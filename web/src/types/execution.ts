@@ -43,3 +43,12 @@ export interface ExecutionResult {
     endTime: Date
     error?: string
 }
+
+export interface LogEntry {
+    level: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+    timestamp: Date
+    nodeId: string
+    message: string
+    details?: any
+    expanded?: boolean
+}

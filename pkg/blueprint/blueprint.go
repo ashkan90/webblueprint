@@ -23,12 +23,13 @@ type NodeProperty struct {
 
 // Connection represents a connection between nodes
 type Connection struct {
-	ID             string `json:"id"`
-	SourceNodeID   string `json:"sourceNodeId"`
-	SourcePinID    string `json:"sourcePinId"`
-	TargetNodeID   string `json:"targetNodeId"`
-	TargetPinID    string `json:"targetPinId"`
-	ConnectionType string `json:"connectionType"` // "execution" or "data"
+	ID             string         `json:"id"`
+	SourceNodeID   string         `json:"sourceNodeId"`
+	SourcePinID    string         `json:"sourcePinId"`
+	TargetNodeID   string         `json:"targetNodeId"`
+	TargetPinID    string         `json:"targetPinId"`
+	ConnectionType string         `json:"connectionType"` // "execution" or "data"
+	Data           map[string]any `json:"data"`
 }
 
 // Variable represents a blueprint variable

@@ -1,0 +1,68 @@
+[debug] 0a89582b-6fe4-4934-a8e7-7f5193a49a6a: Executing HTTP Request node map[nodeID:0a89582b-6fe4-4934-a8e7-7f5193a49a6a]
+[info] 0a89582b-6fe4-4934-a8e7-7f5193a49a6a: Preparing HTTP request map[method:GET nodeID:0a89582b-6fe4-4934-a8e7-7f5193a49a6a url:https://jsonplaceholder.typicode.com/todos/1]
+2025/03/03 16:18:52 [ENGINE] Processing input connections for node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a
+2025/03/03 16:18:52 [ENGINE] Node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a has 0 input connections
+2025/03/03 16:18:52 [ENGINE] Executing node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a (type: http-request)
+[info] 0a89582b-6fe4-4934-a8e7-7f5193a49a6a: HTTP request completed map[body:{
+  "userId": 1,
+  "id": 1,
+  "title": "delectus aut autem",
+  "completed": false
+} nodeID:0a89582b-6fe4-4934-a8e7-7f5193a49a6a size:83 statusCode:200]
+[DEBUG] Attempting to get output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status in execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[DEBUG] Current outputValues structure for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000:
+  No data found for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[DEBUG] No data found for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[DEBUG] Attempting to get output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status in execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[DEBUG] Current outputValues structure for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000:
+  No data found for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[DEBUG] No data found for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000
+[debug] 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e: Executing Print node map[nodeID:5d866e4d-cd6b-4768-bd9f-486f2efa7b4e]
+[debug] 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e: Print node input received map[messageExists:false messageType:<nil> nodeID:5d866e4d-cd6b-4768-bd9f-486f2efa7b4e]
+[warn] 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e: No message provided to print map[nodeID:5d866e4d-cd6b-4768-bd9f-486f2efa7b4e]
+[DEBUG] Output value not found for 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.then
+[DEBUG] Getting output value for 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.output: [undefined] (type: string)
+[DEBUG] Stored output value for 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.output: [undefined] (type: string)
+[DEBUG] Current outputValues structure for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000:
+  Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e:
+    Pin output: [undefined] (type: string)
+[DEBUG] Output value not found for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.then
+[DEBUG] Output value not found for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.catch
+[DEBUG] Getting output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.response: map[completed:false id:1 title:delectus aut autem userId:1] (type: map[string]interface {})
+[DEBUG] Stored output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.response: map[completed:false id:1 title:delectus aut autem userId:1] (type: map[string]interface {})
+[DEBUG] Current outputValues structure for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000:
+  Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e:
+    Pin output: [undefined] (type: string)
+  Node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a:
+    Pin response: map[completed:false id:1 title:delectus aut autem userId:1] (type: map[string]interface {})
+[DEBUG] Getting output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status: 200 (type: float64)
+[DEBUG] Stored output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status: 200 (type: float64)
+[DEBUG] Current outputValues structure for execution bcf89de6-d05e-4508-b237-3f83d377b129-1741007932556550000:
+  Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e:
+    Pin output: [undefined] (type: string)
+  Node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a:
+    Pin response: map[completed:false id:1 title:delectus aut autem userId:1] (type: map[string]interface {})
+    Pin status: 200 (type: float64)
+2025/03/03 16:18:52 [ENGINE] Activating output flow for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.then
+2025/03/03 16:18:52 [ENGINE] Node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a has 2 output connections
+2025/03/03 16:18:52 [ENGINE] Following execution connection to node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e
+2025/03/03 16:18:52 [ENGINE] Processing input connections for node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e
+2025/03/03 16:18:52 [ENGINE] Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e has 2 input connections
+2025/03/03 16:18:52 [ENGINE] Connection 0: 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.then -> 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.exec (type: execution)
+2025/03/03 16:18:52 [ENGINE] Connection 1: 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status -> 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.message (type: data)
+2025/03/03 16:18:52 [ENGINE] Processing data connection from 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status to 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.message
+2025/03/03 16:18:52 [ENGINE] Lookup data from 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status <nil> %!d(bool=false)
+2025/03/03 16:18:52 [ENGINE] No output value found for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status
+2025/03/03 16:18:52 [ENGINE] Executing node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e (type: print)
+2025/03/03 16:18:52 [ENGINE] Activating output flow for 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.then
+2025/03/03 16:18:52 [ENGINE] Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e has 0 output connections
+2025/03/03 16:18:52 [ENGINE] Storing output values for node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e
+2025/03/03 16:18:52 [ENGINE] No output value set for pin then on node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e
+2025/03/03 16:18:52 [ENGINE] Storing output value for 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e.output: [undefined] (type: string)
+2025/03/03 16:18:52 [ENGINE] Node 5d866e4d-cd6b-4768-bd9f-486f2efa7b4e execution completed successfully
+2025/03/03 16:18:52 [ENGINE] Storing output values for node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a
+2025/03/03 16:18:52 [ENGINE] No output value set for pin then on node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a
+2025/03/03 16:18:52 [ENGINE] No output value set for pin catch on node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a
+2025/03/03 16:18:52 [ENGINE] Storing output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.response: map[completed:false id:1 title:delectus aut autem userId:1] (type: map[string]interface {})
+2025/03/03 16:18:52 [ENGINE] Storing output value for 0a89582b-6fe4-4934-a8e7-7f5193a49a6a.status: 200 (type: float64)
+2025/03/03 16:18:52 [ENGINE] Node 0a89582b-6fe4-4934-a8e7-7f5193a49a6a execution completed successfully

@@ -5,6 +5,8 @@
       @wheel="handleWheel"
       @mousedown="handleMouseDown"
       @contextmenu.prevent="handleContextMenu"
+      @dragover.prevent="handleDragOver"
+      @drop.prevent="handleDrop"
   >
     <div
         ref="canvas"
@@ -131,6 +133,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'node-selected', nodeId: string): void
+  (e: 'node-added', nodeId: string): void
   (e: 'node-deselected'): void
   (e: 'node-moved', nodeId: string, position: Position): void
   (e: 'connection-created', connection: Connection): void
@@ -169,6 +172,7 @@ const connectionSource = ref<{
   pinId: string;
   position: { x: number, y: number };
   isExecution: boolean;
+  defaultValue?: any;
 } | null>(null)
 const connectionTarget = ref<{ x: number, y: number } | null>(null)
 const isValidConnection = ref(false)
@@ -363,7 +367,11 @@ function handleMouseUp(event: MouseEvent) {
               sourcePinId: connectionSource.value.pinId,
               targetNodeId: targetNodeId,
               targetPinId: targetPinId,
-              connectionType: isTargetExecution ? 'execution' : 'data'
+              connectionType: isTargetExecution ? 'execution' : 'data',
+              // Include any default value in the connection metadata
+              data: connectionSource.value.defaultValue !== undefined ? {
+                defaultValue: connectionSource.value.defaultValue
+              } : undefined
             }
 
             emit('connection-created', connection)
@@ -416,6 +424,59 @@ function handleContextMenu(event: MouseEvent) {
   }
 }
 
+function handleDragOver(event: DragEvent) {
+  // Allow the drop
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+}
+
+function handleDrop(event: DragEvent) {
+  // Get the dropped data
+  if (!event.dataTransfer) return;
+
+  const jsonData = event.dataTransfer.getData('application/json');
+  if (!jsonData) {
+    console.error('No valid data found in drag operation');
+    return;
+  }
+
+  try {
+    const nodeData = JSON.parse(jsonData);
+    console.log('Dropped node data:', nodeData); // Debug
+
+    // Convert to canvas coordinates
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const canvasX = (event.clientX - rect.left - offset.value.x) / scale.value;
+    const canvasY = (event.clientY - rect.top - offset.value.y) / scale.value;
+
+    // Update position
+    nodeData.position = { x: canvasX, y: canvasY };
+
+    // Ensure we have a complete node object
+    if (!nodeData.id || !nodeData.type) {
+      console.error('Invalid node data', nodeData);
+      return;
+    }
+
+    // Ensure properties is defined
+    if (!nodeData.properties) {
+      nodeData.properties = [];
+    }
+
+    // Add the node
+    emit('node-added', nodeData);
+
+    // Select the new node
+    if (selectedNodeId) {
+      selectedNodeId.value = nodeData.id;
+    }
+  } catch (error) {
+    console.error('Error handling drop:', error);
+  }
+}
+
 function handleNodeSelect(nodeId: string) {
   selectedNodeId.value = nodeId
   emit('node-selected', nodeId)
@@ -435,7 +496,8 @@ function handlePinMouseDown(data: {
   pinId: string,
   isInput: boolean,
   isExecution: boolean,
-  position: { x: number, y: number }
+  position: { x: number, y: number },
+  defaultValue?: any
 }) {
   // Only start connection from output pins
   if (!data.isInput) {
@@ -445,7 +507,8 @@ function handlePinMouseDown(data: {
       nodeId: data.nodeId,
       pinId: data.pinId,
       position: data.position,
-      isExecution: data.isExecution
+      isExecution: data.isExecution,
+      defaultValue: data.defaultValue
     }
     connectionTarget.value = { ...data.position }
   }

@@ -30,6 +30,7 @@ type Node interface {
 
 // Logger interface for node execution logging
 type Logger interface {
+	Opts(map[string]interface{})
 	Debug(msg string, fields map[string]interface{})
 	Info(msg string, fields map[string]interface{})
 	Warn(msg string, fields map[string]interface{})

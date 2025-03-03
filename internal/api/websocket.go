@@ -47,6 +47,7 @@ const (
 	MsgTypeExecEnd      = "execution.end"    // Blueprint execution ended
 	MsgTypeExecStatus   = "execution.status" // Execution status update
 	MsgTypeResult       = "result"           // Pin output value
+	MsgTypeLog          = "log"              // Log message
 )
 
 // HTTP connection upgrader
@@ -271,6 +272,63 @@ func (c *WebSocketClient) sendMessage(messageType string, payload interface{}) {
 	}
 
 	c.send <- msgData
+}
+
+// Create a WebSocket logger that sends logs to clients
+type WebSocketLogger struct {
+	wsManager *WebSocketManager
+	nodeID    string
+}
+
+// NewWebSocketLogger creates a new logger that sends logs via WebSocket
+func NewWebSocketLogger(wsManager *WebSocketManager) *WebSocketLogger {
+	return &WebSocketLogger{
+		wsManager: wsManager,
+	}
+}
+
+func (l *WebSocketLogger) Opts(m map[string]interface{}) {
+	for s, i := range m {
+		if s == "nodeId" {
+			l.nodeID = i.(string)
+		}
+	}
+}
+
+// Implement Logger interface methods
+func (l *WebSocketLogger) Debug(msg string, fields map[string]interface{}) {
+	l.sendLogMessage("debug", msg, fields)
+}
+
+func (l *WebSocketLogger) Info(msg string, fields map[string]interface{}) {
+	l.sendLogMessage("info", msg, fields)
+}
+
+func (l *WebSocketLogger) Warn(msg string, fields map[string]interface{}) {
+	l.sendLogMessage("warn", msg, fields)
+}
+
+func (l *WebSocketLogger) Error(msg string, fields map[string]interface{}) {
+	l.sendLogMessage("error", msg, fields)
+}
+
+// sendLogMessage sends a log message to all clients
+func (l *WebSocketLogger) sendLogMessage(level, msg string, fields map[string]interface{}) {
+	// First print to console for server-side debugging
+	if fields == nil {
+		fields = make(map[string]interface{})
+	}
+	fields["nodeID"] = l.nodeID
+	fmt.Printf("[%s] %s: %s %v\n", level, l.nodeID, msg, fields)
+
+	// Then broadcast via WebSocket
+	l.wsManager.BroadcastMessage(MsgTypeLog, map[string]interface{}{
+		"level":     level,
+		"timestamp": time.Now().Format(time.RFC3339Nano),
+		"nodeId":    l.nodeID,
+		"message":   msg,
+		"fields":    fields,
+	})
 }
 
 // ExecutionEventListener implements the engine.ExecutionListener interface

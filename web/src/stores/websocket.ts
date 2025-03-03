@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-// WebSocket message types
+// Enhanced WebSocket message types with more precise typing
 export const WebSocketEvents = {
     NODE_INTRO: 'node.intro',
     NODE_START: 'node.start',
@@ -12,14 +12,15 @@ export const WebSocketEvents = {
     EXEC_START: 'execution.start',
     EXEC_END: 'execution.end',
     EXEC_STATUS: 'execution.status',
-    RESULT: 'result'
+    RESULT: 'result',
+    LOG: 'log'
 }
 
-export type MessageHandler = (data: any) => void
+export type MessageHandler = (data: unknown) => void
 
 export interface WebSocketMessage {
     type: string
-    payload: any
+    payload: unknown
 }
 
 export const useWebSocketStore = defineStore('websocket', () => {
@@ -62,7 +63,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
                 // Try to reconnect unless max attempts reached
                 if (reconnectAttempts.value < maxReconnectAttempts.value) {
                     reconnectAttempts.value++
-                    setTimeout(() => connect(), reconnectInterval.value)
+                    setTimeout(connect, reconnectInterval.value)
                 }
             }
 
@@ -72,6 +73,14 @@ export const useWebSocketStore = defineStore('websocket', () => {
 
             socket.value.onmessage = (event) => {
                 try {
+                    if (event.data.includes('\n')) {
+                        event.data.split('\n').forEach((eventData: string) => {
+                            const message = JSON.parse(eventData) as WebSocketMessage
+                            handleMessage(message)
+                        })
+                        return
+                    }
+
                     const message = JSON.parse(event.data) as WebSocketMessage
                     handleMessage(message)
                 } catch (error) {
@@ -91,7 +100,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
         }
     }
 
-    function on<T>(event: string, handler: (data: T) => void): () => void {
+    function on<T = unknown>(event: string, handler: (data: T) => void): () => void {
         if (!handlers.value.has(event)) {
             handlers.value.set(event, [])
         }
@@ -103,15 +112,15 @@ export const useWebSocketStore = defineStore('websocket', () => {
 
         // Return a function to remove this handler
         return () => {
-            const handlers = eventHandlers || []
-            const index = handlers.indexOf(handler as MessageHandler)
+            const currentHandlers = handlers.value.get(event) || []
+            const index = currentHandlers.indexOf(handler as MessageHandler)
             if (index !== -1) {
-                handlers.splice(index, 1)
+                currentHandlers.splice(index, 1)
             }
         }
     }
 
-    function send(type: string, payload: any): void {
+    function send(type: string, payload: unknown): void {
         if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
             console.error('WebSocket not connected')
             return

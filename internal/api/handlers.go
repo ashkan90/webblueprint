@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
@@ -149,13 +150,10 @@ func (s *APIServer) handleGetNodeTypes(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, nodeTypes)
 }
 
-// Blueprint storage (in-memory for now, would be replaced with a database)
-var blueprints = make(map[string]*blueprint.Blueprint)
-
 // Blueprint handlers
 func (s *APIServer) handleGetBlueprints(w http.ResponseWriter, r *http.Request) {
-	blueprintList := make([]*blueprint.Blueprint, 0, len(blueprints))
-	for _, bp := range blueprints {
+	blueprintList := make([]*blueprint.Blueprint, 0, len(db.Blueprints))
+	for _, bp := range db.Blueprints {
 		blueprintList = append(blueprintList, bp)
 	}
 
@@ -170,7 +168,7 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 	}
 
 	// Store blueprint
-	blueprints[bp.ID] = &bp
+	db.Blueprints[bp.ID] = &bp
 
 	// Register with execution engine
 	s.executionEngine.LoadBlueprint(&bp)
@@ -182,7 +180,7 @@ func (s *APIServer) handleGetBlueprint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	bp, exists := blueprints[id]
+	bp, exists := db.Blueprints[id]
 	if !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return
@@ -194,11 +192,6 @@ func (s *APIServer) handleGetBlueprint(w http.ResponseWriter, r *http.Request) {
 func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
-
-	if _, exists := blueprints[id]; !exists {
-		respondWithError(w, http.StatusNotFound, "Blueprint not found")
-		return
-	}
 
 	var bp blueprint.Blueprint
 	if err := json.NewDecoder(r.Body).Decode(&bp); err != nil {
@@ -213,7 +206,7 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 	}
 
 	// Update blueprint
-	blueprints[id] = &bp
+	db.Blueprints[id] = &bp
 
 	// Re-register with execution engine
 	s.executionEngine.LoadBlueprint(&bp)
@@ -225,12 +218,12 @@ func (s *APIServer) handleDeleteBlueprint(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	if _, exists := blueprints[id]; !exists {
+	if _, exists := db.Blueprints[id]; !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return
 	}
 
-	delete(blueprints, id)
+	delete(db.Blueprints, id)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -244,7 +237,7 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	if _, exists := blueprints[id]; !exists {
+	if _, exists := db.Blueprints[id]; !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return
 	}

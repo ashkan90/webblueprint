@@ -47,3 +47,14 @@ export interface Blueprint {
     variables: Variable[]
     metadata: Record<string, string>
 }
+
+// Represents a connection between nodes
+export interface Connection {
+    id: string
+    sourceNodeId: string
+    sourcePinId: string
+    targetNodeId: string
+    targetPinId: string
+    connectionType: 'execution' | 'data'
+    data?: Record<string, any>  // Additional metadata for the connection
+}

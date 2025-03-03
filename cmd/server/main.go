@@ -14,14 +14,16 @@ import (
 )
 
 func main() {
+	// Initialize WebSocket manager
+	wsManager := api.NewWebSocketManager()
+
+	wsLogger := api.NewWebSocketLogger(wsManager)
+
 	// Initialize debug manager
 	debugManager := engine.NewDebugManager()
 
 	// Initialize execution engine
-	executionEngine := engine.NewExecutionEngine(debugManager)
-
-	// Initialize WebSocket manager
-	wsManager := api.NewWebSocketManager()
+	executionEngine := engine.NewExecutionEngine(wsLogger, debugManager)
 
 	// Initialize API server
 	apiServer := api.NewAPIServer(executionEngine, wsManager, debugManager)

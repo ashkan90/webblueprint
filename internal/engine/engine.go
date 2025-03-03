@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 	"webblueprint/internal/node"
@@ -72,17 +73,19 @@ type ExecutionEngine struct {
 	variables       map[string]map[string]types.Value // BlueprintID -> VariableName -> Value
 	listeners       []ExecutionListener
 	debugManager    *DebugManager
+	logger          node.Logger
 	mutex           sync.RWMutex
 }
 
 // NewExecutionEngine creates a new execution engine
-func NewExecutionEngine(debugManager *DebugManager) *ExecutionEngine {
+func NewExecutionEngine(logger node.Logger, debugManager *DebugManager) *ExecutionEngine {
 	return &ExecutionEngine{
 		nodeRegistry:    make(map[string]node.NodeFactory),
 		blueprints:      make(map[string]*blueprint.Blueprint),
 		executionStatus: make(map[string]*ExecutionStatus),
 		variables:       make(map[string]map[string]types.Value),
 		listeners:       make([]ExecutionListener, 0),
+		logger:          logger,
 		debugManager:    debugManager,
 	}
 }
@@ -288,14 +291,22 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		},
 		OnNodeError: func(nodeID string, err error) {
 			e.mutex.Lock()
+			defer e.mutex.Unlock()
 			nodeStatus, exists := status.NodeStatuses[nodeID]
-			if exists {
-				nodeStatus.Status = "error"
+			if !exists {
+				return
+				//nodeStatus.Status = "error"
+				//nodeStatus.Error = err
+				//nodeStatus.EndTime = time.Now()
+				//status.NodeStatuses[nodeID] = nodeStatus
+			}
+
+			if nodeStatus.Status == "failed" {
+				nodeStatus.NodeID = nodeID
 				nodeStatus.Error = err
 				nodeStatus.EndTime = time.Now()
 				status.NodeStatuses[nodeID] = nodeStatus
 			}
-			e.mutex.Unlock()
 
 			e.EmitEvent(ExecutionEvent{
 				Type:      EventNodeError,
@@ -313,16 +324,25 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 			}
 			result.NodeResults[nodeID][pinName] = value
 
-			// Emit value produced event
-			e.EmitEvent(ExecutionEvent{
-				Type:      EventValueProduced,
-				Timestamp: time.Now(),
-				NodeID:    nodeID,
-				Data: map[string]interface{}{
-					"pinName": pinName,
-					"value":   value,
-				},
-			})
+			_nodeConnections := bp.GetNodeOutputConnections(nodeID)
+			for _, connection := range _nodeConnections {
+				if connection.ConnectionType == "data" {
+					// Emit value produced event
+					e.EmitEvent(ExecutionEvent{
+						Type:      EventValueProduced,
+						Timestamp: time.Now(),
+						NodeID:    connection.ID,
+						Data: map[string]interface{}{
+							"sourceNodeId": connection.SourceNodeID,
+							"sourcePinId":  connection.SourcePinID,
+							"targetNodeId": connection.TargetNodeID,
+							"targetPinId":  connection.TargetPinID,
+							"timestamp":    time.Now(),
+							"value":        value,
+						},
+					})
+				}
+			}
 		},
 		OnLog: func(nodeID, message string) {
 			// Emit log event as debug data
@@ -427,13 +447,19 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 	nodeInstance := factory()
 
 	// Create execution context
-	logger := NewDefaultLogger(nodeID)
+	log.Printf("[ENGINE] Processing input connections for node %s", nodeID)
 
 	// Collect input values from connected nodes
 	inputValues := make(map[string]types.Value)
 
 	// Get input connections for this node
 	inputConnections := bp.GetNodeInputConnections(nodeID)
+
+	log.Printf("[ENGINE] Node %s has %d input connections", nodeID, len(inputConnections))
+	for i, conn := range inputConnections {
+		log.Printf("[ENGINE] Connection %d: %s.%s -> %s.%s (type: %s)",
+			i, conn.SourceNodeID, conn.SourcePinID, conn.TargetNodeID, conn.TargetPinID, conn.ConnectionType)
+	}
 
 	// Process data connections
 	for _, conn := range inputConnections {
@@ -443,10 +469,15 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 			sourcePinID := conn.SourcePinID
 			targetPinID := conn.TargetPinID
 
+			log.Printf("[ENGINE] Processing data connection from %s.%s to %s.%s",
+				sourceNodeID, sourcePinID, nodeID, targetPinID)
+
 			// Check if we have a result for this pin
 			if nodeResults, ok := e.debugManager.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
+				log.Printf("[ENGINE] Found output value from %s.%s: %v (type: %T)",
+					sourceNodeID, sourcePinID, nodeResults, nodeResults)
+
 				// Convert to Value
-				// This is simplified - we'd need to determine the type properly
 				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
 
 				// Emit value consumed event
@@ -461,16 +492,28 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 						"value":        nodeResults,
 					},
 				})
+			} else {
+				log.Printf("[ENGINE] No output value found for %s.%s", sourceNodeID, sourcePinID)
+				log.Printf("[ENGINE] Lookup data from %s.%s %v %%!d(bool=%v)",
+					sourceNodeID, sourcePinID, nodeResults, ok)
 			}
 		}
 	}
 
-	// Create a function to activate output flows
-	activateFlow := func(nodeID, pinID string) error {
+	// Create a function to activate output flows that maintains proper execution order
+	// This will be passed to the execution context but used later after outputs are stored
+	activateFlowFn := func(nodeID, pinID string) error {
+		log.Printf("[ENGINE] Activating output flow for %s.%s", nodeID, pinID)
+
 		// Find connections from this output pin
-		for _, conn := range bp.GetNodeOutputConnections(nodeID) {
+		outputConnections := bp.GetNodeOutputConnections(nodeID)
+
+		log.Printf("[ENGINE] Node %s has %d output connections", nodeID, len(outputConnections))
+
+		for _, conn := range outputConnections {
 			if conn.ConnectionType == "execution" && conn.SourcePinID == pinID {
 				targetNodeID := conn.TargetNodeID
+				log.Printf("[ENGINE] Following execution connection to node %s", targetNodeID)
 
 				// Execute the target node
 				if err := e.executeNode(targetNodeID, blueprintID, executionID, variables, hooks); err != nil {
@@ -489,9 +532,9 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		executionID,
 		inputValues,
 		variables,
-		logger,
+		e.logger,
 		hooks,
-		activateFlow,
+		activateFlowFn,
 	)
 
 	// Notify node start
@@ -499,24 +542,48 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		hooks.OnNodeStart(nodeID, nodeConfig.Type)
 	}
 
+	log.Printf("[ENGINE] Executing node %s (type: %s)", nodeID, nodeConfig.Type)
+
 	// Execute the node
 	err := nodeInstance.Execute(ctx)
+
+	// Collect all output values that need to be stored and activated
+	outputValues := make(map[string]map[string]types.Value)
+	activateOutputPins := make([]string, 0)
 
 	// Store debug data
 	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
 
-	// Store output values
+	// CRITICAL: Store output values BEFORE following execution paths
+	log.Printf("[ENGINE] Storing output values for node %s", nodeID)
 	for _, pin := range nodeInstance.GetOutputPins() {
 		if value, exists := ctx.GetOutputValue(pin.ID); exists {
+			log.Printf("[ENGINE] Storing output value for %s.%s: %v (type: %T)",
+				nodeID, pin.ID, value.RawValue, value.RawValue)
+
+			// Store the value
+			outputValues[nodeID] = map[string]types.Value{
+				pin.ID: value,
+			}
+
+			// Store in debug manager for data flow
 			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pin.ID, value.RawValue)
+		} else {
+			log.Printf("[ENGINE] No output value set for pin %s on node %s", pin.ID, nodeID)
 		}
 	}
+
+	// Handle execution paths that were stored during node.Execute
+	// Get these from the custom ExecutionContext implementation
+	activateOutputPins = ctx.GetActivatedOutputFlows()
+	log.Printf("[ENGINE] Node %s has %d activated output flows", nodeID, len(activateOutputPins))
 
 	// Notify node completion or error
 	if err != nil {
 		if hooks != nil && hooks.OnNodeError != nil {
 			hooks.OnNodeError(nodeID, err)
 		}
+		log.Printf("[ENGINE] Node %s execution failed: %v", nodeID, err)
 		return err
 	}
 
@@ -524,5 +591,13 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		hooks.OnNodeComplete(nodeID, nodeConfig.Type)
 	}
 
+	// AFTER storing all outputs, now follow execution flows
+	for _, outputPin := range activateOutputPins {
+		if err := activateFlowFn(nodeID, outputPin); err != nil {
+			return err
+		}
+	}
+
+	log.Printf("[ENGINE] Node %s execution completed successfully", nodeID)
 	return nil
 }

@@ -71,6 +71,27 @@ func (n *PrintNode) Execute(ctx node.ExecutionContext) error {
 	// Get message to print
 	messageValue, messageExists := ctx.GetInputValue("message")
 
+	// Log what we received
+	logger.Debug("Print node input received", map[string]interface{}{
+		"messageExists": messageExists,
+		"messageType":   fmt.Sprintf("%T", messageValue.RawValue),
+	})
+
+	if messageExists {
+		// Try to log the value in a structured way
+		jsonData, err := json.Marshal(messageValue.RawValue)
+		if err == nil {
+			logger.Debug("Message value", map[string]interface{}{
+				"json": string(jsonData),
+			})
+		} else {
+			logger.Debug("Non-serializable message value", map[string]interface{}{
+				"error":  err.Error(),
+				"string": fmt.Sprintf("%v", messageValue.RawValue),
+			})
+		}
+	}
+
 	// Collect debug data
 	debugData := make(map[string]interface{})
 	debugData["inputs"] = map[string]interface{}{
@@ -124,6 +145,9 @@ func (n *PrintNode) Execute(ctx node.ExecutionContext) error {
 
 		// Record for debugging
 		debugData["output"] = displayValue
+		logger.Info("Printed message", map[string]interface{}{
+			"message": displayValue,
+		})
 
 		// Pass through the value
 		ctx.SetOutputValue("output", messageValue)

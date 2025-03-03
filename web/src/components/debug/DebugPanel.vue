@@ -235,6 +235,11 @@
           </div>
         </div>
       </div>
+
+      <!-- Logs Tab -->
+      <div v-if="activeTab === 'logs'" class="debug-tab">
+        <LogPanel :execution-id="executionId" />
+      </div>
     </div>
   </div>
 </template>
@@ -244,6 +249,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useExecutionStore } from '../../stores/execution'
 import { useBlueprintStore } from '../../stores/blueprint'
 import { useNodeRegistryStore } from '../../stores/nodeRegistry'
+import LogPanel from './LogPanel.vue'
 import JsonTree from './JsonTree.vue'
 import type { NodeExecutionStatus, NodeDebugData, DataFlow } from '../../types/execution'
 
@@ -272,7 +278,8 @@ const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'nodeData', label: 'Node Data' },
   { id: 'dataFlow', label: 'Data Flow' },
-  { id: 'timeline', label: 'Timeline' }
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'logs', label: 'Logs' }
 ]
 
 // Computed values

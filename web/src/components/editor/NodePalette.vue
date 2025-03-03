@@ -35,6 +35,7 @@
               class="node-type-item"
               draggable="true"
               @dragstart="onDragStart($event, nodeType)"
+              @dragend="onDragEnd($event)"
           >
             <div class="node-type-name">{{ nodeType.name }}</div>
             <div class="node-type-description">{{ nodeType.description }}</div>
@@ -50,22 +51,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { v4 as uuid } from 'uuid'
 import { useNodeRegistryStore } from '../../stores/nodeRegistry'
 import type { NodeTypeDefinition } from '../../types/nodes'
 import type { Node } from '../../types/blueprint'
 
-const props = defineProps<{}>()
 const emit = defineEmits<{
   (e: 'node-added', node: Node): void
 }>()
 
 const nodeRegistryStore = useNodeRegistryStore()
 
+// Inject canvas reference
+const canvasContainer = inject<HTMLElement>('canvasContainer')
+
 // State
 const searchQuery = ref('')
 const collapsedCategories = ref<string[]>([])
+const draggedNode = ref<NodeTypeDefinition | null>(null)
 
 // Computed
 const isLoading = computed(() => nodeRegistryStore.isLoading)
@@ -119,30 +123,59 @@ function toggleCategory(category: string) {
 }
 
 function onDragStart(event: DragEvent, nodeType: NodeTypeDefinition) {
-  // Create a new node instance
-  const node: Node = {
+  // Create a new node instance with complete data
+  const node = {
     id: uuid(),
     type: nodeType.typeId,
     position: { x: 0, y: 0 },
-    properties: []
-  }
+    properties: []  // Ensure properties is initialized
+  };
 
   // Set drag data
   if (event.dataTransfer) {
-    event.dataTransfer.setData('application/json', JSON.stringify(node))
-    event.dataTransfer.effectAllowed = 'copy'
+    // Set the data in proper JSON format
+    event.dataTransfer.setData('application/json', JSON.stringify(node));
+    event.dataTransfer.effectAllowed = 'copy';
+
+    // Add a visual indicator for what's being dragged
+    const dragImage = document.createElement('div');
+    dragImage.textContent = nodeType.name;
+    dragImage.style.backgroundColor = '#333';
+    dragImage.style.color = 'white';
+    dragImage.style.padding = '8px';
+    dragImage.style.borderRadius = '4px';
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px'; // Hide it initially
+    document.body.appendChild(dragImage);
+
+    event.dataTransfer.setDragImage(dragImage, 0, 0);
+
+    // Clean up the element after drag
+    setTimeout(() => document.body.removeChild(dragImage), 0);
   }
 }
 
-function createNode(nodeType: NodeTypeDefinition, x: number, y: number) {
+function onDragEnd(event: DragEvent) {
+  if (!draggedNode.value || !canvasContainer) return
+
+  // Calculate drop position relative to canvas
+  const canvasRect = canvasContainer.getBoundingClientRect()
+  const dropX = event.clientX - canvasRect.left
+  const dropY = event.clientY - canvasRect.top
+
+  // Create a new node instance
   const node: Node = {
     id: uuid(),
-    type: nodeType.typeId,
-    position: { x, y },
+    type: draggedNode.value.typeId,
+    position: { x: dropX, y: dropY },
     properties: []
   }
 
+  // Emit node added event
   emit('node-added', node)
+
+  // Reset dragged node
+  draggedNode.value = null
 }
 </script>
 
@@ -237,5 +270,13 @@ function createNode(nodeType: NodeTypeDefinition, x: number, y: number) {
 
 .error {
   color: var(--accent-red);
+}
+
+.node-type-item {
+  cursor: grab;
+}
+
+.node-type-item:active {
+  cursor: grabbing;
 }
 </style>

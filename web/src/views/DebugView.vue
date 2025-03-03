@@ -29,6 +29,11 @@
           <div class="info-value">{{ formatDuration(duration) }}</div>
         </div>
 
+        <div v-if="errorMessage" class="error-message">
+          <div class="info-label">Error:</div>
+          <div class="info-value error">{{ errorMessage }}</div>
+        </div>
+
         <div class="actions">
           <button class="btn" @click="goToEditor">
             <span class="icon">✏️</span> Edit Blueprint
@@ -78,6 +83,7 @@ const executionStatus = computed(() => executionStore.executionStatus)
 const startTime = computed(() => executionStore.executionStartTime)
 const endTime = computed(() => executionStore.executionEndTime)
 const duration = computed(() => executionStore.executionDuration)
+const errorMessage = computed(() => executionStore.errorMessage)
 
 const statusClass = computed(() => {
   switch (executionStatus.value) {
@@ -98,7 +104,10 @@ function handleSelectNode(nodeId: string) {
 }
 
 function goToEditor() {
-  router.push(`/editor/${blueprintStore.blueprint.id}`)
+  const blueprintId = executionStore.blueprintId
+  if (blueprintId) {
+    router.push(`/editor/${blueprintId}`)
+  }
 }
 
 function goToHome() {
@@ -107,10 +116,11 @@ function goToHome() {
 
 async function rerunExecution() {
   try {
-    if (blueprintStore.blueprint.id) {
-      await executionStore.executeBlueprint(blueprintStore.blueprint.id)
-      // Stay on the same page but update the URL with the new execution ID
-      router.push(`/debug/${executionStore.currentExecutionId}`)
+    const blueprintId = executionStore.blueprintId
+    if (blueprintId) {
+      const result = await executionStore.executeBlueprint(blueprintId)
+      // Update URL to the new execution
+      router.push(`/debug/${result.executionId}`)
     }
   } catch (error) {
     console.error('Failed to re-run execution:', error)
@@ -140,22 +150,12 @@ function formatDuration(ms: number | null): string {
 // Initialize
 onMounted(async () => {
   if (executionId.value) {
-    // Load execution data if not already loaded
-    if (executionStore.currentExecutionId !== executionId.value) {
-      try {
-        await executionStore.loadExecution(executionId.value)
-      } catch (error) {
-        console.error('Failed to load execution:', error)
-      }
-    }
-
-    // Load blueprint if not already loaded
-    if (!blueprintStore.blueprint.id && executionStore.blueprintId) {
-      try {
-        await blueprintStore.loadBlueprint(executionStore.blueprintId)
-      } catch (error) {
-        console.error('Failed to load blueprint:', error)
-      }
+    try {
+      // Load execution data
+      await executionStore.loadExecution(executionId.value)
+    } catch (error) {
+      console.error('Failed to load execution:', error)
+      router.push('/')
     }
   }
 })
@@ -185,7 +185,6 @@ h1 {
   background-color: #333;
   padding: 15px;
   border-radius: 6px;
-  margin-bottom: 1rem;
 }
 
 .info-row {
@@ -215,6 +214,11 @@ h1 {
   color: var(--accent-red);
 }
 
+.error-message .info-value {
+  color: var(--accent-red);
+  font-weight: bold;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -237,6 +241,10 @@ h1 {
 
 .btn:hover {
   background-color: #555;
+}
+
+.btn .icon {
+  margin-right: 4px;
 }
 
 .no-execution {

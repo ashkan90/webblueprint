@@ -125,6 +125,50 @@
           <div v-if="pin.description" class="pin-description">
             {{ pin.description }}
           </div>
+
+          <!-- Default value editor (only for non-execution pins that are not connected) -->
+          <div v-if="!isPinConnected(pin.id) && pin.type.id !== 'execution'" class="pin-default-editor">
+            <div class="default-label">Default Value:</div>
+
+            <!-- String input -->
+            <input
+                v-if="pin.type.id === 'string'"
+                type="text"
+                v-model="pinDefaults[pin.id]"
+                class="property-input"
+                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+            />
+
+            <!-- Number input -->
+            <input
+                v-if="pin.type.id === 'number'"
+                type="number"
+                v-model.number="pinDefaults[pin.id]"
+                class="property-input"
+                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+            />
+
+            <!-- Boolean input -->
+            <div v-if="pin.type.id === 'boolean'" class="property-boolean">
+              <label class="toggle-switch">
+                <input
+                    type="checkbox"
+                    v-model="pinDefaults[pin.id]"
+                    @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+                />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <!-- Object/JSON input -->
+            <textarea
+                v-if="pin.type.id === 'object' || pin.type.id === 'array'"
+                v-model="pinDefaults[pin.id]"
+                class="property-input property-textarea"
+                @change="updateJsonPinDefault(pin.id, pinDefaults[pin.id])"
+            ></textarea>
+          </div>
+
         </div>
       </div>
 
@@ -157,21 +201,25 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useBlueprintStore } from '../../stores/blueprint'
 import type { Node } from '../../types/blueprint'
 import type { NodeTypeDefinition } from '../../types/nodes'
 
 const props = defineProps<{
   node: Node
   nodeType: NodeTypeDefinition | null
+  selected: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'property-changed', nodeId: string, propertyName: string, value: any): void
+  (e: 'pin-default-changed', nodeId: string, pinId: string, value: any): void
 }>()
 
 // Reactive state
 const position = ref({ x: props.node.position.x, y: props.node.position.y })
 const properties = ref<Array<{ name: string, value: any, type: string, options?: string[] }>>([])
+const pinDefaults = ref<Record<string, any>>({})
 
 // Computed
 const nodeTitle = computed(() => {
@@ -186,13 +234,30 @@ function updatePosition() {
   })
 }
 
+function updatePinDefault(pinId: string, value: any) {
+  emit('pin-default-changed', props.node.id, pinId, value)
+}
+
 function updateProperty(name: string, value: any) {
   emit('property-changed', props.node.id, name, value)
+}
+
+function updateJsonPinDefault(pinId: string, jsonString: string) {
+  try {
+    // Try to parse the JSON string
+    const value = JSON.parse(jsonString)
+    emit('pin-default-changed', props.node.id, pinId, value)
+  } catch (e) {
+    // If it's not valid JSON, use the string as is
+    console.warn(`Invalid JSON for pin ${pinId}:`, e)
+    // Optionally, you could show an error to the user here
+  }
 }
 
 // Initialize properties from node data
 function initializeProperties() {
   properties.value = []
+  pinDefaults.value = {}
 
   // First load properties from the node
   const nodeProps = props.node.properties || []
@@ -214,14 +279,75 @@ function initializeProperties() {
         options = prop.value
       }
 
-      properties.value.push({
-        name: prop.name,
-        value: prop.value,
-        type,
-        options
-      })
+      // Add to properties if it's not a pin default
+      if (!prop.name.startsWith('input_')) {
+        properties.value.push({
+          name: prop.name,
+          value: prop.value,
+          type,
+          options
+        })
+      }
+    })
+
+    // Initialize pin defaults from node properties
+    props.nodeType.inputs.forEach(pin => {
+      // Skip execution pins
+      if (pin.type.id === 'execution') return
+
+      // Find default value in node properties if exists
+      const defaultPropName = `input_${pin.id}`
+      const pinProp = nodeProps.find(prop => prop.name === defaultPropName)
+
+      if (pinProp) {
+        // Use stored default value
+        pinDefaults.value[pin.id] = pinProp.value
+      } else if (pin.default !== undefined) {
+        // Use pin's default value from the type definition
+        pinDefaults.value[pin.id] = pin.default
+      } else {
+        // Initialize with type-appropriate empty value
+        switch (pin.type.id) {
+          case 'string':
+            pinDefaults.value[pin.id] = ''
+            break
+          case 'number':
+            pinDefaults.value[pin.id] = 0
+            break
+          case 'boolean':
+            pinDefaults.value[pin.id] = false
+            break
+          case 'object':
+            pinDefaults.value[pin.id] = '{}'
+            break
+          case 'array':
+            pinDefaults.value[pin.id] = '[]'
+            break
+          default:
+            pinDefaults.value[pin.id] = ''
+        }
+      }
+
+      // Format JSON for display
+      if (pin.type.id === 'object' || pin.type.id === 'array') {
+        if (typeof pinDefaults.value[pin.id] !== 'string') {
+          try {
+            pinDefaults.value[pin.id] = JSON.stringify(pinDefaults.value[pin.id], null, 2)
+          } catch (e) {
+            pinDefaults.value[pin.id] = '{}'
+          }
+        }
+      }
     })
   }
+}
+
+function isPinConnected(pinId: string): boolean {
+  // Use blueprint store to check if pin has connections
+  const blueprintStore = useBlueprintStore();
+
+  // Check if this input pin has any incoming connections
+  return blueprintStore.isNodePinConnected(props.node.id, pinId, 'input');
 }
 
 // Watch for node changes
@@ -407,5 +533,24 @@ input:checked + .toggle-slider:before {
 .pin-description {
   font-size: 0.8rem;
   color: #bbb;
+}
+
+.pin-default-editor {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #444;
+}
+
+.default-label {
+  font-size: 0.8rem;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
+.property-textarea {
+  min-height: 80px;
+  font-family: monospace;
+  width: 100%;
+  resize: vertical;
 }
 </style>

@@ -7,24 +7,27 @@ export default defineConfig({
     plugins: [vue()],
     resolve: {
         alias: {
-            '@': path.resolve(__dirname, './web/src')
+            '@': path.resolve(__dirname, './src')
         }
     },
-    root: './web',
+    server: {
+        port: 8089,
+        proxy: {
+            // Proxy API requests
+            '/api': {
+                target: 'http://localhost:8089',
+                changeOrigin: true,
+            },
+            // Proxy WebSocket requests
+            '/ws': {
+                target: 'ws://localhost:8089',
+                ws: true,
+                changeOrigin: true
+            }
+        }
+    },
     build: {
         outDir: '../dist',
         emptyOutDir: true
-    },
-    server: {
-        proxy: {
-            '/api': {
-                target: 'http://localhost:8089',
-                changeOrigin: true
-            },
-            '/ws': {
-                target: 'ws://localhost:8089',
-                ws: true
-            }
-        }
     }
 })

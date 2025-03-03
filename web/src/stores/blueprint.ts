@@ -148,7 +148,18 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     }
 
     function addNode(node: Node) {
-        blueprint.value.nodes.push(node)
+        console.log('Store adding node:', node);
+
+        // Make sure we're creating a deep copy to avoid shared references
+        const nodeCopy = JSON.parse(JSON.stringify(node));
+
+        // Ensure properties is initialized
+        if (!nodeCopy.properties) {
+            nodeCopy.properties = [];
+        }
+
+        // Add the node
+        blueprint.value.nodes.push(nodeCopy);
     }
 
     function updateNode(id: string, updates: Partial<Node>) {
@@ -176,6 +187,18 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             } else {
                 // Add new property
                 node.properties.push({ name: propertyName, value })
+            }
+
+            // If this is a pin default value (input_*), add it to the node's data for easy access
+            if (propertyName.startsWith('input_')) {
+                if (!node.data) {
+                    node.data = {}
+                }
+                if (!node.data.defaults) {
+                    node.data.defaults = {}
+                }
+                const pinId = propertyName.substring(6) // Remove "input_" prefix
+                node.data.defaults[pinId] = value
             }
         }
     }

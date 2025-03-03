@@ -355,6 +355,7 @@ func (n *HTTPRequestNode) Execute(ctx node.ExecutionContext) error {
 	logger.Info("HTTP request completed", map[string]interface{}{
 		"statusCode": resp.StatusCode,
 		"size":       len(responseBody),
+		"body":       string(responseBody),
 	})
 
 	return ctx.ActivateOutputFlow("then")

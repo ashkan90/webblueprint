@@ -51,7 +51,8 @@
             :node="selectedNode"
             :node-type="getNodeType(selectedNode.type)"
             @property-changed="handlePropertyChanged"
-        />
+            @pin-default-changed="handlePinDefaultChanged"
+            selected/>
       </div>
     </div>
 
@@ -156,8 +157,25 @@ function getNodeType(typeId: string): NodeTypeDefinition | null {
 }
 
 function handleNodeAdded(node: Node) {
-  blueprintStore.addNode(node)
-  selectedNodeId.value = node.id
+  console.log('Adding node to blueprint:', node); // Debug
+
+  // Ensure we're not adding duplicates by checking IDs
+  const existingNodeIndex = blueprintStore.nodes.findIndex(n => n.id === node.id);
+
+  if (existingNodeIndex === -1) {
+    // Node doesn't exist, add it
+    blueprintStore.addNode(node);
+  } else {
+    // Node already exists with this ID, generate a new ID and add
+    const newNode = {
+      ...node,
+      id: uuid() // Generate new ID
+    };
+    blueprintStore.addNode(newNode);
+  }
+
+  // Select the newly added node
+  selectedNodeId.value = node.id;
 }
 
 function handleNodeSelected(nodeId: string) {
@@ -189,6 +207,11 @@ function handleNodeDeleted(nodeId: string) {
 
 function handlePropertyChanged(nodeId: string, propertyName: string, value: any) {
   blueprintStore.updateNodeProperty(nodeId, propertyName, value)
+}
+
+function handlePinDefaultChanged(nodeId: string, pinId: string, value: any) {
+  // Store pin defaults with a special naming convention
+  blueprintStore.updateNodeProperty(nodeId, `input_${pinId}`, value)
 }
 
 function updateBlueprintName() {

@@ -2,24 +2,28 @@ package engine
 
 import (
 	"fmt"
+	"sync"
 	"time"
+	"webblueprint/internal/db"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
 
 // DefaultExecutionContext is the implementation of node.ExecutionContext
 type DefaultExecutionContext struct {
-	nodeID       string
-	nodeType     string
-	blueprintID  string
-	executionID  string
-	inputs       map[string]types.Value
-	outputs      map[string]types.Value
-	variables    map[string]types.Value
-	debugData    map[string]interface{}
-	logger       node.Logger
-	hooks        *node.ExecutionHooks
-	activateFlow func(nodeID, pinID string) error
+	nodeID             string
+	nodeType           string
+	blueprintID        string
+	executionID        string
+	inputs             map[string]types.Value
+	outputs            map[string]types.Value
+	variables          map[string]types.Value
+	debugData          map[string]interface{}
+	logger             node.Logger
+	hooks              *node.ExecutionHooks
+	activateFlow       func(nodeID, pinID string) error
+	activatedFlows     []string // Track which output pins were activated
+	activatedFlowMutex sync.Mutex
 }
 
 // NewExecutionContext creates a new execution context
@@ -34,18 +38,20 @@ func NewExecutionContext(
 	hooks *node.ExecutionHooks,
 	activateFlow func(nodeID, pinID string) error,
 ) *DefaultExecutionContext {
+	logger.Opts(map[string]interface{}{"nodeId": nodeID})
 	return &DefaultExecutionContext{
-		nodeID:       nodeID,
-		nodeType:     nodeType,
-		blueprintID:  blueprintID,
-		executionID:  executionID,
-		inputs:       inputs,
-		outputs:      make(map[string]types.Value),
-		variables:    variables,
-		debugData:    make(map[string]interface{}),
-		logger:       logger,
-		hooks:        hooks,
-		activateFlow: activateFlow,
+		nodeID:         nodeID,
+		nodeType:       nodeType,
+		blueprintID:    blueprintID,
+		executionID:    executionID,
+		inputs:         inputs,
+		outputs:        make(map[string]types.Value),
+		variables:      variables,
+		debugData:      make(map[string]interface{}),
+		logger:         logger,
+		hooks:          hooks,
+		activateFlow:   activateFlow,
+		activatedFlows: make([]string, 0),
 	}
 }
 
@@ -53,12 +59,50 @@ func NewExecutionContext(
 func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
 	value, exists := ctx.inputs[pinID]
 
-	// Log the input access
-	if exists && ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
-		ctx.hooks.OnPinValue(ctx.nodeID, pinID, value.RawValue)
+	// If the value exists, return it
+	if exists {
+		// Log the input access
+		if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+			ctx.hooks.OnPinValue(ctx.nodeID, pinID, value.RawValue)
+		}
+		return value, true
 	}
 
-	return value, exists
+	// If the value doesn't exist, try to find a default value
+	// First check the node properties for input_[pinID]
+	blueprintID := ctx.GetBlueprintID()
+	if bp, err := db.Blueprints.GetBlueprint(blueprintID); err == nil {
+		if _node := bp.FindNode(ctx.nodeID); _node != nil {
+			for _, prop := range _node.Properties {
+				if prop.Name == fmt.Sprintf("input_%s", pinID) {
+					// Create a value from the default
+					defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+
+					// Log the default value usage
+					if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+						ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
+					}
+
+					// Add to debug data
+					ctx.RecordDebugInfo(types.DebugInfo{
+						NodeID:      ctx.nodeID,
+						PinID:       pinID,
+						Description: "Default value used",
+						Value: map[string]interface{}{
+							"default": defaultValue.RawValue,
+							"source":  "node property",
+						},
+						Timestamp: time.Now(),
+					})
+
+					return defaultValue, true
+				}
+			}
+		}
+	}
+
+	// No value or default found
+	return types.Value{}, false
 }
 
 // SetOutputValue sets an output value by pin ID
@@ -74,15 +118,37 @@ func (ctx *DefaultExecutionContext) SetOutputValue(pinID string, value types.Val
 // GetOutputValue retrieves an output value by pin ID
 func (ctx *DefaultExecutionContext) GetOutputValue(pinID string) (types.Value, bool) {
 	value, exists := ctx.outputs[pinID]
+
+	// Log for debugging
+	if exists {
+		fmt.Printf("[DEBUG] Getting output value for %s.%s: %v (type: %T)\n",
+			ctx.nodeID, pinID, value.RawValue, value.RawValue)
+	} else {
+		fmt.Printf("[DEBUG] Output value not found for %s.%s\n", ctx.nodeID, pinID)
+	}
+
 	return value, exists
 }
 
 // ActivateOutputFlow activates an output execution flow
+// This now just stores which pins to activate, actual activation happens later
 func (ctx *DefaultExecutionContext) ActivateOutputFlow(pinID string) error {
-	if ctx.activateFlow == nil {
-		return fmt.Errorf("no activation function provided")
-	}
-	return ctx.activateFlow(ctx.nodeID, pinID)
+	ctx.activatedFlowMutex.Lock()
+	defer ctx.activatedFlowMutex.Unlock()
+
+	// Store the activated pin for later execution
+	ctx.activatedFlows = append(ctx.activatedFlows, pinID)
+	fmt.Printf("[DEBUG] Queued output flow activation for %s.%s\n", ctx.nodeID, pinID)
+
+	return nil
+}
+
+// GetActivatedOutputFlows returns the list of output pins that were activated
+func (ctx *DefaultExecutionContext) GetActivatedOutputFlows() []string {
+	ctx.activatedFlowMutex.Lock()
+	defer ctx.activatedFlowMutex.Unlock()
+
+	return ctx.activatedFlows
 }
 
 // GetVariable retrieves a variable by name
