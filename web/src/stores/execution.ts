@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useWebSocketStore, WebSocketEvents } from './websocket'
-import type { NodeExecutionStatus, NodeDebugData, DataFlow } from '../types/execution'
+import type {NodeExecutionStatus, NodeDebugData, DataFlow, LogEntry} from '../types/execution'
 import { useBlueprintStore } from './blueprint'
 
 type NodeStatus = 'idle' | 'executing' | 'completed' | 'error'
@@ -132,20 +132,29 @@ export const useExecutionStore = defineStore('execution', () => {
         }
     }
 
-    function recordDataFlow(flow: unknown) {
-        if (!flow || typeof flow !== 'object') return
+    function recordDataFlow(flow: DataFlow) {
+        // Store the flow
+        dataFlows.value.push(flow)
 
-        const dataFlow = flow as Partial<DataFlow>
-        const validFlow: DataFlow = {
-            sourceNodeId: safeString(dataFlow.sourceNodeId),
-            sourcePinId: safeString(dataFlow.sourcePinId),
-            targetNodeId: safeString(dataFlow.targetNodeId),
-            targetPinId: safeString(dataFlow.targetPinId),
-            value: dataFlow.value,
-            timestamp: safeDate(dataFlow.timestamp)
+        // Update node statuses to reflect data flow
+        // This is important for visualizing active connections
+
+        // Ensure we have statuses for both source and target nodes
+        if (!nodeStatuses.value[flow.sourceNodeId]) {
+            nodeStatuses.value[flow.sourceNodeId] = {
+                nodeId: flow.sourceNodeId,
+                status: 'completed', // Assume completed if we're getting data from it
+                timestamp: flow.timestamp
+            }
         }
 
-        dataFlows.value.push(validFlow)
+        if (!nodeStatuses.value[flow.targetNodeId]) {
+            nodeStatuses.value[flow.targetNodeId] = {
+                nodeId: flow.targetNodeId,
+                status: 'executing', // Assume executing if we're sending data to it
+                timestamp: flow.timestamp
+            }
+        }
     }
 
     async function loadExecution(executionId: string) {

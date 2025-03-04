@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useWebSocketStore, WebSocketEvents } from './websocket'
 import type { NodeTypeDefinition, PinDefinition } from '../types/nodes'
+import { arePinTypesCompatible } from '../types/nodes'
+
 
 export const useNodeRegistryStore = defineStore('nodeRegistry', () => {
     // State
@@ -98,29 +100,7 @@ export const useNodeRegistryStore = defineStore('nodeRegistry', () => {
 
     // Check if pins are compatible for connection
     function arePinsCompatible(sourcePinType: string, targetPinType: string): boolean {
-        // Execution pins can only connect to execution pins
-        if (sourcePinType === 'execution' && targetPinType !== 'execution') {
-            return false
-        }
-
-        if (sourcePinType !== 'execution' && targetPinType === 'execution') {
-            return false
-        }
-
-        // Any type can connect to any other type
-        if (sourcePinType === 'any' || targetPinType === 'any') {
-            return true
-        }
-
-        // Same types can connect
-        if (sourcePinType === targetPinType) {
-            return true
-        }
-
-        // Add logic for automatic type conversion if needed
-        // For example, number can connect to string if auto-conversion is allowed
-
-        return false
+        return arePinTypesCompatible(sourcePinType, targetPinType);
     }
 
     // Call setup after store is created

@@ -6,9 +6,10 @@ import (
 
 // BaseNode provides common implementation for all nodes
 type BaseNode struct {
-	Metadata NodeMetadata
-	Inputs   []types.Pin
-	Outputs  []types.Pin
+	Metadata   NodeMetadata
+	Inputs     []types.Pin
+	Outputs    []types.Pin
+	Properties []types.Property
 }
 
 // GetMetadata returns the node's metadata

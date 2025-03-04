@@ -110,9 +110,9 @@
         </div>
       </div>
 
-      <!-- Input pins -->
+      <!-- Input pins and properties -->
       <div v-if="nodeType.inputs.length > 0" class="section">
-        <h4>Inputs</h4>
+        <h4>Inputs & Properties</h4>
         <div
             v-for="pin in nodeType.inputs"
             :key="pin.id"
@@ -126,49 +126,82 @@
             {{ pin.description }}
           </div>
 
-          <!-- Default value editor (only for non-execution pins that are not connected) -->
-          <div v-if="!isPinConnected(pin.id) && pin.type.id !== 'execution'" class="pin-default-editor">
-            <div class="default-label">Default Value:</div>
-
+          <!-- Special handling for Constant node properties -->
+          <div v-if="!isPinConnected(pin.id) && pin.type.id !== 'execution'" class="pin-property-editor">
             <!-- String input -->
-            <input
-                v-if="pin.type.id === 'string'"
-                type="text"
-                v-model="pinDefaults[pin.id]"
-                class="property-input"
-                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
-            />
+            <div v-if="pin.type.id === 'string'">
+              <input
+                  v-if="isConstantValuePin(pin)"
+                  type="text"
+                  v-model="constantValue"
+                  class="property-input"
+                  @change="updateValue(pin)"
+              />
+              <!--  -->
+              <input
+                  v-else-if="!isPinConnected(pin.id)"
+                  type="text"
+                  v-model="pinDefaults[pin.id]"
+                  class="property-input"
+                  @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+              />
+            </div>
 
             <!-- Number input -->
-            <input
-                v-if="pin.type.id === 'number'"
-                type="number"
-                v-model.number="pinDefaults[pin.id]"
-                class="property-input"
-                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
-            />
+            <div v-if="pin.type.id === 'number'">
+              <input
+                  v-if="isConstantValuePin(pin)"
+                  type="number"
+                  v-model.number="constantValue"
+                  class="property-input"
+                  @change="updateValue(pin)"
+              />
+              <!--  -->
+              <input
+                  v-else-if="!isPinConnected(pin.id)"
+                  type="number"
+                  v-model.number="pinDefaults[pin.id]"
+                  class="property-input"
+                  @change="updateValue(pin)"
+              />
+            </div>
 
             <!-- Boolean input -->
             <div v-if="pin.type.id === 'boolean'" class="property-boolean">
               <label class="toggle-switch">
                 <input
                     type="checkbox"
+                    v-if="isConstantValuePin(pin)"
+                    v-model="constantValue"
+                    @change="updateValue(pin)"
+                />
+                <input
+                    type="checkbox"
+                    v-else-if="!isPinConnected(pin.id)"
                     v-model="pinDefaults[pin.id]"
-                    @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+                    @change="updateValue(pin)"
                 />
                 <span class="toggle-slider"></span>
               </label>
             </div>
 
-            <!-- Object/JSON input -->
-            <textarea
-                v-if="pin.type.id === 'object' || pin.type.id === 'array'"
-                v-model="pinDefaults[pin.id]"
-                class="property-input property-textarea"
-                @change="updateJsonPinDefault(pin.id, pinDefaults[pin.id])"
-            ></textarea>
+            <div v-if="pin.type.id === 'any'">
+              <input
+                  v-if="isConstantValuePin(pin)"
+                  type="text"
+                  class="property-input"
+                  v-model="constantValue"
+                  @change="updateValue(pin)"
+              />
+              <input
+                  v-else-if="!isPinConnected(pin.id)"
+                  type="text"
+                  class="property-input"
+                  v-model="pinDefaults[pin.id]"
+                  @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+              />
+            </div>
           </div>
-
         </div>
       </div>
 
@@ -187,6 +220,46 @@
           <div v-if="pin.description" class="pin-description">
             {{ pin.description }}
           </div>
+          <!-- Special handling for Constant node properties -->
+          <div v-if="!isPinConnected(pin.id) && pin.type.id !== 'execution' && !isConstantValuePin(pin)" class="pin-property-editor">
+            <!-- String input -->
+            <input
+                v-if="pin.type.id === 'string'"
+                type="text"
+                v-model="pinDefaults[pin.id]"
+                class="property-input"
+                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+            />
+
+            <!-- Number input -->
+            <input
+                v-else-if="pin.type.id === 'number'"
+                type="number"
+                v-model.number="pinDefaults[pin.id]"
+                class="property-input"
+                @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+            />
+
+            <!-- Boolean input -->
+            <div v-else-if="pin.type.id === 'boolean'" class="property-boolean">
+              <label class="toggle-switch">
+                <input
+                    type="checkbox"
+                    v-model="pinDefaults[pin.id]"
+                    @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+                />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <input
+              v-else
+              type="text"
+              class="property-input"
+              v-model="pinDefaults[pin.id]"
+              @change="updatePinDefault(pin.id, pinDefaults[pin.id])"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -203,7 +276,7 @@
 import { ref, computed, watch } from 'vue'
 import { useBlueprintStore } from '../../stores/blueprint'
 import type { Node } from '../../types/blueprint'
-import type { NodeTypeDefinition } from '../../types/nodes'
+import type {NodeTypeDefinition, PinDefinition} from '../../types/nodes'
 
 const props = defineProps<{
   node: Node
@@ -220,6 +293,7 @@ const emit = defineEmits<{
 const position = ref({ x: props.node.position.x, y: props.node.position.y })
 const properties = ref<Array<{ name: string, value: any, type: string, options?: string[] }>>([])
 const pinDefaults = ref<Record<string, any>>({})
+const constantValue = ref<any>('')
 
 // Computed
 const nodeTitle = computed(() => {
@@ -227,6 +301,40 @@ const nodeTitle = computed(() => {
 })
 
 // Methods
+// Initialize constant value from node properties
+function initConstantValue() {
+  // Check if this is a constant node
+  if (props.nodeType && props.nodeType.typeId.startsWith('constant-')) {
+    const property = props.node.properties.find(p => p.name === 'constantValue')
+
+    if (property) {
+      constantValue.value = property.value
+    } else {
+      // Set default value based on type
+      if (props.nodeType.typeId === 'constant-string') {
+        constantValue.value = ''
+      } else if (props.nodeType.typeId === 'constant-number') {
+        constantValue.value = 0
+      } else if (props.nodeType.typeId === 'constant-boolean') {
+        constantValue.value = false
+      }
+    }
+  }
+}
+
+// Check if this pin is a constant value input
+function isConstantValuePin(pin: any): boolean {
+  return pin.id === 'constantValue' || props.nodeType && props.nodeType.typeId.startsWith('constant-')
+}
+
+// Update the constant value property
+function updateValue(pin: PinDefinition) {
+  if (isConstantValuePin(pin)) {
+    emit('property-changed', props.node.id, 'constantValue', constantValue.value)
+    return
+  }
+}
+
 function updatePosition() {
   emit('property-changed', props.node.id, 'position', {
     x: position.value.x,
@@ -354,10 +462,17 @@ function isPinConnected(pinId: string): boolean {
 watch(() => props.node, () => {
   position.value = { x: props.node.position.x, y: props.node.position.y }
   initializeProperties()
+  initConstantValue()
+}, { deep: true })
+
+// Watch for nodeType changes
+watch(() => props.nodeType, () => {
+  initConstantValue()
 }, { deep: true })
 
 // Initialize
 initializeProperties()
+initConstantValue()
 </script>
 
 <style scoped>
@@ -533,6 +648,13 @@ input:checked + .toggle-slider:before {
 .pin-description {
   font-size: 0.8rem;
   color: #bbb;
+}
+
+.pin-property-editor {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: #383838;
+  border-radius: 4px;
 }
 
 .pin-default-editor {

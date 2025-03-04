@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
 	"webblueprint/internal/node"
@@ -19,6 +20,7 @@ type APIServer struct {
 	nodeRegistry    map[string]node.NodeFactory
 	wsManager       *WebSocketManager
 	debugManager    *engine.DebugManager
+	rw              *sync.RWMutex
 }
 
 // NewAPIServer creates a new API server
@@ -28,6 +30,7 @@ func NewAPIServer(executionEngine *engine.ExecutionEngine, wsManager *WebSocketM
 		nodeRegistry:    make(map[string]node.NodeFactory),
 		wsManager:       wsManager,
 		debugManager:    debugManager,
+		rw:              &sync.RWMutex{},
 	}
 }
 
@@ -168,6 +171,8 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 	}
 
 	// Store blueprint
+	s.rw.Lock()
+	defer s.rw.Unlock()
 	db.Blueprints[bp.ID] = &bp
 
 	// Register with execution engine
@@ -180,6 +185,8 @@ func (s *APIServer) handleGetBlueprint(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
+	s.rw.RLock()
+	defer s.rw.RUnlock()
 	bp, exists := db.Blueprints[id]
 	if !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
@@ -206,6 +213,8 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 	}
 
 	// Update blueprint
+	s.rw.Lock()
+	defer s.rw.Unlock()
 	db.Blueprints[id] = &bp
 
 	// Re-register with execution engine
@@ -218,6 +227,8 @@ func (s *APIServer) handleDeleteBlueprint(w http.ResponseWriter, r *http.Request
 	vars := mux.Vars(r)
 	id := vars["id"]
 
+	s.rw.Lock()
+	defer s.rw.Unlock()
 	if _, exists := db.Blueprints[id]; !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return
@@ -237,6 +248,8 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	id := vars["id"]
 
+	s.rw.Lock()
+	defer s.rw.Unlock()
 	if _, exists := db.Blueprints[id]; !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return

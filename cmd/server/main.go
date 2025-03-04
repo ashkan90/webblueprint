@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"webblueprint/internal/api"
 	"webblueprint/internal/engine"
+	"webblueprint/internal/nodes/data"
 	"webblueprint/internal/nodes/logic"
+	"webblueprint/internal/nodes/math"
 	"webblueprint/internal/nodes/utility"
 	"webblueprint/internal/nodes/web"
 )
@@ -35,9 +37,23 @@ func main() {
 	// Register node types
 	// Logic nodes
 	apiServer.RegisterNodeType("if-condition", logic.NewIfConditionNode)
+	apiServer.RegisterNodeType("loop", logic.NewLoopNode)
 
 	// Web nodes
 	apiServer.RegisterNodeType("http-request", web.NewHTTPRequestNode)
+
+	// Data nodes
+	apiServer.RegisterNodeType("constant-string", data.NewStringConstantNode)
+	apiServer.RegisterNodeType("constant-number", data.NewNumberConstantNode)
+	apiServer.RegisterNodeType("constant-boolean", data.NewBooleanConstantNode)
+	apiServer.RegisterNodeType("variable-get", data.NewVariableGetNode)
+	apiServer.RegisterNodeType("variable-set", data.NewVariableSetNode)
+
+	// Math nodes
+	apiServer.RegisterNodeType("math-add", math.NewAddNode)
+	apiServer.RegisterNodeType("math-subtract", math.NewSubtractNode)
+	apiServer.RegisterNodeType("math-multiply", math.NewMultiplyNode)
+	apiServer.RegisterNodeType("math-divide", math.NewDivideNode)
 
 	// Utility nodes
 	apiServer.RegisterNodeType("print", utility.NewPrintNode)

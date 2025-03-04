@@ -195,7 +195,7 @@ onMounted(() => {
 .log-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 8px 48px;
 }
 
 .log-entry {

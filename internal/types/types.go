@@ -362,6 +362,12 @@ type Pin struct {
 	Default     interface{} // Default value if not connected
 }
 
+// Property ...
+type Property struct {
+	Name  string      `json:"name"`
+	Value interface{} `json:"value"`
+}
+
 // DebugInfo stores debug information during execution
 type DebugInfo struct {
 	NodeID      string

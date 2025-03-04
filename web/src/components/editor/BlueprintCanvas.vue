@@ -20,9 +20,27 @@
         <g v-for="connection in connections" :key="connection.id">
           <path
               :d="getConnectionPath(connection)"
-              :class="getConnectionClass(connection)"
+              :class="[
+                getConnectionClass(connection),
+                { 'connection-active': isConnectionActive(connection) }
+              ]"
               @click="handleConnectionClick(connection)"
           />
+
+          <!-- Data flow animation -->
+          <circle
+              v-if="connection.connectionType === 'data' && isConnectionActive(connection)"
+              :class="['data-particle', getConnectionParticleClass(connection)]"
+              r="4"
+              style="filter: blur(1px);"
+          >
+            <animateMotion
+                :path="getConnectionPath(connection)"
+                dur="0.5s"
+                repeatCount="indefinite"
+                rotate="auto"
+            />
+          </circle>
         </g>
 
         <!-- Connection being created -->
@@ -720,6 +738,51 @@ function getConnectionPath(connection: Connection): string {
   return generateConnectionPath(x1, y1, x2, y2)
 }
 
+function isConnectionActive(connection: Connection): boolean {
+  // Check if this connection is part of an active data flow
+  if (!props.nodeStatuses) return false
+
+  // For execution connections, check if source node is executing or completed
+  // and target node is executing
+  if (connection.connectionType === 'execution') {
+    const sourceStatus = props.nodeStatuses[connection.sourceNodeId]
+    const targetStatus = props.nodeStatuses[connection.targetNodeId]
+
+    return (sourceStatus?.status === 'completed' && targetStatus?.status === 'executing')
+  }
+
+  // For data connections, check if source node is completed and target is executing
+  const sourceStatus = props.nodeStatuses[connection.sourceNodeId]
+  const targetStatus = props.nodeStatuses[connection.targetNodeId]
+
+  return (sourceStatus && targetStatus &&
+      (sourceStatus.status === 'completed' || sourceStatus.status === 'executing') &&
+      targetStatus.status === 'executing')
+}
+
+function getConnectionParticleClass(connection: Connection): string {
+  // Get the source node type to determine the particle color
+  const sourceNode = props.nodes.find(n => n.id === connection.sourceNodeId)
+  if (!sourceNode) return ''
+
+  // Get the pin that's the source of this connection
+  const nodeType = nodeRegistryStore.getNodeTypeById(sourceNode.type)
+  if (!nodeType) return ''
+
+  const pin = nodeType.outputs.find(p => p.id === connection.sourcePinId)
+  if (!pin) return ''
+
+  // Return a class based on pin type
+  switch (pin.type.id) {
+    case 'string': return 'particle-string'
+    case 'number': return 'particle-number'
+    case 'boolean': return 'particle-boolean'
+    case 'object': return 'particle-object'
+    case 'array': return 'particle-array'
+    default: return 'particle-any'
+  }
+}
+
 function generateConnectionPath(x1: number, y1: number, x2: number, y2: number): string {
   // Create a bezier curve path
   const dx = Math.max(Math.abs(x2 - x1) * 0.5, 50)
@@ -818,6 +881,47 @@ defineExpose({
 .connection-invalid {
   opacity: 0.5;
   stroke-dasharray: 4 2;
+}
+
+.connection-active {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7));
+  stroke-width: 3px;
+  animation: connection-pulse 1s ease-in-out infinite;
+}
+
+@keyframes connection-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.data-particle {
+  fill: white;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
+}
+
+.particle-string {
+  fill: var(--input-pin);
+}
+
+.particle-number {
+  fill: var(--output-pin);
+}
+
+.particle-boolean {
+  fill: #dc5050;
+}
+
+.particle-object {
+  fill: var(--conn-color);
+}
+
+.particle-array {
+  fill: #bb86fc;
+}
+
+.particle-any {
+  fill: #aaaaaa;
 }
 
 .context-menu, .add-node-menu {

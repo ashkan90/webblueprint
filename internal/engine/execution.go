@@ -74,7 +74,7 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 	if bp, err := db.Blueprints.GetBlueprint(blueprintID); err == nil {
 		if _node := bp.FindNode(ctx.nodeID); _node != nil {
 			for _, prop := range _node.Properties {
-				if prop.Name == fmt.Sprintf("input_%s", pinID) {
+				if prop.Name == fmt.Sprintf("input_%s", pinID) || prop.Name == "constantValue" {
 					// Create a value from the default
 					defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
 

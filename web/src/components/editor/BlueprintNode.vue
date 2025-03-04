@@ -464,7 +464,45 @@ onUnmounted(() => {
 }
 
 .blueprint-node.executing {
-    box-shadow: 0 0 0 2px #ffcc00, 0 0 10px rgba(255, 204, 0, 0.5);
+  box-shadow: 0 0 0 2px #ffcc00, 0 0 10px rgba(255, 204, 0, 0.5);
+  animation: node-executing 1.5s ease-in-out infinite;
+}
+
+@keyframes node-executing {
+  0% { box-shadow: 0 0 0 2px #ffcc00, 0 0 10px rgba(255, 204, 0, 0.3); }
+  50% { box-shadow: 0 0 0 2px #ffcc00, 0 0 15px rgba(255, 204, 0, 0.8); }
+  100% { box-shadow: 0 0 0 2px #ffcc00, 0 0 10px rgba(255, 204, 0, 0.3); }
+}
+
+.blueprint-node.executing .node-status-badge {
+  background-color: #ffcc00;
+  color: #333;
+}
+
+.blueprint-node.completed {
+  box-shadow: 0 0 0 2px #00cc00, 0 0 10px rgba(0, 204, 0, 0.5);
+  transition: box-shadow 0.3s ease-out;
+}
+
+.blueprint-node.completed .node-status-badge {
+  background-color: #00cc00;
+  color: #fff;
+}
+
+.blueprint-node.error {
+  box-shadow: 0 0 0 2px #cc0000, 0 0 10px rgba(204, 0, 0, 0.5);
+  animation: node-error 0.5s ease-in-out 3;
+}
+
+@keyframes node-error {
+  0% { box-shadow: 0 0 0 2px #cc0000, 0 0 10px rgba(204, 0, 0, 0.5); }
+  50% { box-shadow: 0 0 0 3px #cc0000, 0 0 20px rgba(204, 0, 0, 0.8); }
+  100% { box-shadow: 0 0 0 2px #cc0000, 0 0 10px rgba(204, 0, 0, 0.5); }
+}
+
+.blueprint-node.error .node-status-badge {
+  background-color: #cc0000;
+  color: #fff;
 }
 
 .blueprint-node.executing .node-status-badge {
