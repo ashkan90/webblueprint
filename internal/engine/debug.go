@@ -79,6 +79,20 @@ func (dm *DebugManager) StoreNodeOutputValue(executionID, nodeID, pinID string, 
 	}
 }
 
+// ClearCachedPinTypes clears any cached type information for a pin
+func (dm *DebugManager) ClearCachedPinTypes(executionID, nodeID, pinID string) {
+	// This is a placeholder for future type caching optimization
+	// Currently, we don't cache pin types, but this method ensures we have a hook
+	// for clearing type information if we implement caching in the future
+
+	// Ensure the value is fresh by re-fetching it if needed
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	// In a more advanced implementation, we might clear a type cache here
+	// For now, this is just a placeholder
+}
+
 // GetNodeDebugData retrieves debug data for a node
 func (dm *DebugManager) GetNodeDebugData(executionID, nodeID string) (map[string]interface{}, bool) {
 	dm.mutex.RLock()

@@ -21,7 +21,7 @@ type DefaultExecutionContext struct {
 	debugData          map[string]interface{}
 	logger             node.Logger
 	hooks              *node.ExecutionHooks
-	activateFlow       func(nodeID, pinID string) error
+	activateFlow       func(ctx *DefaultExecutionContext, nodeID, pinID string) error
 	activatedFlows     []string // Track which output pins were activated
 	activatedFlowMutex sync.Mutex
 }
@@ -36,7 +36,7 @@ func NewExecutionContext(
 	variables map[string]types.Value,
 	logger node.Logger,
 	hooks *node.ExecutionHooks,
-	activateFlow func(nodeID, pinID string) error,
+	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
 ) *DefaultExecutionContext {
 	logger.Opts(map[string]interface{}{"nodeId": nodeID})
 	return &DefaultExecutionContext{
@@ -70,34 +70,63 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 
 	// If the value doesn't exist, try to find a default value
 	// First check the node properties for input_[pinID]
-	blueprintID := ctx.GetBlueprintID()
-	if bp, err := db.Blueprints.GetBlueprint(blueprintID); err == nil {
-		if _node := bp.FindNode(ctx.nodeID); _node != nil {
-			for _, prop := range _node.Properties {
-				if prop.Name == fmt.Sprintf("input_%s", pinID) || prop.Name == "constantValue" {
-					// Create a value from the default
-					defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
+	if err != nil {
+		return types.Value{}, false
+	}
 
-					// Log the default value usage
-					if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
-						ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
-					}
+	_node := bp.FindNode(ctx.GetNodeID())
+	if _node == nil {
+		return types.Value{}, false
+	}
 
-					// Add to debug data
-					ctx.RecordDebugInfo(types.DebugInfo{
-						NodeID:      ctx.nodeID,
-						PinID:       pinID,
-						Description: "Default value used",
-						Value: map[string]interface{}{
-							"default": defaultValue.RawValue,
-							"source":  "node property",
-						},
-						Timestamp: time.Now(),
-					})
+	for _, prop := range _node.Properties {
+		if prop.Name == fmt.Sprintf("input_%s", pinID) || prop.Name == "constantValue" {
+			// Create a value from the default
+			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
 
-					return defaultValue, true
-				}
+			// Log the default value usage
+			if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+				ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
 			}
+
+			// Add to debug data
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.nodeID,
+				PinID:       pinID,
+				Description: "Default value used",
+				Value: map[string]interface{}{
+					"default": defaultValue.RawValue,
+					"source":  "node property",
+				},
+				Timestamp: time.Now(),
+			})
+
+			return defaultValue, true
+		}
+
+		if prop.Name == fmt.Sprintf("_loop_%s", pinID) {
+			// Create a value from the default
+			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+
+			// Log the default value usage
+			if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+				ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
+			}
+
+			// Add to debug data
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.nodeID,
+				PinID:       pinID,
+				Description: "Default value used",
+				Value: map[string]interface{}{
+					"default": defaultValue.RawValue,
+					"source":  "node property",
+				},
+				Timestamp: time.Now(),
+			})
+
+			return defaultValue, true
 		}
 	}
 
@@ -141,6 +170,20 @@ func (ctx *DefaultExecutionContext) ActivateOutputFlow(pinID string) error {
 	fmt.Printf("[DEBUG] Queued output flow activation for %s.%s\n", ctx.nodeID, pinID)
 
 	return nil
+}
+
+// ExecuteConnectedNodes executes all nodes connected to the given output pin
+// This is different from ActivateOutputFlow because it executes the nodes immediately
+// rather than just marking them for execution
+func (ctx *DefaultExecutionContext) ExecuteConnectedNodes(pinID string) error {
+	logger := ctx.Logger()
+	logger.Debug("Executing connected nodes", map[string]interface{}{
+		"pin": pinID,
+	})
+
+	// We must directly execute connected nodes one by one
+	// This requires calling the activateFlow function and waiting for it to complete
+	return ctx.activateFlow(ctx, ctx.nodeID, pinID)
 }
 
 // GetActivatedOutputFlows returns the list of output pins that were activated

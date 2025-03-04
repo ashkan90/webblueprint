@@ -28,6 +28,14 @@
         No log messages to display
       </div>
 
+      <div v-if="filteredLogs.length > 0" class="panel-header">
+        <input
+          v-model="logFilter"
+          type="text"
+          class="search-input"
+        />
+      </div>
+
       <div
           v-for="(log, index) in filteredLogs"
           :key="index"
@@ -74,11 +82,18 @@ const showWarn = ref(true)
 const showError = ref(true)
 const logContent = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
+const logFilter = ref('')
 
 // Get logs from execution store
 const logs = computed(() => executionStore.logs)
 const filteredLogs = computed(() => {
   return logs.value.filter(log => {
+    if (logFilter.value !== '') {
+      return logFilter.value.includes('-')
+        ? log.nodeId.includes(logFilter.value)
+        : log.message.toLowerCase().includes(logFilter.value)
+    }
+
     switch (log.level.toLowerCase()) {
       case 'debug': return showDebug.value
       case 'info': return showInfo.value
@@ -96,7 +111,6 @@ function formatTime(date: Date | string): string {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    fractionalSecondDigits: 3
   })
 }
 
@@ -115,7 +129,9 @@ function clearLogs() {
 }
 
 function toggleLogDetails(index: number) {
-  executionStore.toggleLogExpanded(index)
+  if (filteredLogs.value[index]) {
+    filteredLogs.value[index].expanded = !filteredLogs.value[index].expanded
+  }
 }
 
 function scrollToBottom() {
@@ -307,5 +323,21 @@ onMounted(() => {
   height: 100px;
   color: #666;
   font-style: italic;
+}
+
+.search-input,
+.search-select {
+  flex: 1;
+  background-color: #444;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: white;
+}
+
+.search-input:focus,
+.search-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
 }
 </style>

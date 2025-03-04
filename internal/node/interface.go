@@ -46,6 +46,9 @@ type ExecutionContext interface {
 	// Execution control
 	ActivateOutputFlow(pinID string) error
 
+	// Direct execution (for nodes that need synchronous execution)
+	ExecuteConnectedNodes(pinID string) error
+
 	// State management
 	GetVariable(name string) (types.Value, bool)
 	SetVariable(name string, value types.Value)

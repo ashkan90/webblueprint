@@ -2,7 +2,6 @@ package engine
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 	"webblueprint/internal/node"
@@ -447,19 +446,11 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 	nodeInstance := factory()
 
 	// Create execution context
-	log.Printf("[ENGINE] Processing input connections for node %s", nodeID)
-
 	// Collect input values from connected nodes
 	inputValues := make(map[string]types.Value)
 
 	// Get input connections for this node
 	inputConnections := bp.GetNodeInputConnections(nodeID)
-
-	log.Printf("[ENGINE] Node %s has %d input connections", nodeID, len(inputConnections))
-	for i, conn := range inputConnections {
-		log.Printf("[ENGINE] Connection %d: %s.%s -> %s.%s (type: %s)",
-			i, conn.SourceNodeID, conn.SourcePinID, conn.TargetNodeID, conn.TargetPinID, conn.ConnectionType)
-	}
 
 	// Process data connections
 	for _, conn := range inputConnections {
@@ -469,14 +460,8 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 			sourcePinID := conn.SourcePinID
 			targetPinID := conn.TargetPinID
 
-			log.Printf("[ENGINE] Processing data connection from %s.%s to %s.%s",
-				sourceNodeID, sourcePinID, nodeID, targetPinID)
-
 			// Check if we have a result for this pin
 			if nodeResults, ok := e.debugManager.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
-				log.Printf("[ENGINE] Found output value from %s.%s: %v (type: %T)",
-					sourceNodeID, sourcePinID, nodeResults, nodeResults)
-
 				// Convert to Value
 				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
 
@@ -492,28 +477,24 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 						"value":        nodeResults,
 					},
 				})
-			} else {
-				log.Printf("[ENGINE] No output value found for %s.%s", sourceNodeID, sourcePinID)
-				log.Printf("[ENGINE] Lookup data from %s.%s %v %%!d(bool=%v)",
-					sourceNodeID, sourcePinID, nodeResults, ok)
 			}
 		}
 	}
 
 	// Create a function to activate output flows that maintains proper execution order
 	// This will be passed to the execution context but used later after outputs are stored
-	activateFlowFn := func(nodeID, pinID string) error {
-		log.Printf("[ENGINE] Activating output flow for %s.%s", nodeID, pinID)
+	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+		for _, pin := range nodeInstance.GetOutputPins() {
+			if value, exists := ctx.GetOutputValue(pin.ID); exists {
+				e.debugManager.StoreNodeOutputValue(executionID, nodeID, pin.ID, value.RawValue)
+			}
+		}
 
 		// Find connections from this output pin
 		outputConnections := bp.GetNodeOutputConnections(nodeID)
-
-		log.Printf("[ENGINE] Node %s has %d output connections", nodeID, len(outputConnections))
-
 		for _, conn := range outputConnections {
 			if conn.ConnectionType == "execution" && conn.SourcePinID == pinID {
 				targetNodeID := conn.TargetNodeID
-				log.Printf("[ENGINE] Following execution connection to node %s", targetNodeID)
 
 				// Execute the target node
 				if err := e.executeNode(targetNodeID, blueprintID, executionID, variables, hooks); err != nil {
@@ -542,8 +523,6 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		hooks.OnNodeStart(nodeID, nodeConfig.Type)
 	}
 
-	log.Printf("[ENGINE] Executing node %s (type: %s)", nodeID, nodeConfig.Type)
-
 	// Execute the node
 	err := nodeInstance.Execute(ctx)
 
@@ -554,13 +533,9 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 	// Store debug data
 	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
 
-	// CRITICAL: Store output values BEFORE following execution paths
-	log.Printf("[ENGINE] Storing output values for node %s", nodeID)
+	// Store output values
 	for _, pin := range nodeInstance.GetOutputPins() {
 		if value, exists := ctx.GetOutputValue(pin.ID); exists {
-			log.Printf("[ENGINE] Storing output value for %s.%s: %v (type: %T)",
-				nodeID, pin.ID, value.RawValue, value.RawValue)
-
 			// Store the value
 			outputValues[nodeID] = map[string]types.Value{
 				pin.ID: value,
@@ -568,36 +543,31 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 
 			// Store in debug manager for data flow
 			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pin.ID, value.RawValue)
-		} else {
-			log.Printf("[ENGINE] No output value set for pin %s on node %s", pin.ID, nodeID)
 		}
 	}
 
 	// Handle execution paths that were stored during node.Execute
 	// Get these from the custom ExecutionContext implementation
 	activateOutputPins = ctx.GetActivatedOutputFlows()
-	log.Printf("[ENGINE] Node %s has %d activated output flows", nodeID, len(activateOutputPins))
 
 	// Notify node completion or error
 	if err != nil {
 		if hooks != nil && hooks.OnNodeError != nil {
 			hooks.OnNodeError(nodeID, err)
 		}
-		log.Printf("[ENGINE] Node %s execution failed: %v", nodeID, err)
 		return err
+	}
+
+	// AFTER storing all outputs, now follow execution flows
+	for _, outputPin := range activateOutputPins {
+		if err := activateFlowFn(ctx, nodeID, outputPin); err != nil {
+			return err
+		}
 	}
 
 	if hooks != nil && hooks.OnNodeComplete != nil {
 		hooks.OnNodeComplete(nodeID, nodeConfig.Type)
 	}
 
-	// AFTER storing all outputs, now follow execution flows
-	for _, outputPin := range activateOutputPins {
-		if err := activateFlowFn(nodeID, outputPin); err != nil {
-			return err
-		}
-	}
-
-	log.Printf("[ENGINE] Node %s execution completed successfully", nodeID)
 	return nil
 }

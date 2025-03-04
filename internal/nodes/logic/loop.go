@@ -130,14 +130,18 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 	}
 
 	// Create a context variable to store loop state
+	nodeID := ctx.GetNodeID()
+	loopVarName := fmt.Sprintf("_loop_%s", nodeID)
+
+	// Record debug info for loop start
 	ctx.RecordDebugInfo(types.DebugInfo{
-		NodeID:      ctx.GetNodeID(),
+		NodeID:      nodeID,
 		Description: "Loop Start",
 		Value:       debugData,
 		Timestamp:   time.Now(),
 	})
 
-	// Execute the loop
+	// Convert iterations to int
 	maxIterations := int(iterations)
 	if maxIterations <= 0 {
 		// If iterations <= 0, skip the loop body
@@ -148,7 +152,7 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 		debugData["execution"] = "skipped"
 		debugData["reason"] = "iterations <= 0"
 		ctx.RecordDebugInfo(types.DebugInfo{
-			NodeID:      ctx.GetNodeID(),
+			NodeID:      nodeID,
 			Description: "Loop Skipped",
 			Value:       debugData,
 			Timestamp:   time.Now(),
@@ -157,29 +161,17 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 		return ctx.ActivateOutputFlow("completed")
 	}
 
-	// Store the node and pin IDs for loop iteration
-	nodeID := ctx.GetNodeID()
+	// Get access to a direct execution capability, if available
+	directExecutionCtx, hasDirectExec := ctx.(interface {
+		ExecuteConnectedNodes(pinID string) error
+	})
 
-	// Create a variable to store the loop iteration
-	loopVarName := fmt.Sprintf("_loop_%s", nodeID)
-
-	// Initialize the loop variable
-	ctx.SetVariable(loopVarName, types.NewValue(types.PinTypes.Number, startValue))
-
-	// Set output for index
-	ctx.SetOutputValue("index", types.NewValue(types.PinTypes.Number, startValue))
-
-	// Register a hook function to continue the loop after each iteration
-	// This has to be implemented by creating a special execution context for the loop
-	// that intercepts the completion of the loop body and either starts the next iteration
-	// or exits the loop.
-
-	// For the current implementation, we'll execute the loop body and then immediately
-	// activate the "completed" flow.
+	// Loop initialization
+	currentIndex := startValue
 
 	logger.Info("Starting loop execution", map[string]interface{}{
 		"iterations": maxIterations,
-		"startValue": startValue,
+		"startIndex": startValue,
 	})
 
 	debugData["execution"] = "started"
@@ -190,14 +182,74 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 		Timestamp:   time.Now(),
 	})
 
-	// Activate the loop body flow
-	err = ctx.ActivateOutputFlow("loop")
-	if err != nil {
-		return err
+	// Execute each iteration
+	for i := 0; i < maxIterations; i++ {
+		// Update debug data for this iteration
+		iterDebugData := map[string]interface{}{
+			"iteration":    i,
+			"currentIndex": currentIndex,
+			"timestamp":    time.Now(),
+		}
+
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.GetNodeID(),
+			Description: fmt.Sprintf("Loop Iteration %d", i),
+			Value:       iterDebugData,
+			Timestamp:   time.Now(),
+		})
+
+		// Store the current index in a loop variable
+		ctx.SetVariable(loopVarName, types.NewValue(types.PinTypes.Number, currentIndex))
+
+		// Set output value for this iteration
+		ctx.SetOutputValue("index", types.NewValue(types.PinTypes.Number, currentIndex))
+
+		logger.Info(fmt.Sprintf("Loop iteration %d", i), map[string]interface{}{
+			"index": currentIndex,
+		})
+
+		// If we have direct execution capability, use it
+		if hasDirectExec {
+			// Execute connected nodes immediately and synchronously
+			err = directExecutionCtx.ExecuteConnectedNodes("loop")
+			if err != nil {
+				logger.Error("Failed to execute loop body", map[string]interface{}{
+					"error":     err.Error(),
+					"iteration": i,
+				})
+				break
+			}
+		} else {
+			// Fall back to standard activation (might not work as expected)
+			err = ctx.ActivateOutputFlow("loop")
+			if err != nil {
+				logger.Error("Failed to activate loop body", map[string]interface{}{
+					"error":     err.Error(),
+					"iteration": i,
+				})
+				break
+			}
+		}
+
+		// Increment index for next iteration
+		currentIndex++
 	}
 
-	// After the loop body execution is complete, we would normally update the index and
-	// check if more iterations are needed. For now, we'll just activate the "completed" flow.
+	// Record loop completion
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Loop Completed",
+		Value: map[string]interface{}{
+			"iterationsDone": maxIterations,
+			"finalIndex":     currentIndex - 1,
+		},
+		Timestamp: time.Now(),
+	})
 
+	logger.Info("Loop execution completed", map[string]interface{}{
+		"iterations": maxIterations,
+	})
+
+	// Activate the completed flow
 	return ctx.ActivateOutputFlow("completed")
 }
