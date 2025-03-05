@@ -22,6 +22,7 @@
         >
           <div
               class="node-pin pin-input pin-exec"
+              :class="{ 'pin-active': isPinActive(pin.id) }"
               :data-node-id="node.id"
               :data-pin-id="pin.id"
               :data-pin-type="pin.type.id"
@@ -43,6 +44,7 @@
         >
           <div
               class="node-pin pin-input"
+              :class="{ 'pin-active': isPinActive(pin.id) }"
               :data-node-id="node.id"
               :data-pin-id="pin.id"
               :data-pin-type="pin.type.id"
@@ -111,6 +113,7 @@ import type { NodeTypeDefinition, PinDefinition } from '../../types/nodes'
 const props = defineProps<{
   node: Node
   nodeType: NodeTypeDefinition | null
+  activePins: Set<string>
   selected: boolean
   status: string
 }>()
@@ -182,6 +185,12 @@ const hasExecOutputs = computed(() => execOutputPins.value.length > 0)
 const hasDataOutputs = computed(() => dataOutputPins.value.length > 0)
 
 // Methods
+
+// We need to expose a method to check if a pin is active
+function isPinActive(pinId: string): boolean {
+  // This would be passed down from BlueprintCanvas
+  return props.activePins?.has(`${props.node.id}-${pinId}`) || false;
+}
 
 function handleMouseDown(event: MouseEvent) {
   // Prevent default behavior
