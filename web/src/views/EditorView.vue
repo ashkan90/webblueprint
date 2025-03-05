@@ -37,6 +37,7 @@
             :nodes="nodes"
             :connections="connections"
             :node-statuses="nodeStatuses"
+            @node-added="handleNodeAdded"
             @node-selected="handleNodeSelected"
             @node-deselected="handleNodeDeselected"
             @node-moved="handleNodeMoved"
@@ -84,7 +85,7 @@
             </div>
             <div class="info-item">
               <span class="label">Duration:</span>
-              <span class="value">{{ executionDuration }}</span>
+              <span class="value">{{ executionResult?.duration }}</span>
             </div>
           </div>
         </div>
@@ -126,6 +127,7 @@ const showDebugPanel = ref(false)
 const canvas = ref<InstanceType<typeof BlueprintCanvas> | null>(null)
 const showResultModal = ref(false)
 const executionResult = ref<{
+  duration: string;
   executionId: string;
   success: boolean;
   error?: string;
@@ -254,6 +256,7 @@ async function executeBlueprint() {
 
     // Show result modal
     executionResult.value = {
+      duration: result.duration,
       executionId: result.executionId,
       success: result.success,
       error: result.error

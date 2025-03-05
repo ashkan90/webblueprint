@@ -1,7 +1,7 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Node, Connection, Blueprint, Position, NodeProperty } from '../types/blueprint'
-import { v4 as uuid } from 'uuid'
+import {defineStore} from 'pinia'
+import {computed, ref} from 'vue'
+import type {Blueprint, Connection, Node, Position} from '../types/blueprint'
+import {v4 as uuid} from 'uuid'
 
 export const useBlueprintStore = defineStore('blueprint', () => {
     // State
@@ -104,8 +104,7 @@ export const useBlueprintStore = defineStore('blueprint', () => {
                 throw new Error(`Failed to load blueprint: ${response.statusText}`)
             }
 
-            const data = await response.json()
-            blueprint.value = data
+            blueprint.value = await response.json()
         } catch (err) {
             error.value = err instanceof Error ? err.message : String(err)
             console.error('Error loading blueprint:', err)
@@ -136,8 +135,7 @@ export const useBlueprintStore = defineStore('blueprint', () => {
                 throw new Error(`Failed to save blueprint: ${response.statusText}`)
             }
 
-            const data = await response.json()
-            blueprint.value = data
+            blueprint.value = await response.json()
         } catch (err) {
             error.value = err instanceof Error ? err.message : String(err)
             console.error('Error saving blueprint:', err)
@@ -148,8 +146,6 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     }
 
     function addNode(node: Node) {
-        console.log('Store adding node:', node);
-
         // Make sure we're creating a deep copy to avoid shared references
         const nodeCopy = JSON.parse(JSON.stringify(node));
 

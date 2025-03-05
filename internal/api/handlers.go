@@ -218,7 +218,10 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 	db.Blueprints[id] = &bp
 
 	// Re-register with execution engine
-	s.executionEngine.LoadBlueprint(&bp)
+	err := s.executionEngine.LoadBlueprint(&bp)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+	}
 
 	respondWithJSON(w, http.StatusOK, bp)
 }

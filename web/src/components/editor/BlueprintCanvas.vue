@@ -135,11 +135,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import {ref, computed, onMounted, onUnmounted, watch, toRaw} from 'vue'
 import { v4 as uuid } from 'uuid'
 import { useNodeRegistryStore } from '../../stores/nodeRegistry'
-import type { Node, Connection, Position } from '../../types/blueprint'
-import type { NodeTypeDefinition } from '../../types/nodes'
+import type {Node, Connection, Position, NodeProperty} from '../../types/blueprint'
+import type {NodeTypeDefinition, PinDefinition} from '../../types/nodes'
 import type { NodeExecutionStatus } from '../../types/execution'
 import BlueprintNode from './BlueprintNode.vue'
 
@@ -152,6 +152,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'node-selected', nodeId: string): void
   (e: 'node-added', nodeId: string): void
+  (e: 'node-added', node: Node): void
   (e: 'node-deselected'): void
   (e: 'node-moved', nodeId: string, position: Position): void
   (e: 'connection-created', connection: Connection): void
@@ -608,9 +609,23 @@ function handleAddSpecificNode(nodeType: NodeTypeDefinition) {
     properties: []
   }
 
+  nodeType.inputs.forEach((input: PinDefinition) => {
+    if (!input.default) {
+      return
+    }
+
+    const nodeProperty: NodeProperty = {
+      name: `input_${input.id}`,
+      value: input.default,
+    }
+
+    node.properties.push(nodeProperty)
+  })
+
   // Add the node to the blueprint
   const newNode = structuredClone(node)
-  props.nodes.push(newNode)
+  emit('node-added', newNode)
+  // props.nodes.push(newNode)
 
   // Close the menu
   showAddNodeMenu.value = false
@@ -620,7 +635,7 @@ function handleCopyNode() {
   if (selectedNodeId.value) {
     const node = props.nodes.find(n => n.id === selectedNodeId.value)
     if (node) {
-      copiedNode.value = structuredClone(node)
+      copiedNode.value = structuredClone(toRaw(node))
     }
   }
 
@@ -631,7 +646,7 @@ function handlePasteNode() {
   if (copiedNode.value) {
     // Create a new node based on the copied one
     const node: Node = {
-      ...structuredClone(copiedNode.value),
+      ...structuredClone(toRaw(copiedNode.value)),
       id: uuid(),
       position: { x: dragStart.value.x, y: dragStart.value.y }
     }
@@ -649,7 +664,7 @@ function handleDuplicateNode() {
     if (node) {
       // Create a new node based on the selected one
       const newNode: Node = {
-        ...structuredClone(node),
+        ...structuredClone(toRaw(node)),
         id: uuid(),
         position: {
           x: node.position.x + 20,
@@ -658,7 +673,7 @@ function handleDuplicateNode() {
       }
 
       // Add the node to the blueprint
-      props.nodes.push(newNode)
+      emit('node-added', newNode)
     }
   }
 

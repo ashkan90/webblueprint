@@ -38,9 +38,14 @@ func main() {
 	// Logic nodes
 	apiServer.RegisterNodeType("if-condition", logic.NewIfConditionNode)
 	apiServer.RegisterNodeType("loop", logic.NewLoopNode)
+	apiServer.RegisterNodeType("sequence", logic.NewSequenceNode)
+	apiServer.RegisterNodeType("branch", logic.NewBranchNode)
 
 	// Web nodes
 	apiServer.RegisterNodeType("http-request", web.NewHTTPRequestNode)
+	apiServer.RegisterNodeType("dom-element", web.NewDOMElementNode)
+	apiServer.RegisterNodeType("dom-event", web.NewDOMEventNode)
+	apiServer.RegisterNodeType("storage", web.NewStorageNode)
 
 	// Data nodes
 	apiServer.RegisterNodeType("constant-string", data.NewStringConstantNode)
@@ -48,6 +53,10 @@ func main() {
 	apiServer.RegisterNodeType("constant-boolean", data.NewBooleanConstantNode)
 	apiServer.RegisterNodeType("variable-get", data.NewVariableGetNode)
 	apiServer.RegisterNodeType("variable-set", data.NewVariableSetNode)
+	apiServer.RegisterNodeType("json-processor", data.NewJSONNode)
+	apiServer.RegisterNodeType("array-operations", data.NewArrayNode)
+	apiServer.RegisterNodeType("object-operations", data.NewObjectNode)
+	apiServer.RegisterNodeType("type-conversion", data.NewTypeConversionNode)
 
 	// Math nodes
 	apiServer.RegisterNodeType("math-add", math.NewAddNode)
@@ -57,6 +66,7 @@ func main() {
 
 	// Utility nodes
 	apiServer.RegisterNodeType("print", utility.NewPrintNode)
+	apiServer.RegisterNodeType("timer", utility.NewTimerNode)
 
 	// Set up routes
 	router := apiServer.SetupRoutes()
