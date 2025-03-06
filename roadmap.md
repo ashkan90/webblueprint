@@ -74,17 +74,12 @@ Let me create a comprehensive roadmap for developing this system in stages:
 ## Stage 3: Web-Specific Functionality (Weeks 10-13)
 
 ### Web Nodes Implementation
-1. HTTP Request node:
-    - Support for different methods (GET, POST, etc.)
-    - Header/body configuration
-    - Response handling
-
-2. DOM manipulation nodes:
+1. DOM manipulation nodes:
     - Element creation
     - Event listening
     - Style modification
 
-3. JSON processing nodes:
+2. JSON processing nodes:
     - Parse and stringify
     - Path-based property access
     - Array manipulation
@@ -100,7 +95,21 @@ Let me create a comprehensive roadmap for developing this system in stages:
     - Error handlers
     - Data value reporting
 
+### UI Refinement
+1. Left Panel needs to be changed as:
+   - Events
+   - Variables
+   - Functions
+   - Macros
+
 ## Stage 4: Debugging Tools (Weeks 14-17)
+
+### User Defined Function Nodes
+1. Nodes can be defined and created by user:
+   - Functions
+   - Macros
+
+2. Nodes used in functions/macros are came from Backend declared nodes
 
 ### Real-Time Execution Visualization
 1. Node status highlighting:

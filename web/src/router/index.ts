@@ -15,6 +15,11 @@ const router = createRouter({
             component: () => import('../views/EditorView.vue')
         },
         {
+            path: '/editor2/:id?',
+            name: 'editor2',
+            component: () => import('../views/EnhancedEditorView.vue')
+        },
+        {
             path: '/debug/:executionId',
             name: 'debug',
             component: () => import('../views/DebugView.vue')

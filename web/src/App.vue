@@ -1,174 +1,178 @@
+<!-- File: web/src/App.vue -->
 <template>
-  <header class="app-header">
-    <div class="logo">
-      <h1>WebBlueprint</h1>
-    </div>
-    <nav>
-      <RouterLink to="/">Home</RouterLink>
-      <RouterLink to="/editor">Editor</RouterLink>
-      <RouterLink to="/about">About</RouterLink>
-    </nav>
-    <div class="connection-status" :class="connectionStatus">
-      <span class="status-indicator"></span>
-      <span class="status-text">{{ connectionStatusText }}</span>
-    </div>
-  </header>
+  <div class="app">
+    <header class="app-header">
+      <div class="logo">
+        <router-link to="/">WebBlueprint</router-link>
+      </div>
+      <nav>
+        <router-link to="/">Home</router-link>
+        <router-link to="/editor">Editor</router-link>
+        <router-link to="/about">About</router-link>
+      </nav>
+    </header>
 
-  <RouterView />
+    <div v-if="isInitializing" class="initializing-overlay">
+      <div class="initializing-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Initializing WebBlueprint...</div>
+      </div>
+    </div>
+
+    <main class="app-content">
+      <router-view v-if="!isInitializing" />
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
-import { computed, onMounted } from 'vue'
-import { useWebSocketStore } from './stores/websocket'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { executionManager, initializeBlueprintSystem, cleanupBlueprintSystem } from './bootstrap/blueprintSystem'
+import { WebSocketExecutionBridge } from './services/websocketBridge'
 
-const websocketStore = useWebSocketStore()
+// State
+const isInitializing = ref(true)
 
-// Computed properties for connection status
-const connectionStatus = computed(() => websocketStore.connectionStatus)
-const connectionStatusText = computed(() => {
-  switch (websocketStore.connectionStatus) {
-    case 'connected':
-      return 'Connected'
-    case 'connecting':
-      return 'Connecting...'
-    case 'disconnected':
-      return 'Disconnected'
-    default:
-      return 'Unknown'
+// Initialize the system on component mount
+onMounted(async () => {
+  try {
+    // Initialize blueprint system
+    await initializeBlueprintSystem()
+
+    // Initialize WebSocket bridge
+    const websocketBridge = new WebSocketExecutionBridge(executionManager)
+    websocketBridge.initialize()
+
+    // Mark initialization as complete
+    isInitializing.value = false
+  } catch (error) {
+    console.error('Failed to initialize WebBlueprint:', error)
+
+    // Could show an error message here
+    // For now, we'll still mark initialization as complete to allow UI to load
+    isInitializing.value = false
   }
 })
 
-// Connect to WebSocket when the app starts
-onMounted(() => {
-  websocketStore.connect()
+// Clean up on component unmount
+onBeforeUnmount(() => {
+  cleanupBlueprintSystem()
 })
 </script>
 
 <style>
-/* Global styles */
 :root {
-  /* Colors based on Unreal Engine Blueprint theme */
+  /* Colors */
   --bg-color: #1e1e1e;
-  --grid-color: #2a2a2a;
-  --node-bg: #2d2d2d;
-  --node-header: #3a3a3a;
-  --node-selected: #4a4a7a;
-  --exec-pin: #ffffff;
-  --conn-exec: #ffffff;
-  --conn-color: #8ab4f8;
+  --text-color: #e0e0e0;
+  --node-bg: #333333;
+  --node-header: #444444;
+  --node-selected: #1a73e8;
+  --grid-color: rgba(80, 80, 80, 0.2);
+  --conn-color: #abc;
+  --conn-exec: #fff;
+  --exec-pin: #fff;
   --input-pin: #f0883e;
   --output-pin: #6ed69a;
-  --text-color: #e0e0e0;
-  --context-menu-bg: #333333;
-  --context-menu-hover: #444444;
-
-  /* Accent colors */
   --accent-blue: #3498db;
   --accent-green: #2ecc71;
   --accent-red: #e74c3c;
-  --accent-yellow: #f1c40f;
-
-  /* Spacing */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
+  --accent-yellow: #f39c12;
+  --context-menu-bg: #333333;
+  --context-menu-hover: #444444;
 }
 
-* {
-  box-sizing: border-box;
+html, body {
   margin: 0;
   padding: 0;
-}
-
-body {
   background-color: var(--bg-color);
   color: var(--text-color);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.6;
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  height: 100%;
   overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
 }
 
 .app-header {
-  background-color: #222;
-  padding: 0 var(--space-md);
-  height: 50px;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-  position: relative;
-  z-index: 100;
+  align-items: center;
+  padding: 0 20px;
+  height: 50px;
+  background-color: #242424;
+  border-bottom: 1px solid #333;
 }
 
-.logo h1 {
-  font-size: 1.4rem;
+.logo a {
+  font-size: 1.2rem;
+  font-weight: bold;
   color: var(--accent-blue);
-  text-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+  text-decoration: none;
 }
 
 nav {
   display: flex;
-  gap: var(--space-lg);
+  gap: 20px;
 }
 
 nav a {
-  color: #ccc;
+  color: #bbb;
   text-decoration: none;
-  font-weight: 500;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  transition: color 0.2s;
 }
 
 nav a:hover {
   color: white;
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 nav a.router-link-active {
   color: var(--accent-blue);
-  background-color: rgba(52, 152, 219, 0.2);
 }
 
-.connection-status {
+.app-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.initializing-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 9999;
   display: flex;
   align-items: center;
-  font-size: 0.8rem;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 4px;
-  background-color: rgba(0, 0, 0, 0.2);
+  justify-content: center;
 }
 
-.status-indicator {
-  width: 8px;
-  height: 8px;
+.initializing-content {
+  text-align: center;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(255, 255, 255, 0.1);
   border-radius: 50%;
-  margin-right: var(--space-xs);
+  border-top-color: var(--accent-blue);
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 20px;
 }
 
-.connection-status.connected .status-indicator {
-  background-color: var(--accent-green);
-  box-shadow: 0 0 5px rgba(46, 204, 113, 0.8);
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-.connection-status.connecting .status-indicator {
-  background-color: var(--accent-yellow);
-  box-shadow: 0 0 5px rgba(241, 196, 15, 0.8);
-  animation: pulse 1s infinite;
-}
-
-.connection-status.disconnected .status-indicator {
-  background-color: var(--accent-red);
-  box-shadow: 0 0 5px rgba(231, 76, 60, 0.8);
-}
-
-@keyframes pulse {
-  0% { opacity: 0.4; }
-  50% { opacity: 1; }
-  100% { opacity: 0.4; }
+.loading-text {
+  font-size: 1.2rem;
+  color: #fff;
 }
 </style>

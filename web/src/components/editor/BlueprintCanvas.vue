@@ -199,6 +199,7 @@ const emit = defineEmits<{
 }>()
 
 const nodeRegistryStore = useNodeRegistryStore()
+const executionStore = useExecutionStore()
 
 // DOM Refs
 const canvasContainer = ref<HTMLElement | null>(null)
@@ -351,9 +352,6 @@ function handleConnectionMouseOver(event: MouseEvent, connection: Connection) {
   if (!sourceNode || !sourceNodeType || !sourcePin) {
     return;
   }
-
-  // Get the execution store
-  const executionStore = useExecutionStore();
 
   // Try to get the debug data for this node
   const debugData = executionStore.getNodeDebugData(connection.sourceNodeId);
@@ -1099,7 +1097,7 @@ onUnmounted(() => {
 })
 
 // Watch for node status changes
-watch(() => props.nodeStatuses, (newStatuses, oldStatuses) => {
+watch(() => props.nodeStatuses, async (newStatuses, oldStatuses) => {
   if (!newStatuses) return;
 
   // Check for new active nodes
@@ -1108,6 +1106,9 @@ watch(() => props.nodeStatuses, (newStatuses, oldStatuses) => {
       updateActivePins(nodeId, 'executing');
     } else if (status.status === 'completed') {
       updateActivePins(nodeId, 'completed');
+      setTimeout(() => {
+        props.nodeStatuses[nodeId].status = 'idle'
+      }, 2500)
     }
   }
 }, { deep: true });

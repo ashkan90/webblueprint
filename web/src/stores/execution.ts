@@ -242,11 +242,16 @@ export const useExecutionStore = defineStore('execution', () => {
         isExecuting,
         getNodeStatus,
         getNodeDebugData,
+        updateNodeStatus,
+        updateNodeDebugData,
+        recordDataFlow,
         logs,
         addLogEntry,
         clearLogs,
         toggleLogExpanded,
         executionDuration,
+        startExecution,
+        endExecution,
         loadExecution,
         executeBlueprint: async (blueprintId: string, initialData?: Record<string, any>) => {
             try {

@@ -1,5 +1,5 @@
 <template>
-  <div class="editor-view">
+  <div class="enhanced-editor-view">
     <div class="toolbar">
       <div class="blueprint-info">
         <input
@@ -8,9 +8,18 @@
             placeholder="Blueprint Name"
             @change="updateBlueprintName"
         />
+        <div class="blueprint-id" v-if="blueprintStore.blueprint.id">ID: {{ blueprintStore.blueprint.id }}</div>
       </div>
 
       <div class="tool-buttons">
+        <div class="execution-mode-selector">
+          <label for="execution-mode">Execution: </label>
+          <select id="execution-mode" v-model="executionMode" class="mode-select" :disabled="isExecuting">
+            <option value="direct">Direct Mode</option>
+            <option value="actor">Actor Mode</option>
+          </select>
+        </div>
+
         <button @click="executeBlueprint" :disabled="isExecuting" class="btn primary">
           <span class="icon">▶</span>
           {{ isExecuting ? 'Running...' : 'Execute' }}
@@ -29,15 +38,16 @@
     <div class="editor-container" :class="{ 'with-debug': showDebugPanel }">
       <div class="node-palette">
         <EnhancedNodePalette @node-added="handleNodeAdded" />
-<!--        <NodePalette @node-added="handleNodeAdded" />-->
       </div>
 
-      <div class="canvas-container">
+      <div class="canvas-container" ref="canvasContainer">
         <BlueprintCanvas
             ref="canvas"
             :nodes="nodes"
             :connections="connections"
             :node-statuses="nodeStatuses"
+            :active-connections="activeConnections"
+            :active-pins="activePins"
             @node-added="handleNodeAdded"
             @node-selected="handleNodeSelected"
             @node-deselected="handleNodeDeselected"
@@ -49,7 +59,7 @@
       </div>
 
       <div v-if="selectedNode" class="node-properties">
-        <NodeProperties
+        <EnhancedPropertyEditor
             :node="selectedNode"
             :node-type="getNodeType(selectedNode.type)"
             @property-changed="handlePropertyChanged"
@@ -62,6 +72,7 @@
         v-if="showDebugPanel"
         :execution-id="currentExecutionId"
         :selected-node-id="selectedNodeId"
+        @select-node="handleDebugNodeSelected"
     />
 
     <!-- Execution result modal -->
@@ -86,7 +97,11 @@
             </div>
             <div class="info-item">
               <span class="label">Duration:</span>
-              <span class="value">{{ executionResult?.duration }}</span>
+              <span class="value">{{ executionDuration }}</span>
+            </div>
+            <div class="info-item">
+              <span class="label">Mode:</span>
+              <span class="value">{{ executionMode }}</span>
             </div>
           </div>
         </div>
@@ -102,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { v4 as uuid } from 'uuid'
 import { useBlueprintStore } from '../stores/blueprint'
@@ -110,11 +125,17 @@ import { useNodeRegistryStore } from '../stores/nodeRegistry'
 import { useExecutionStore } from '../stores/execution'
 import type { Node, Connection } from '../types/blueprint'
 import type { NodeTypeDefinition } from '../types/nodes'
-import NodePalette from '../components/editor/NodePalette.vue'
 import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
-import NodeProperties from '../components/editor/NodeProperties.vue'
+import EnhancedNodePalette from '../components/editor/EnhancedNodePalette.vue'
+import EnhancedPropertyEditor from '../components/editor/EnhancedPropertyEditor.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
-import EnhancedNodePalette from "../components/editor/EnhancedNodePalette.vue";
+import {
+  executeBlueprint as executeBlueprintFn,
+  executionManager,
+  getExecutionMode,
+  setExecutionMode
+} from '../bootstrap/blueprintSystem'
+import { ExecutionMode } from '../services/executionService'
 
 const route = useRoute()
 const router = useRouter()
@@ -127,6 +148,7 @@ const blueprintName = ref('')
 const selectedNodeId = ref<string | null>(null)
 const showDebugPanel = ref(false)
 const canvas = ref<InstanceType<typeof BlueprintCanvas> | null>(null)
+const canvasContainer = ref<HTMLElement | null>(null)
 const showResultModal = ref(false)
 const executionResult = ref<{
   duration: string;
@@ -134,6 +156,7 @@ const executionResult = ref<{
   success: boolean;
   error?: string;
 }>()
+const executionMode = ref<ExecutionMode>(getExecutionMode())
 
 // Computed values
 const nodes = computed(() => blueprintStore.nodes)
@@ -155,35 +178,44 @@ const executionDuration = computed(() => {
   }
 })
 
+// Get active connections and pins from execution manager
+const activeConnections = computed(() => executionManager.getActiveConnections())
+const activePins = computed(() => executionManager.getActivePins())
+
 // Methods
 function getNodeType(typeId: string): NodeTypeDefinition | null {
   return nodeRegistryStore.getNodeTypeById(typeId)
 }
 
 function handleNodeAdded(node: Node) {
-  console.log('Adding node to blueprint:', node); // Debug
-
-  // Ensure we're not adding duplicates by checking IDs
-  const existingNodeIndex = blueprintStore.nodes.findIndex(n => n.id === node.id);
+  // Check for duplicates
+  const existingNodeIndex = blueprintStore.nodes.findIndex(n => n.id === node.id)
 
   if (existingNodeIndex === -1) {
     // Node doesn't exist, add it
-    blueprintStore.addNode(node);
+    blueprintStore.addNode(node)
   } else {
     // Node already exists with this ID, generate a new ID and add
     const newNode = {
       ...node,
       id: uuid() // Generate new ID
-    };
-    blueprintStore.addNode(newNode);
+    }
+    blueprintStore.addNode(newNode)
   }
 
   // Select the newly added node
-  selectedNodeId.value = node.id;
+  selectedNodeId.value = node.id
 }
 
 function handleNodeSelected(nodeId: string) {
   selectedNodeId.value = nodeId
+}
+
+function handleDebugNodeSelected(nodeId: string) {
+  // Select the node both in the debug panel and highlight it in the canvas
+  selectedNodeId.value = nodeId
+
+  // TODO: Could also scroll the canvas to show the selected node
 }
 
 function handleNodeDeselected() {
@@ -239,7 +271,7 @@ async function saveBlueprint() {
 
     // Update the route if this is a new blueprint
     if (route.params.id !== blueprintStore.blueprint.id) {
-      router.push(`/editor/${blueprintStore.blueprint.id}`)
+      router.push(`/editor2/${blueprintStore.blueprint.id}`)
     }
   } catch (error) {
     console.error('Failed to save blueprint:', error)
@@ -254,11 +286,15 @@ async function executeBlueprint() {
       await saveBlueprint()
     }
 
-    const result = await executionStore.executeBlueprint(blueprintStore.blueprint.id)
+    // Update the execution mode before running
+    setExecutionMode(executionMode.value)
+
+    // Execute the blueprint
+    const result = await executeBlueprintFn(blueprintStore.blueprint.id)
 
     // Show result modal
     executionResult.value = {
-      duration: result.duration,
+      duration: result.duration || executionDuration.value,
       executionId: result.executionId,
       success: result.success,
       error: result.error
@@ -282,6 +318,14 @@ function openDebugPanelWithResult() {
   showDebugPanel.value = true
   closeResultModal()
 }
+
+// Watch for changes in execution mode
+watch(() => executionMode.value, (newMode) => {
+  setExecutionMode(newMode)
+})
+
+// Provide canvas container to children components
+provide('canvasContainer', canvasContainer)
 
 // Load blueprint on mount
 onMounted(async () => {
@@ -308,7 +352,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.editor-view {
+.enhanced-editor-view {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 50px); /* Subtract header height */
@@ -326,6 +370,8 @@ onMounted(async () => {
 
 .blueprint-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .blueprint-name {
@@ -335,6 +381,7 @@ onMounted(async () => {
   color: white;
   padding: 4px 8px;
   border-radius: 4px;
+  margin-bottom: 4px;
 }
 
 .blueprint-name:hover, .blueprint-name:focus {
@@ -343,9 +390,16 @@ onMounted(async () => {
   outline: none;
 }
 
+.blueprint-id {
+  font-size: 0.7rem;
+  color: #777;
+  padding-left: 8px;
+}
+
 .tool-buttons {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .editor-container {
@@ -377,7 +431,6 @@ onMounted(async () => {
   background-color: #2d2d2d;
   border-left: 1px solid #3d3d3d;
   overflow-y: auto;
-  padding: 16px;
   flex: 0 0 auto;
 }
 
@@ -419,6 +472,28 @@ onMounted(async () => {
 
 .icon {
   font-size: 0.9em;
+}
+
+.execution-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.mode-select {
+  background-color: #444;
+  border: 1px solid #555;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.mode-select:focus {
+  outline: none;
+  border-color: var(--accent-blue);
 }
 
 /* Modal styles */
