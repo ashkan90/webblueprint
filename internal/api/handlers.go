@@ -105,6 +105,10 @@ func (s *APIServer) SetupRoutes() *mux.Router {
 	api.HandleFunc("/executions/{id}", s.handleGetExecution).Methods("GET")
 	api.HandleFunc("/executions/{id}/nodes/{nodeId}", s.handleGetNodeDebugData).Methods("GET")
 
+	// Engine configuration
+	api.HandleFunc("/engine/config", s.handleGetEngineConfig).Methods("GET")
+	api.HandleFunc("/engine/config", s.handleUpdateEngineConfig).Methods("PUT")
+
 	// Serve static files for the frontend
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
 
@@ -127,6 +131,51 @@ func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, map[string]string{"error": message})
+}
+
+// Engine configuration handlers
+func (s *APIServer) handleGetEngineConfig(w http.ResponseWriter, r *http.Request) {
+	// Get engine configuration
+	config := map[string]interface{}{
+		"executionMode": s.executionEngine.GetExecutionMode(),
+	}
+
+	respondWithJSON(w, http.StatusOK, config)
+}
+
+func (s *APIServer) handleUpdateEngineConfig(w http.ResponseWriter, r *http.Request) {
+	// Parse request
+	var config struct {
+		ExecutionMode string `json:"executionMode"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request format")
+		return
+	}
+
+	// Update execution mode if provided
+	if config.ExecutionMode != "" {
+		var mode engine.ExecutionMode
+		switch config.ExecutionMode {
+		case "actor":
+			mode = engine.ModeActor
+		case "standard":
+			mode = engine.ModeStandard
+		default:
+			respondWithError(w, http.StatusBadRequest, "Invalid execution mode: must be 'standard' or 'actor'")
+			return
+		}
+
+		s.executionEngine.SetExecutionMode(mode)
+	}
+
+	// Return updated configuration
+	updatedConfig := map[string]interface{}{
+		"executionMode": s.executionEngine.GetExecutionMode(),
+	}
+
+	respondWithJSON(w, http.StatusOK, updatedConfig)
 }
 
 // Node types handler

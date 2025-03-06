@@ -64,6 +64,14 @@ type ExecutionResult struct {
 	NodeResults map[string]map[string]interface{} // NodeID -> PinID -> Value
 }
 
+// ExecutionMode defines the execution engine to use
+type ExecutionMode string
+
+const (
+	ModeStandard ExecutionMode = "standard" // Original sequential execution
+	ModeActor    ExecutionMode = "actor"    // Actor-based concurrent execution
+)
+
 // ExecutionEngine manages blueprint execution
 type ExecutionEngine struct {
 	nodeRegistry    map[string]node.NodeFactory
@@ -73,6 +81,7 @@ type ExecutionEngine struct {
 	listeners       []ExecutionListener
 	debugManager    *DebugManager
 	logger          node.Logger
+	executionMode   ExecutionMode
 	mutex           sync.RWMutex
 }
 
@@ -86,7 +95,21 @@ func NewExecutionEngine(logger node.Logger, debugManager *DebugManager) *Executi
 		listeners:       make([]ExecutionListener, 0),
 		logger:          logger,
 		debugManager:    debugManager,
+		executionMode:   ModeStandard, // Default to standard mode
 	}
+}
+
+// SetExecutionMode sets the execution mode
+func (e *ExecutionEngine) SetExecutionMode(mode ExecutionMode) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.executionMode = mode
+}
+
+func (e *ExecutionEngine) GetExecutionMode() ExecutionMode {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.executionMode
 }
 
 // RegisterNodeType registers a node type with the engine
@@ -163,7 +186,7 @@ func (e *ExecutionEngine) GetNodeDebugData(executionID, nodeID string) (map[stri
 	return e.debugManager.GetNodeDebugData(executionID, nodeID)
 }
 
-// Execute runs a blueprint from the specified start node
+// Execute runs a blueprint
 func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]types.Value) (ExecutionResult, error) {
 	e.mutex.Lock()
 
@@ -248,10 +271,125 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		return result, err
 	}
 
+	// Select execution method based on mode
+	var err error
+	executionMode := e.GetExecutionMode()
+
+	if executionMode == ModeActor {
+		err = e.executeWithActorSystem(bp, executionID, entryPoints, variables)
+	} else {
+		err = e.executeWithStandardEngine(bp, executionID, entryPoints, variables)
+	}
+
+	// Handle execution result
+	if err != nil {
+		// Update execution status
+		e.mutex.Lock()
+		status.Status = "failed"
+		status.EndTime = time.Now()
+		e.mutex.Unlock()
+
+		// Emit execution end event
+		e.EmitEvent(ExecutionEvent{
+			Type:      EventExecutionEnd,
+			Timestamp: time.Now(),
+			Data: map[string]interface{}{
+				"blueprintID":  blueprintID,
+				"executionID":  executionID,
+				"success":      false,
+				"errorMessage": err.Error(),
+			},
+		})
+
+		result.Success = false
+		result.Error = err
+		result.EndTime = time.Now()
+	} else {
+		// Update execution status
+		e.mutex.Lock()
+		status.Status = "completed"
+		status.EndTime = time.Now()
+		e.mutex.Unlock()
+
+		// Get node results from debug manager
+		nodeResults := make(map[string]map[string]interface{})
+		if nodeOutputs := e.debugManager.GetExecutionOutputValues(executionID); nodeOutputs != nil {
+			for nodeID, outputs := range nodeOutputs {
+				nodeResults[nodeID] = outputs
+			}
+		}
+
+		// Emit execution end event
+		e.EmitEvent(ExecutionEvent{
+			Type:      EventExecutionEnd,
+			Timestamp: time.Now(),
+			Data: map[string]interface{}{
+				"blueprintID": blueprintID,
+				"executionID": executionID,
+				"success":     true,
+				"duration":    time.Since(status.StartTime).String(),
+			},
+		})
+
+		result.Success = true
+		result.EndTime = time.Now()
+		result.NodeResults = nodeResults
+	}
+
+	return result, err
+}
+
+// executeWithActorSystem executes a blueprint using the actor system
+func (e *ExecutionEngine) executeWithActorSystem(bp *blueprint.Blueprint, executionID string, entryPoints []string, variables map[string]types.Value) error {
+	// Create an actor system for this execution
+	actorSystem, err := NewActorSystem(
+		executionID,
+		bp,
+		e.nodeRegistry,
+		e.logger,
+		e.listeners,
+		e.debugManager,
+		variables,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create actor system: %w", err)
+	}
+
+	// Initialize actor system
+	if err := actorSystem.Start(bp); err != nil {
+		return fmt.Errorf("failed to start actor system: %w", err)
+	}
+
+	// Execute the blueprint
+	if err := actorSystem.Execute(entryPoints); err != nil {
+		return fmt.Errorf("actor system execution failed: %w", err)
+	}
+
+	// Wait for completion with timeout (30 seconds)
+	if !actorSystem.Wait(30 * time.Second) {
+		actorSystem.Stop()
+		return fmt.Errorf("actor system execution timed out")
+	}
+
+	// Get node statuses from actor system
+	e.mutex.Lock()
+	status := e.executionStatus[executionID]
+	status.NodeStatuses = actorSystem.GetNodesStatus()
+	e.mutex.Unlock()
+
+	// Clean up resources
+	actorSystem.Stop()
+
+	return nil
+}
+
+// executeWithStandardEngine executes a blueprint using the standard engine
+func (e *ExecutionEngine) executeWithStandardEngine(bp *blueprint.Blueprint, executionID string, entryPoints []string, variables map[string]types.Value) error {
 	// Create hooks for tracking execution
 	hooks := &node.ExecutionHooks{
 		OnNodeStart: func(nodeID, nodeType string) {
 			e.mutex.Lock()
+			status := e.executionStatus[executionID]
 			status.NodeStatuses[nodeID] = NodeStatus{
 				NodeID:    nodeID,
 				Status:    "executing",
@@ -270,6 +408,7 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		},
 		OnNodeComplete: func(nodeID, nodeType string) {
 			e.mutex.Lock()
+			status := e.executionStatus[executionID]
 			nodeStatus, exists := status.NodeStatuses[nodeID]
 			if exists {
 				nodeStatus.Status = "completed"
@@ -284,28 +423,21 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 				NodeID:    nodeID,
 				Data: map[string]interface{}{
 					"nodeType": nodeType,
-					"duration": nodeStatus.EndTime.Sub(nodeStatus.StartTime).String(),
+					"duration": time.Since(nodeStatus.StartTime).String(),
 				},
 			})
 		},
 		OnNodeError: func(nodeID string, err error) {
 			e.mutex.Lock()
-			defer e.mutex.Unlock()
+			status := e.executionStatus[executionID]
 			nodeStatus, exists := status.NodeStatuses[nodeID]
-			if !exists {
-				return
-				//nodeStatus.Status = "error"
-				//nodeStatus.Error = err
-				//nodeStatus.EndTime = time.Now()
-				//status.NodeStatuses[nodeID] = nodeStatus
-			}
-
-			if nodeStatus.Status == "failed" {
-				nodeStatus.NodeID = nodeID
+			if exists {
+				nodeStatus.Status = "error"
 				nodeStatus.Error = err
 				nodeStatus.EndTime = time.Now()
 				status.NodeStatuses[nodeID] = nodeStatus
 			}
+			e.mutex.Unlock()
 
 			e.EmitEvent(ExecutionEvent{
 				Type:      EventNodeError,
@@ -318,25 +450,21 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		},
 		OnPinValue: func(nodeID, pinName string, value interface{}) {
 			// Store value for result
-			if _, exists := result.NodeResults[nodeID]; !exists {
-				result.NodeResults[nodeID] = make(map[string]interface{})
-			}
-			result.NodeResults[nodeID][pinName] = value
+			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinName, value)
 
-			_nodeConnections := bp.GetNodeOutputConnections(nodeID)
-			for _, connection := range _nodeConnections {
-				if connection.ConnectionType == "data" {
+			// Find connections from this output pin
+			for _, conn := range bp.GetNodeOutputConnections(nodeID) {
+				if conn.SourcePinID == pinName && conn.ConnectionType == "data" {
 					// Emit value produced event
 					e.EmitEvent(ExecutionEvent{
 						Type:      EventValueProduced,
 						Timestamp: time.Now(),
-						NodeID:    connection.ID,
+						NodeID:    nodeID,
 						Data: map[string]interface{}{
-							"sourceNodeId": connection.SourceNodeID,
-							"sourcePinId":  connection.SourcePinID,
-							"targetNodeId": connection.TargetNodeID,
-							"targetPinId":  connection.TargetPinID,
-							"timestamp":    time.Now(),
+							"sourceNodeId": conn.SourceNodeID,
+							"sourcePinId":  conn.SourcePinID,
+							"targetNodeId": conn.TargetNodeID,
+							"targetPinId":  conn.TargetPinID,
 							"value":        value,
 						},
 					})
@@ -366,7 +494,7 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		go func(nodeID string) {
 			defer wg.Done()
 
-			if err := e.executeNode(nodeID, blueprintID, executionID, variables, hooks); err != nil {
+			if err := e.executeNode(nodeID, bp, bp.ID, executionID, variables, hooks); err != nil {
 				errors <- err
 			}
 		}(entryNodeID)
@@ -384,56 +512,21 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 		lastError = err
 	}
 
-	// Update execution status
-	e.mutex.Lock()
 	if errorCount > 0 {
-		status.Status = "failed"
-	} else {
-		status.Status = "completed"
-	}
-	status.EndTime = time.Now()
-	e.mutex.Unlock()
-
-	// Set result
-	result.Success = errorCount == 0
-	result.EndTime = status.EndTime
-	if errorCount > 0 {
-		result.Error = lastError
+		return lastError
 	}
 
-	// Emit execution end event
-	e.EmitEvent(ExecutionEvent{
-		Type:      EventExecutionEnd,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"blueprintID": blueprintID,
-			"executionID": executionID,
-			"success":     result.Success,
-			"errorCount":  errorCount,
-			"duration":    result.EndTime.Sub(result.StartTime).String(),
-		},
-	})
-
-	return result, lastError
+	return nil
 }
 
-// executeNode executes a single node
-func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks) error {
-	e.mutex.RLock()
-	bp, exists := e.blueprints[blueprintID]
-	e.mutex.RUnlock()
-
-	if !exists {
-		return fmt.Errorf("blueprint not found: %s", blueprintID)
-	}
-
+// executeNode executes a single node in the standard engine
+func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks) error {
 	// Find the node in the blueprint
 	nodeConfig := bp.FindNode(nodeID)
 	if nodeConfig == nil {
 		return fmt.Errorf("node not found: %s", nodeID)
 	}
 
-	// Get the node factory
 	e.mutex.RLock()
 	factory, exists := e.nodeRegistry[nodeConfig.Type]
 	e.mutex.RUnlock()
@@ -481,9 +574,9 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		}
 	}
 
-	// Create a function to activate output flows that maintains proper execution order
-	// This will be passed to the execution context but used later after outputs are stored
+	// Create a function to activate output flows
 	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+		// Store all outputs before activating flows
 		for _, pin := range nodeInstance.GetOutputPins() {
 			if value, exists := ctx.GetOutputValue(pin.ID); exists {
 				e.debugManager.StoreNodeOutputValue(executionID, nodeID, pin.ID, value.RawValue)
@@ -497,7 +590,7 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 				targetNodeID := conn.TargetNodeID
 
 				// Execute the target node
-				if err := e.executeNode(targetNodeID, blueprintID, executionID, variables, hooks); err != nil {
+				if err := e.executeNode(targetNodeID, bp, blueprintID, executionID, variables, hooks); err != nil {
 					return err
 				}
 			}
@@ -526,31 +619,7 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 	// Execute the node
 	err := nodeInstance.Execute(ctx)
 
-	// Collect all output values that need to be stored and activated
-	outputValues := make(map[string]map[string]types.Value)
-	activateOutputPins := make([]string, 0)
-
-	// Store debug data
-	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
-
-	// Store output values
-	for _, pin := range nodeInstance.GetOutputPins() {
-		if value, exists := ctx.GetOutputValue(pin.ID); exists {
-			// Store the value
-			outputValues[nodeID] = map[string]types.Value{
-				pin.ID: value,
-			}
-
-			// Store in debug manager for data flow
-			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pin.ID, value.RawValue)
-		}
-	}
-
-	// Handle execution paths that were stored during node.Execute
-	// Get these from the custom ExecutionContext implementation
-	activateOutputPins = ctx.GetActivatedOutputFlows()
-
-	// Notify node completion or error
+	// Handle errors
 	if err != nil {
 		if hooks != nil && hooks.OnNodeError != nil {
 			hooks.OnNodeError(nodeID, err)
@@ -558,13 +627,18 @@ func (e *ExecutionEngine) executeNode(nodeID, blueprintID, executionID string, v
 		return err
 	}
 
-	// AFTER storing all outputs, now follow execution flows
-	for _, outputPin := range activateOutputPins {
+	// Store debug data
+	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
+
+	// Follow execution flows
+	activatedFlows := ctx.GetActivatedOutputFlows()
+	for _, outputPin := range activatedFlows {
 		if err := activateFlowFn(ctx, nodeID, outputPin); err != nil {
 			return err
 		}
 	}
 
+	// Notify node completion
 	if hooks != nil && hooks.OnNodeComplete != nil {
 		hooks.OnNodeComplete(nodeID, nodeConfig.Type)
 	}

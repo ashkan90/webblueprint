@@ -111,6 +111,7 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			nodeLogger,
 			s.listeners,
 			s.debugMgr,
+			s.variables,
 		)
 
 		// Store the actor
@@ -146,10 +147,23 @@ func (s *ActorSystem) Execute(entryPoints []string) error {
 		}(nodeID)
 	}
 
-	// Wait for execution to complete
+	// Wait for execution to complete in a separate goroutine
 	go func() {
 		s.waitGroup.Wait()
 		close(s.executionDone)
+
+		// Emit execution end event
+		for _, listener := range s.listeners {
+			listener.OnExecutionEvent(ExecutionEvent{
+				Type:      EventExecutionEnd,
+				Timestamp: time.Now(),
+				Data: map[string]interface{}{
+					"executionId": s.executionID,
+					"blueprintId": s.blueprintID,
+					"success":     true,
+				},
+			})
+		}
 	}()
 
 	return nil
@@ -169,6 +183,12 @@ func (s *ActorSystem) executeNode(nodeID string) {
 		return
 	}
 
+	// Log node execution
+	s.logger.Debug("Executing node", map[string]interface{}{
+		"nodeId":   nodeID,
+		"nodeType": actor.NodeType,
+	})
+
 	// Create execute message
 	msg := NodeMessage{
 		Type:     "execute",
@@ -185,6 +205,24 @@ func (s *ActorSystem) executeNode(nodeID string) {
 		})
 		return
 	}
+
+	// Store all output values in the debug manager
+	for pinID, value := range response.OutputPins {
+		if s.debugMgr != nil {
+			s.debugMgr.StoreNodeOutputValue(s.executionID, nodeID, pinID, value.RawValue)
+			s.logger.Debug("Stored output value in debug manager", map[string]interface{}{
+				"nodeId": nodeID,
+				"pinId":  pinID,
+				"value":  value.RawValue,
+			})
+		}
+	}
+
+	// Log number of outputs
+	s.logger.Debug("Node execution succeeded", map[string]interface{}{
+		"nodeId":      nodeID,
+		"outputCount": len(response.OutputPins),
+	})
 
 	// Follow output connections
 	s.followConnections(actor, response)
@@ -204,7 +242,76 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 	// Get activated flows
 	activatedFlows := actor.ctx.GetActivatedOutputFlows()
 
-	// Follow execution connections
+	// Process data connections first to ensure data is available before execution
+	for _, conn := range connections {
+		if conn.ConnectionType == "data" {
+			// Check if we have a value for this pin
+			value, exists := response.OutputPins[conn.SourcePinID]
+			if !exists {
+				s.logger.Debug("No value for data connection", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+				})
+				continue
+			}
+
+			// Get the target actor
+			s.mutex.RLock()
+			targetActor, exists := s.actors[conn.TargetNodeID]
+			s.mutex.RUnlock()
+
+			if !exists {
+				s.logger.Warn("Target actor not found for data connection", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"targetNodeId": conn.TargetNodeID,
+				})
+				continue
+			}
+
+			// Send the value to the target actor
+			inputMsg := NodeMessage{
+				Type:  "input",
+				PinID: conn.TargetPinID,
+				Value: value,
+			}
+			if sent := targetActor.SendAsync(inputMsg); !sent {
+				s.logger.Warn("Failed to send input value to target actor", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+				})
+			} else {
+				s.logger.Debug("Sent input value to target actor", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+					"value":        value.RawValue,
+				})
+			}
+
+			// Emit value produced event
+			for _, listener := range s.listeners {
+				listener.OnExecutionEvent(ExecutionEvent{
+					Type:      EventValueProduced,
+					Timestamp: time.Now(),
+					NodeID:    conn.SourceNodeID,
+					Data: map[string]interface{}{
+						"sourceNodeId": conn.SourceNodeID,
+						"sourcePinId":  conn.SourcePinID,
+						"targetNodeId": conn.TargetNodeID,
+						"targetPinId":  conn.TargetPinID,
+						"value":        value.RawValue,
+					},
+				})
+			}
+		}
+	}
+
+	// Now follow execution connections
 	for _, conn := range connections {
 		if conn.ConnectionType == "execution" {
 			// Check if this flow was activated
@@ -226,74 +333,21 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 			}
 		}
 	}
-
-	// Follow data connections
-	for _, conn := range connections {
-		if conn.ConnectionType == "data" {
-			// Check if we have a value for this pin
-			value, exists := response.OutputPins[conn.SourcePinID]
-			if !exists {
-				continue
-			}
-
-			// Get the target actor
-			s.mutex.RLock()
-			targetActor, exists := s.actors[conn.TargetNodeID]
-			s.mutex.RUnlock()
-
-			if !exists {
-				continue
-			}
-
-			// Send the value to the target actor
-			inputMsg := NodeMessage{
-				Type:  "input",
-				PinID: conn.TargetPinID,
-				Value: value,
-			}
-			targetActor.SendAsync(inputMsg)
-
-			// Log data flow for debugging
-			s.logger.Debug("Data flow", map[string]interface{}{
-				"sourceNodeId": conn.SourceNodeID,
-				"sourcePinId":  conn.SourcePinID,
-				"targetNodeId": conn.TargetNodeID,
-				"targetPinId":  conn.TargetPinID,
-				"value":        value.RawValue,
-			})
-
-			// Emit value produced event
-			for _, listener := range s.listeners {
-				listener.OnExecutionEvent(ExecutionEvent{
-					Type:      EventValueProduced,
-					Timestamp: time.Now(),
-					NodeID:    conn.SourceNodeID,
-					Data: map[string]interface{}{
-						"sourceNodeId": conn.SourceNodeID,
-						"sourcePinId":  conn.SourcePinID,
-						"targetNodeId": conn.TargetNodeID,
-						"targetPinId":  conn.TargetPinID,
-						"value":        value.RawValue,
-					},
-				})
-			}
-		}
-	}
 }
 
-// Wait waits for all execution to complete
-func (s *ActorSystem) Wait() bool {
+// Wait waits for all execution to complete with a timeout
+func (s *ActorSystem) Wait(timeout time.Duration) bool {
 	select {
 	case <-s.executionDone:
 		// Execution completed
 		return true
-	case <-time.After(30 * time.Second):
+	case <-time.After(timeout):
 		// Timeout
 		return false
 	}
 }
 
-// Stop stops all actors
+// Stop stops all actors and cleans up resources
 func (s *ActorSystem) Stop() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -326,10 +380,23 @@ func (s *ActorSystem) GetResult() ExecutionResult {
 	}
 
 	return ExecutionResult{
-		Success:     true, // Assume success for now, can be overridden
+		Success:     true,
 		ExecutionID: s.executionID,
-		StartTime:   time.Time{}, // Should be set by the caller
+		StartTime:   time.Time{}, // Will be set by the caller
 		EndTime:     time.Now(),
 		NodeResults: nodeResults,
 	}
+}
+
+// GetNodesStatus returns the status of all nodes
+func (s *ActorSystem) GetNodesStatus() map[string]NodeStatus {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	statuses := make(map[string]NodeStatus)
+	for nodeID, actor := range s.actors {
+		statuses[nodeID] = actor.GetStatus()
+	}
+
+	return statuses
 }

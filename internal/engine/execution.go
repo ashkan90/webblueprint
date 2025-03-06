@@ -147,15 +147,6 @@ func (ctx *DefaultExecutionContext) SetOutputValue(pinID string, value types.Val
 // GetOutputValue retrieves an output value by pin ID
 func (ctx *DefaultExecutionContext) GetOutputValue(pinID string) (types.Value, bool) {
 	value, exists := ctx.outputs[pinID]
-
-	// Log for debugging
-	if exists {
-		fmt.Printf("[DEBUG] Getting output value for %s.%s: %v (type: %T)\n",
-			ctx.nodeID, pinID, value.RawValue, value.RawValue)
-	} else {
-		fmt.Printf("[DEBUG] Output value not found for %s.%s\n", ctx.nodeID, pinID)
-	}
-
 	return value, exists
 }
 
@@ -167,7 +158,6 @@ func (ctx *DefaultExecutionContext) ActivateOutputFlow(pinID string) error {
 
 	// Store the activated pin for later execution
 	ctx.activatedFlows = append(ctx.activatedFlows, pinID)
-	fmt.Printf("[DEBUG] Queued output flow activation for %s.%s\n", ctx.nodeID, pinID)
 
 	return nil
 }
@@ -191,7 +181,11 @@ func (ctx *DefaultExecutionContext) GetActivatedOutputFlows() []string {
 	ctx.activatedFlowMutex.Lock()
 	defer ctx.activatedFlowMutex.Unlock()
 
-	return ctx.activatedFlows
+	// Create a copy to avoid concurrent modification
+	result := make([]string, len(ctx.activatedFlows))
+	copy(result, ctx.activatedFlows)
+
+	return result
 }
 
 // GetVariable retrieves a variable by name
@@ -251,6 +245,15 @@ type DefaultLogger struct {
 func NewDefaultLogger(nodeID string) *DefaultLogger {
 	return &DefaultLogger{
 		nodeID: nodeID,
+	}
+}
+
+// Opts sets options for the logger
+func (l *DefaultLogger) Opts(opts map[string]interface{}) {
+	if nodeID, ok := opts["nodeId"]; ok {
+		if id, ok := nodeID.(string); ok {
+			l.nodeID = id
+		}
 	}
 }
 

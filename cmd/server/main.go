@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +17,11 @@ import (
 )
 
 func main() {
+	// Define command line flags
+	useActorSystem := flag.Bool("actor", true, "Use the actor system for execution (default: false)")
+	port := flag.String("port", "", "Server port (default: 8089 or $PORT env var)")
+	flag.Parse()
+
 	// Initialize WebSocket manager
 	wsManager := api.NewWebSocketManager()
 
@@ -26,6 +32,14 @@ func main() {
 
 	// Initialize execution engine
 	executionEngine := engine.NewExecutionEngine(wsLogger, debugManager)
+
+	// Set execution mode if actor system is enabled
+	if *useActorSystem {
+		log.Println("Using Actor System for execution")
+		executionEngine.SetExecutionMode(engine.ModeActor)
+	} else {
+		log.Println("Using Standard Engine for execution")
+	}
 
 	// Initialize API server
 	apiServer := api.NewAPIServer(executionEngine, wsManager, debugManager)
@@ -71,10 +85,13 @@ func main() {
 	// Set up routes
 	router := apiServer.SetupRoutes()
 
-	// Get server port from environment or use default
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8089" // Default port
+	// Get server port from flag, environment, or use default
+	serverPort := *port
+	if serverPort == "" {
+		serverPort = os.Getenv("PORT")
+		if serverPort == "" {
+			serverPort = "8089" // Default port
+		}
 	}
 
 	// Determine frontend path
@@ -102,7 +119,7 @@ func main() {
 	}
 
 	// Start server
-	addr := fmt.Sprintf(":%s", port)
+	addr := fmt.Sprintf(":%s", serverPort)
 	log.Printf("WebBlueprint server starting on http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, router))
 }

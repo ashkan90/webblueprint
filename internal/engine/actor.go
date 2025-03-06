@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"webblueprint/internal/db"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
@@ -16,7 +17,10 @@ type NodeActor struct {
 	ExecutionID string
 	node        node.Node
 	mailbox     chan NodeMessage
+	inputs      map[string]types.Value
 	outputs     map[string]types.Value
+	variables   map[string]types.Value
+	status      NodeStatus
 	ctx         *ActorExecutionContext
 	logger      node.Logger
 	listeners   []ExecutionListener
@@ -48,7 +52,14 @@ func NewNodeActor(
 	logger node.Logger,
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
+	variables map[string]types.Value,
 ) *NodeActor {
+	// Create a deep copy of the variable map to avoid concurrency issues
+	varsCopy := make(map[string]types.Value)
+	for k, v := range variables {
+		varsCopy[k] = v
+	}
+
 	return &NodeActor{
 		NodeID:      nodeID,
 		NodeType:    nodeType,
@@ -56,11 +67,17 @@ func NewNodeActor(
 		ExecutionID: executionID,
 		node:        nodeInstance,
 		mailbox:     make(chan NodeMessage, 50), // Buffer for handling multiple messages
+		inputs:      make(map[string]types.Value),
 		outputs:     make(map[string]types.Value),
-		logger:      logger,
-		listeners:   listeners,
-		debugMgr:    debugMgr,
-		done:        make(chan struct{}),
+		variables:   varsCopy,
+		status: NodeStatus{
+			NodeID: nodeID,
+			Status: "idle",
+		},
+		logger:    logger,
+		listeners: listeners,
+		debugMgr:  debugMgr,
+		done:      make(chan struct{}),
 	}
 }
 
@@ -91,24 +108,29 @@ func (a *NodeActor) Send(msg NodeMessage) NodeResponse {
 	if msg.Response == nil {
 		responseChan := make(chan NodeResponse, 1)
 		msg.Response = responseChan
-		defer close(responseChan)
 	}
 
-	// Send the message
 	select {
 	case a.mailbox <- msg:
 		// Message sent, wait for response
 		select {
-		case response := <-msg.Response:
+		case response, ok := <-msg.Response:
+			if !ok {
+				// Channel was closed
+				return NodeResponse{
+					Success: false,
+					Error:   fmt.Errorf("response channel closed"),
+				}
+			}
 			return response
-		case <-time.After(5 * time.Second):
+		case <-time.After(10 * time.Second):
 			// Timeout waiting for response
 			return NodeResponse{
 				Success: false,
 				Error:   fmt.Errorf("timeout waiting for node response"),
 			}
 		}
-	case <-time.After(1 * time.Second):
+	case <-time.After(2 * time.Second):
 		// Timeout sending message
 		return NodeResponse{
 			Success: false,
@@ -118,16 +140,18 @@ func (a *NodeActor) Send(msg NodeMessage) NodeResponse {
 }
 
 // SendAsync sends a message to the actor without waiting for a response
-func (a *NodeActor) SendAsync(msg NodeMessage) {
+func (a *NodeActor) SendAsync(msg NodeMessage) bool {
 	select {
 	case a.mailbox <- msg:
 		// Message sent
-	default:
+		return true
+	case <-time.After(1 * time.Second):
 		// Mailbox full, log an error
 		a.logger.Error("Failed to send message to node actor, mailbox full", map[string]interface{}{
 			"nodeId":  a.NodeID,
 			"msgType": msg.Type,
 		})
+		return false
 	}
 }
 
@@ -138,18 +162,25 @@ func (a *NodeActor) processMessages() {
 		case <-a.done:
 			// Actor is being stopped
 			return
-		case msg := <-a.mailbox:
+		case msg, ok := <-a.mailbox:
+			if !ok {
+				// Mailbox was closed
+				return
+			}
 			// Process the message
 			response := a.handleMessage(msg)
 
 			// Send the response if a response channel was provided
 			if msg.Response != nil {
-				resp := msg.Response
 				select {
-				case resp <- response:
+				case msg.Response <- response:
 					// Response sent
 				default:
 					// Response channel is full or closed
+					a.logger.Warn("Could not send response, channel may be full or closed", map[string]interface{}{
+						"nodeId":  a.NodeID,
+						"msgType": msg.Type,
+					})
 				}
 			}
 		}
@@ -175,6 +206,12 @@ func (a *NodeActor) handleMessage(msg NodeMessage) NodeResponse {
 
 // handleExecuteMessage handles an execute message
 func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
+	// Update node status
+	a.mutex.Lock()
+	a.status.Status = "executing"
+	a.status.StartTime = time.Now()
+	a.mutex.Unlock()
+
 	// Mark node as executing
 	a.emitNodeStartedEvent()
 
@@ -188,6 +225,25 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		outputs[k] = v
 	}
 	a.mutex.RUnlock()
+
+	// Store outputs in debug manager
+	if a.debugMgr != nil {
+		// Store all outputs for this node
+		for pinID, value := range outputs {
+			a.debugMgr.StoreNodeOutputValue(a.ExecutionID, a.NodeID, pinID, value.RawValue)
+		}
+	}
+
+	// Update node status based on execution result
+	a.mutex.Lock()
+	a.status.EndTime = time.Now()
+	if err != nil {
+		a.status.Status = "error"
+		a.status.Error = err
+	} else {
+		a.status.Status = "completed"
+	}
+	a.mutex.Unlock()
 
 	// Mark node as completed or error
 	if err != nil {
@@ -208,8 +264,34 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 
 // handleInputMessage handles an input message
 func (a *NodeActor) handleInputMessage(msg NodeMessage) NodeResponse {
-	// Store the input value in the context
+	if msg.PinID == "" {
+		a.logger.Error("Input message missing pin ID", nil)
+		return NodeResponse{
+			Success: false,
+			Error:   fmt.Errorf("input message missing pin ID"),
+		}
+	}
+
+	if msg.Value.Type == nil || msg.Value.RawValue == nil {
+		a.logger.Warn("Received nil value for pin", map[string]interface{}{
+			"pinId": msg.PinID,
+		})
+	}
+
+	// Store the input value
+	a.mutex.Lock()
+	a.inputs[msg.PinID] = msg.Value
+	a.mutex.Unlock()
+
+	// Store input in the execution context
 	a.ctx.SetInput(msg.PinID, msg.Value)
+
+	// Log the received input for debugging
+	a.logger.Debug("Received input value", map[string]interface{}{
+		"pinId":     msg.PinID,
+		"valueType": fmt.Sprintf("%T", msg.Value.RawValue),
+		"value":     msg.Value.RawValue,
+	})
 
 	// Return success
 	return NodeResponse{
@@ -313,6 +395,14 @@ func (a *NodeActor) GetOutput(pinID string) (types.Value, bool) {
 	return value, exists
 }
 
+// GetStatus returns the current status of the node
+func (a *NodeActor) GetStatus() NodeStatus {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	return a.status
+}
+
 // ActorExecutionContext is the execution context for a node actor
 type ActorExecutionContext struct {
 	nodeID         string
@@ -337,13 +427,25 @@ func NewActorExecutionContext(
 	logger node.Logger,
 	actor *NodeActor,
 ) *ActorExecutionContext {
+	// Copy the actor's inputs to initialize the context
+	inputs := make(map[string]types.Value)
+	actor.mutex.RLock()
+	for k, v := range actor.inputs {
+		inputs[k] = v
+	}
+	actor.mutex.RUnlock()
+
+	//for _, pin := range actor.node.GetInputPins() {
+	//
+	//}
+
 	return &ActorExecutionContext{
 		nodeID:         nodeID,
 		nodeType:       nodeType,
 		blueprintID:    blueprintID,
 		executionID:    executionID,
-		inputs:         make(map[string]types.Value),
-		variables:      make(map[string]types.Value),
+		inputs:         inputs,
+		variables:      actor.variables, // Share variables with the actor
 		debugData:      make(map[string]interface{}),
 		logger:         logger,
 		actor:          actor,
@@ -364,23 +466,114 @@ func (ctx *ActorExecutionContext) GetActivatedOutputFlows() []string {
 	ctx.mutex.RLock()
 	defer ctx.mutex.RUnlock()
 
-	return ctx.activatedFlows
+	// Return a copy to avoid concurrent modification issues
+	flows := make([]string, len(ctx.activatedFlows))
+	copy(flows, ctx.activatedFlows)
+	return flows
 }
 
-// Implementation of ExecutionContext interface for ActorExecutionContext
+// Implementation of node.ExecutionContext interface for ActorExecutionContext
 
 // GetInputValue retrieves an input value by pin ID
 func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
-	ctx.mutex.RLock()
-	defer ctx.mutex.RUnlock()
-
 	value, exists := ctx.inputs[pinID]
-	return value, exists
+
+	// If the value exists, return it
+	if exists {
+		//// Log the input access
+		//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+		//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, value.RawValue)
+		//}
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.nodeID,
+			PinID:       pinID,
+			Description: "Existing value used",
+			Value: map[string]interface{}{
+				"default": value.RawValue,
+				"source":  "node property",
+			},
+			Timestamp: time.Now(),
+		})
+		return value, true
+	}
+
+	// If the value doesn't exist, try to find a default value
+	// First check the node properties for input_[pinID]
+	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
+	if err != nil {
+		return types.Value{}, false
+	}
+
+	_node := bp.FindNode(ctx.GetNodeID())
+	if _node == nil {
+		return types.Value{}, false
+	}
+
+	for _, prop := range _node.Properties {
+		if prop.Name == fmt.Sprintf("input_%s", pinID) || prop.Name == "constantValue" {
+			// Create a value from the default
+			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+
+			//// Log the default value usage
+			//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+			//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
+			//}
+
+			// Add to debug data
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.nodeID,
+				PinID:       pinID,
+				Description: "Default value used",
+				Value: map[string]interface{}{
+					"default": defaultValue.RawValue,
+					"source":  "node property",
+				},
+				Timestamp: time.Now(),
+			})
+
+			return defaultValue, true
+		}
+
+		if prop.Name == fmt.Sprintf("_loop_%s", pinID) {
+			// Create a value from the default
+			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+
+			//// Log the default value usage
+			//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+			//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
+			//}
+
+			// Add to debug data
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.nodeID,
+				PinID:       pinID,
+				Description: "Default value used",
+				Value: map[string]interface{}{
+					"default": defaultValue.RawValue,
+					"source":  "node property",
+				},
+				Timestamp: time.Now(),
+			})
+
+			return defaultValue, true
+		}
+	}
+
+	// No value or default found
+	return types.Value{}, false
 }
 
 // SetOutputValue sets an output value by pin ID
 func (ctx *ActorExecutionContext) SetOutputValue(pinID string, value types.Value) {
+	// Store the output value in the actor
 	ctx.actor.SetOutput(pinID, value)
+
+	// Log the output for debugging
+	ctx.logger.Debug("Set output value", map[string]interface{}{
+		"pinId":     pinID,
+		"valueType": fmt.Sprintf("%T", value.RawValue),
+		"value":     value.RawValue,
+	})
 }
 
 // ActivateOutputFlow activates an output execution flow
@@ -394,12 +587,10 @@ func (ctx *ActorExecutionContext) ActivateOutputFlow(pinID string) error {
 }
 
 // ExecuteConnectedNodes executes nodes connected to the given output pin
+// This is needed for some node types that require synchronous execution
 func (ctx *ActorExecutionContext) ExecuteConnectedNodes(pinID string) error {
-	// This is a placeholder - the actual implementation would depend on the actor system
-	// Directly executing connected nodes violates the actor model
-	// Instead, we'd queue messages for connected actors
-
-	// For now, just record that the flow was activated
+	// In the actor model, we can't directly execute connected nodes
+	// Instead, we just mark the flow as activated and let the system handle it
 	return ctx.ActivateOutputFlow(pinID)
 }
 
@@ -429,7 +620,10 @@ func (ctx *ActorExecutionContext) Logger() node.Logger {
 func (ctx *ActorExecutionContext) RecordDebugInfo(info types.DebugInfo) {
 	// Add the debug info to our collection
 	key := fmt.Sprintf("debug_%d", time.Now().UnixNano())
+
+	ctx.mutex.Lock()
 	ctx.debugData[key] = info
+	ctx.mutex.Unlock()
 
 	// Store in debug manager if available
 	if ctx.actor.debugMgr != nil {
@@ -441,7 +635,16 @@ func (ctx *ActorExecutionContext) RecordDebugInfo(info types.DebugInfo) {
 
 // GetDebugData returns all debug data
 func (ctx *ActorExecutionContext) GetDebugData() map[string]interface{} {
-	return ctx.debugData
+	ctx.mutex.RLock()
+	defer ctx.mutex.RUnlock()
+
+	// Create a copy to avoid concurrency issues
+	dataCopy := make(map[string]interface{})
+	for k, v := range ctx.debugData {
+		dataCopy[k] = v
+	}
+
+	return dataCopy
 }
 
 // GetNodeID returns the ID of the executing node
