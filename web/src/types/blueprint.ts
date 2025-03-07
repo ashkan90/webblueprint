@@ -31,6 +31,7 @@ export interface Connection {
 
 // Represents a blueprint variable
 export interface Variable {
+    id: string
     name: string
     type: string
     value: any

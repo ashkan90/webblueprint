@@ -28,7 +28,8 @@
 
     <div class="editor-container" :class="{ 'with-debug': showDebugPanel }">
       <div class="node-palette">
-        <EnhancedNodePalette @node-added="handleNodeAdded" />
+        <BlueprintLeftPanel @add-node="handleNodeAdded"/>
+<!--        <EnhancedNodePalette @node-added="handleNodeAdded" />-->
 <!--        <NodePalette @node-added="handleNodeAdded" />-->
       </div>
 
@@ -115,6 +116,7 @@ import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
 import NodeProperties from '../components/editor/NodeProperties.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
 import EnhancedNodePalette from "../components/editor/EnhancedNodePalette.vue";
+import BlueprintLeftPanel from "../components/editor/BlueprintLeftPanel.vue";
 
 const route = useRoute()
 const router = useRouter()

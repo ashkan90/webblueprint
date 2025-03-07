@@ -1,6 +1,6 @@
 import {defineStore} from 'pinia'
 import {computed, ref} from 'vue'
-import type {Blueprint, Connection, Node, Position} from '../types/blueprint'
+import type {Blueprint, Connection, Node, Position, Variable} from '../types/blueprint'
 import {v4 as uuid} from 'uuid'
 
 export const useBlueprintStore = defineStore('blueprint', () => {
@@ -22,6 +22,7 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     // Getters
     const nodes = computed(() => blueprint.value.nodes)
     const connections = computed(() => blueprint.value.connections)
+    const variables = computed(() => blueprint.value.variables)
 
     const getNodeById = computed(() => (id: string) => {
         return blueprint.value.nodes.find(node => node.id === id)
@@ -235,6 +236,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         )
     }
 
+    function addVariable(variable: Variable) {
+        blueprint.value.variables.push(variable)
+    }
+
     return {
         blueprint,
         isLoading,
@@ -256,6 +261,8 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         updateNodeProperty,
         removeNode,
         addConnection,
-        removeConnection
+        removeConnection,
+        variables,
+        addVariable
     }
 })
