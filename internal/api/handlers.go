@@ -8,6 +8,7 @@ import (
 	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
 	"webblueprint/internal/node"
+	"webblueprint/internal/nodes/utility"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
 
@@ -119,16 +120,16 @@ func (s *APIServer) SetupRoutes() *mux.Router {
 
 // Response helpers
 func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
-	response, err := json.Marshal(payload)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	err := json.NewEncoder(w).Encode(payload)
+	//response, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("Error marshaling response: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write(response)
 }
 
 func respondWithError(w http.ResponseWriter, code int, message string) {
@@ -221,6 +222,10 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	//for _, function := range bp.Functions {
+	//	s.RegisterNodeType(function.ID, utility.NewUserFunctionNode(function))
+	//}
+
 	// Store blueprint
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -261,6 +266,10 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 	if bp.ID != id {
 		respondWithError(w, http.StatusBadRequest, "Blueprint ID mismatch")
 		return
+	}
+
+	for _, function := range bp.Functions {
+		s.RegisterNodeType(function.Name, utility.NewUserFunctionNode(function))
 	}
 
 	// Update blueprint

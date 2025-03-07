@@ -20,10 +20,12 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     const isLoading = ref(false)
     const error = ref<string | null>(null)
 
+    const currentEditingFunction = ref<string | null>(null)
+
     // Getters
     const nodes = computed(() => blueprint.value.nodes)
     const connections = computed(() => blueprint.value.connections)
-    const variables = computed(() => blueprint.value.variables)
+    const variables = computed(() => blueprint.value.variables || [])
     const functions = computed(() => blueprint.value.functions)
 
     const getNodeById = computed(() => (id: string) => {
@@ -82,6 +84,8 @@ export const useBlueprintStore = defineStore('blueprint', () => {
 
         return entryPoints
     })
+
+    const isFunctionEditing = computed(() => currentEditingFunction.value !== null)
 
     // Actions
     function createBlueprint(name: string, description: string = '') {
@@ -247,10 +251,21 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         blueprint.value.functions.push(fn)
     }
 
+    function addNodeToFunction(fnID: string, node: Node) {
+        const fnIdx = blueprint.value.functions.findIndex((fn: Function) => fn.id === fnID)
+        blueprint.value.functions[fnIdx].nodes.push(node)
+    }
+
+    function createFunction(fn: Function, constructor: Node) {
+        const method = 'POST';
+        const url = '';
+    }
+
     return {
         blueprint,
         isLoading,
         error,
+        currentEditingFunction,
         nodes,
         connections,
         getNodeById,
@@ -258,6 +273,7 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         getNodeInputConnections,
         getNodeOutputConnections,
         isNodePinConnected,
+        isFunctionEditing,
         findEntryPoints,
         createBlueprint,
         loadBlueprint,
@@ -272,6 +288,7 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         variables,
         addVariable,
         functions,
-        addFunction
+        addFunction,
+        addNodeToFunction
     }
 })

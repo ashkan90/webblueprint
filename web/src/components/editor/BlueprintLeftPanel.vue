@@ -68,6 +68,7 @@
               class="section-item"
               :class="{ active: selectedItem === func.id }"
               @click="selectItem(func.id)"
+              @dblclick="openFunctionEditor(func)"
               draggable="true"
               @dragstart="onFunctionDragStart($event, func)"
           >
@@ -294,15 +295,20 @@ import { ref, computed, inject } from 'vue'
 import { v4 as uuid } from 'uuid'
 import ModalDialog from '../common/ModalDialog.vue'
 import { useBlueprintStore } from '../../stores/blueprint'
-import type { Variable, Function } from '../../types/blueprint'
+import type {Variable, Function, Node} from '../../types/blueprint'
+import {useNodeRegistryStore} from "../../stores/nodeRegistry";
+import {NodeTypeDefinition} from "../../types/nodes";
 
 const emit = defineEmits<{
   (e: 'add-node', data: any): void
   (e: 'select-item', id: string, type: string): void
+  (e: 'function-double-clicked', functionId: string): void
 }>()
 
 // Blueprint store
 const blueprintStore = useBlueprintStore()
+// Node Type store
+const nodeTypeStore = useNodeRegistryStore()
 
 // State
 const searchQuery = ref('')
@@ -373,7 +379,7 @@ const filteredFunctions = computed(() => {
 
   return blueprintStore.functions.filter(f =>
       f.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
+  ) || []
 })
 
 const filteredMacros = computed(() => {
@@ -550,13 +556,13 @@ function createSetVariableNode() {
   draggedVariable.value = null;
 }
 
-function onFunctionDragStart(event: DragEvent, func: any) {
+function onFunctionDragStart(event: DragEvent, func: Function) {
   if (!event.dataTransfer) return
 
   // Create a node representation of this function
   const nodeData = {
     id: uuid(),
-    type: 'function-call',
+    type: func.name,
     position: { x: 0, y: 0 },
     properties: [
       { name: 'functionId', value: func.id },
@@ -604,6 +610,11 @@ function onEventDragStart(event: DragEvent, eventDispatcher: any) {
   event.dataTransfer.effectAllowed = 'copy'
 }
 
+// Function to handle double-click on a function in the list
+function openFunctionEditor(func: Function) {
+  emit('function-double-clicked', func.id);
+}
+
 // Creation methods
 function createVariable() {
   const newVar: Variable = {
@@ -625,20 +636,66 @@ function createVariable() {
 }
 
 function createFunction() {
-  // Implement function creation in your store
-  console.log('Creating function:', newFunction.value)
-  // name: string     description: string     version: string     nodes: Node[]     functions: Blueprint[]     connections: Connection[]     variables: Variable[]     metadata: Record<string, string>
+  // Create a new function with UUID
+  const fnNodeType: NodeTypeDefinition = {
+    typeId: newFunction.value.name,
+    name: newFunction.value.name,
+    description: '',
+    category: 'Function',
+    version: '1.0.0',
+    inputs: [
+      {
+        description: 'Execution continues',
+        id: 'exec',
+        name: 'Execute',
+        optional: false,
+        type: {
+          description: 'Controls execution flow',
+          id: 'execution',
+          name: 'Execution',
+        }
+      }
+    ],
+    outputs: [
+      {
+        description: 'Execution continues',
+        id: 'then',
+        name: 'Then',
+        optional: false,
+        type: {
+          description: 'Controls execution flow',
+          id: 'execution',
+          name: 'Execution',
+        }
+      }
+    ],
+  }
+
   const fn: Function = {
     id: uuid(),
     name: newFunction.value.name,
     description: newFunction.value.description,
+    nodeType: fnNodeType,
     nodes: [],
     connections: [],
     variables: [],
-    metadata: {}
+    metadata: {
+      'type': 'function'
+    }
   }
 
+  const constructNode: Node = {
+    id: uuid(),
+    type: newFunction.value.name,
+    position: {x: 100, y: 100},
+    properties: []
+  }
+
+  nodeTypeStore.registerNodeType(fnNodeType)
+
   blueprintStore.addFunction(fn)
+  blueprintStore.addNodeToFunction(fn.id, constructNode)
+
   showCreateFunctionModal.value = false
 
   // Reset form

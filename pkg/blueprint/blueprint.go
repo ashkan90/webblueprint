@@ -9,6 +9,27 @@ type BlueprintNode struct {
 	Data       map[string]interface{} `json:"data,omitempty"`
 }
 
+type BlueprintNodeType struct {
+	Inputs     []NodePin      `json:"inputs"`
+	Outputs    []NodePin      `json:"outputs"`
+	Properties []NodeProperty `json:"properties"`
+}
+
+type NodePin struct {
+	ID          string       `json:"id,omitempty"`          // Unique identifier
+	Name        string       `json:"name,omitempty"`        // Human-readable name
+	Description string       `json:"description,omitempty"` // Description of what the pin does
+	Type        *NodePinType `json:"type,omitempty"`        // Type of data for this pin
+	Optional    bool         `json:"optional,omitempty"`    // Whether this pin is required
+	Default     interface{}  `json:"default,omitempty"`     // Default value if not connected
+}
+
+type NodePinType struct {
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 // Position represents the node position on the canvas
 type Position struct {
 	X float64 `json:"x"`
@@ -39,6 +60,17 @@ type Variable struct {
 	Value interface{} `json:"value"`
 }
 
+type Function struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	NodeType    BlueprintNodeType `json:"nodeType"`
+	Nodes       []BlueprintNode   `json:"nodes"`
+	Connections []Connection      `json:"connections"`
+	Variables   []Variable        `json:"variables,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
 // Blueprint represents a complete blueprint definition
 type Blueprint struct {
 	ID          string            `json:"id"`
@@ -46,6 +78,7 @@ type Blueprint struct {
 	Description string            `json:"description,omitempty"`
 	Version     string            `json:"version"`
 	Nodes       []BlueprintNode   `json:"nodes"`
+	Functions   []Function        `json:"functions"`
 	Connections []Connection      `json:"connections"`
 	Variables   []Variable        `json:"variables,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`

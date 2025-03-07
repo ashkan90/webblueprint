@@ -1,4 +1,6 @@
 // Represents a position on the canvas
+import {NodeTypeDefinition} from "./nodes";
+
 export interface Position {
     x: number
     y: number
@@ -41,6 +43,7 @@ export interface Function {
     id: string
     name: string
     description: string
+    nodeType: NodeTypeDefinition
     nodes: Node[]
     connections: Connection[]
     variables: Variable[]

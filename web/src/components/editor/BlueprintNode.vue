@@ -14,7 +14,7 @@
 
     <div class="node-content">
       <!-- Execution Input Pins -->
-      <div v-if="hasExecInputs" class="pin-section">
+      <div v-if="hasExecInputs && !(isInFunction && nodeType.category === 'Function')" class="pin-section">
         <div
             v-for="pin in execInputPins"
             :key="pin.id"
@@ -58,7 +58,7 @@
       </div>
 
       <!-- Divider if both inputs and outputs -->
-      <div v-if="(hasDataInputs || hasExecInputs) && (hasDataOutputs || hasExecOutputs)" class="pin-divider"></div>
+      <div v-if="(hasDataInputs || hasExecInputs) && (hasDataOutputs || hasExecOutputs) && (execInputPins.length > 0 && !isInFunction)" class="pin-divider"></div>
 
       <!-- Data Output Pins -->
       <div v-if="hasDataOutputs" class="pin-section">
@@ -109,6 +109,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Node } from '../../types/blueprint'
 import type { NodeTypeDefinition, PinDefinition } from '../../types/nodes'
+import { useBlueprintStore } from '../../stores/blueprint'
+
+const blueprintStore = useBlueprintStore()
 
 const props = defineProps<{
   node: Node
@@ -148,6 +151,8 @@ const dragStart = ref({ x: 0, y: 0 })
 const initialPosition = ref({ x: 0, y: 0 })
 
 // Computed properties
+const isInFunction = computed(() => blueprintStore.isFunctionEditing)
+
 const nodeTitle = computed(() => {
   return props.nodeType ? props.nodeType.name : props.node.type
 })

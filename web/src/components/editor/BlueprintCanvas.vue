@@ -640,7 +640,7 @@ function handleDrop(event: DragEvent) {
   }
 
   try {
-    const nodeData = JSON.parse(jsonData);
+    const nodeData: Node = JSON.parse(jsonData);
 
     console.log('Dropped node data:', nodeData);
 

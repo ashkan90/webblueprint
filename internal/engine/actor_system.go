@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 	"webblueprint/internal/node"
@@ -87,6 +88,7 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 	// Create actors for all nodes
 	for _, nodeConfig := range bp.Nodes {
 		// Get the node factory
+		log.Println(s.nodeRegistry, nodeConfig.Type)
 		factory, exists := s.nodeRegistry[nodeConfig.Type]
 		if !exists {
 			return fmt.Errorf("node type not registered: %s", nodeConfig.Type)

@@ -3,13 +3,17 @@
   <div class="app">
     <header class="app-header">
       <div class="logo">
-        <router-link to="/">WebBlueprint</router-link>
+        <h1>WebBlueprint</h1>
       </div>
       <nav>
-        <router-link to="/">Home</router-link>
-        <router-link to="/editor">Editor</router-link>
-        <router-link to="/about">About</router-link>
+        <RouterLink to="/">Home</RouterLink>
+        <RouterLink to="/editor">Editor</RouterLink>
+        <RouterLink to="/about">About</RouterLink>
       </nav>
+      <div class="connection-status" :class="connectionStatus">
+        <span class="status-indicator"></span>
+        <span class="status-text">{{ connectionStatusText }}</span>
+      </div>
     </header>
 
     <div v-if="isInitializing" class="initializing-overlay">
@@ -26,9 +30,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import {ref, onMounted, onBeforeUnmount, computed} from 'vue'
 import { executionManager, initializeBlueprintSystem, cleanupBlueprintSystem } from './bootstrap/blueprintSystem'
 import { WebSocketExecutionBridge } from './services/websocketBridge'
+import {useWebSocketStore} from "./stores/websocket";
+
+
+const websocketStore = useWebSocketStore()
 
 // State
 const isInitializing = ref(true)
@@ -54,6 +62,21 @@ onMounted(async () => {
   }
 })
 
+// Computed properties for connection status
+const connectionStatus = computed(() => websocketStore.connectionStatus)
+const connectionStatusText = computed(() => {
+  switch (websocketStore.connectionStatus) {
+    case 'connected':
+      return 'Connected'
+    case 'connecting':
+      return 'Connecting...'
+    case 'disconnected':
+      return 'Disconnected'
+    default:
+      return 'Unknown'
+  }
+})
+
 // Clean up on component unmount
 onBeforeUnmount(() => {
   cleanupBlueprintSystem()
@@ -69,17 +92,26 @@ onBeforeUnmount(() => {
   --node-header: #444444;
   --node-selected: #1a73e8;
   --grid-color: rgba(80, 80, 80, 0.2);
-  --conn-color: #abc;
+  --conn-color: #8ab4f8;
   --conn-exec: #fff;
   --exec-pin: #fff;
   --input-pin: #f0883e;
   --output-pin: #6ed69a;
+  --context-menu-bg: #333333;
+  --context-menu-hover: #444444;
+
+  /* Accent colors */
   --accent-blue: #3498db;
   --accent-green: #2ecc71;
   --accent-red: #e74c3c;
-  --accent-yellow: #f39c12;
-  --context-menu-bg: #333333;
-  --context-menu-hover: #444444;
+  --accent-yellow: #f1c40f;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
 }
 
 html, body {
@@ -174,5 +206,43 @@ nav a.router-link-active {
 .loading-text {
   font-size: 1.2rem;
   color: #fff;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--space-xs);
+}
+
+.connection-status.connected .status-indicator {
+  background-color: var(--accent-green);
+  box-shadow: 0 0 5px rgba(46, 204, 113, 0.8);
+}
+
+.connection-status.connecting .status-indicator {
+  background-color: var(--accent-yellow);
+  box-shadow: 0 0 5px rgba(241, 196, 15, 0.8);
+  animation: pulse 1s infinite;
+}
+
+.connection-status.disconnected .status-indicator {
+  background-color: var(--accent-red);
+  box-shadow: 0 0 5px rgba(231, 76, 60, 0.8);
+}
+
+@keyframes pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
 }
 </style>
