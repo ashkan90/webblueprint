@@ -1,5 +1,6 @@
 <template>
   <div
+      key="canvasContainer"
       ref="canvasContainer"
       class="blueprint-canvas-container"
       @wheel="handleWheel"
@@ -625,6 +626,13 @@ function handleDrop(event: DragEvent) {
   // Get the dropped data
   if (!event.dataTransfer) return;
 
+  // Completely ignore variable drags - let BlueprintLeftPanel handle them
+  if (event.dataTransfer.types.includes('application/x-blueprint-variable')) {
+    // This is a variable drag - don't do anything
+    console.log("Variable drag detected - ignoring in canvas");
+    return;
+  }
+
   const jsonData = event.dataTransfer.getData('application/json');
   if (!jsonData) {
     console.error('No valid data found in drag operation');
@@ -633,7 +641,8 @@ function handleDrop(event: DragEvent) {
 
   try {
     const nodeData = JSON.parse(jsonData);
-    console.log('Dropped node data:', nodeData); // Debug
+
+    console.log('Dropped node data:', nodeData);
 
     // Convert to canvas coordinates
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();

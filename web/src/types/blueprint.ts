@@ -37,6 +37,16 @@ export interface Variable {
     value: any
 }
 
+export interface Function {
+    id: string
+    name: string
+    description: string
+    nodes: Node[]
+    connections: Connection[]
+    variables: Variable[]
+    metadata: Record<string, string>
+}
+
 // Represents a complete blueprint
 export interface Blueprint {
     id: string
@@ -44,6 +54,7 @@ export interface Blueprint {
     description: string
     version: string
     nodes: Node[]
+    functions: Function[]
     connections: Connection[]
     variables: Variable[]
     metadata: Record<string, string>

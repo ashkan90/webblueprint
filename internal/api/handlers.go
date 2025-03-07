@@ -55,6 +55,8 @@ func (s *APIServer) RegisterNodeType(typeID string, factory node.NodeFactory) {
 	})
 }
 
+func (s *APIServer) RegisterBrowserContentType(typeID string, factory node.NodeFactory) {}
+
 // convertPinsToInfo converts pins to a format suitable for the client
 func convertPinsToInfo(pins []types.Pin) []map[string]interface{} {
 	result := make([]map[string]interface{}, len(pins))

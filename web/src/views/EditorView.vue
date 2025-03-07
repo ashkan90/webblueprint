@@ -28,7 +28,7 @@
 
     <div class="editor-container" :class="{ 'with-debug': showDebugPanel }">
       <div class="node-palette">
-        <BlueprintLeftPanel @add-node="handleNodeAdded"/>
+        <BlueprintLeftPanel @add-node="handleNodeAdded" />
 <!--        <EnhancedNodePalette @node-added="handleNodeAdded" />-->
 <!--        <NodePalette @node-added="handleNodeAdded" />-->
       </div>
@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import {ref, computed, onMounted, watch, provide} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { v4 as uuid } from 'uuid'
 import { useBlueprintStore } from '../stores/blueprint'
@@ -129,6 +129,7 @@ const blueprintName = ref('')
 const selectedNodeId = ref<string | null>(null)
 const showDebugPanel = ref(false)
 const canvas = ref<InstanceType<typeof BlueprintCanvas> | null>(null)
+const canvasRef = ref<HTMLElement | null>(null)
 const showResultModal = ref(false)
 const executionResult = ref<{
   duration: string;
@@ -136,6 +137,8 @@ const executionResult = ref<{
   success: boolean;
   error?: string;
 }>()
+
+provide('canvasContainer', canvasRef)
 
 // Computed values
 const nodes = computed(() => blueprintStore.nodes)

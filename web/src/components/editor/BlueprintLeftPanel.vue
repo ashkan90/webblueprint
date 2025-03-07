@@ -1,3 +1,4 @@
+<!-- File: web/src/components/editor/BlueprintLeftPanel.vue -->
 <template>
   <div class="blueprint-left-panel">
     <div class="panel-search">
@@ -133,6 +134,7 @@
               @click="selectItem(variable.id)"
               draggable="true"
               @dragstart="onVariableDragStart($event, variable)"
+              @dragend="onVariableDragEnd($event, variable)"
           >
             <div class="variable-type-indicator" :style="{ backgroundColor: getVariableTypeColor(variable.type) }"></div>
             <div class="item-name">{{ variable.name }}</div>
@@ -206,6 +208,16 @@
         </div>
       </div>
     </ModalDialog>
+
+    <!-- Variable Actions Menu (GET/SET) -->
+    <div v-if="showVariableMenu" class="variable-menu" :style="variableMenuStyle">
+      <div class="menu-item" @click="createGetVariableNode">
+        Get {{ draggedVariable?.name }}
+      </div>
+      <div class="menu-item" @click="createSetVariableNode">
+        Set {{ draggedVariable?.name }}
+      </div>
+    </div>
 
     <!-- Create Function Modal -->
     <ModalDialog
@@ -282,15 +294,12 @@ import { ref, computed, inject } from 'vue'
 import { v4 as uuid } from 'uuid'
 import ModalDialog from '../common/ModalDialog.vue'
 import { useBlueprintStore } from '../../stores/blueprint'
-import type { Variable, Blueprint } from '../../types/blueprint'
+import type { Variable, Function } from '../../types/blueprint'
 
 const emit = defineEmits<{
   (e: 'add-node', data: any): void
   (e: 'select-item', id: string, type: string): void
 }>()
-
-// Inject canvas container reference (passed from parent component)
-const canvasContainer = inject<HTMLElement>('canvasContainer')
 
 // Blueprint store
 const blueprintStore = useBlueprintStore()
@@ -311,6 +320,12 @@ const showCreateVariableModal = ref(false)
 const showCreateFunctionModal = ref(false)
 const showCreateMacroModal = ref(false)
 const showCreateEventDispatcherModal = ref(false)
+
+// Variable menu state
+const showVariableMenu = ref(false)
+const variableMenuPosition = ref({ x: 0, y: 0 })
+const draggedVariable = ref<Variable | null>(null)
+const dropPosition = ref({ x: 0, y: 0 })
 
 // New item forms
 const newVariable = ref({
@@ -335,6 +350,14 @@ const newEventDispatcher = ref({
   description: ''
 })
 
+// Computed values for variable menu positioning
+const variableMenuStyle = computed(() => {
+  return {
+    left: `${variableMenuPosition.value.x}px`,
+    top: `${variableMenuPosition.value.y}px`
+  }
+})
+
 // Filtered lists based on search query
 const filteredGraphs = computed(() => {
   const graphs = [{ id: 'eventGraph', name: 'EventGraph' }]
@@ -346,15 +369,9 @@ const filteredGraphs = computed(() => {
 })
 
 const filteredFunctions = computed(() => {
-  // Replace with actual function data from store
-  const functions = [
-    { id: 'function1', name: 'CalculateDistance' },
-    { id: 'function2', name: 'ProcessInput' }
-  ]
+  if (!searchQuery.value) return blueprintStore.functions
 
-  if (!searchQuery.value) return functions
-
-  return functions.filter(f =>
+  return blueprintStore.functions.filter(f =>
       f.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
@@ -428,23 +445,109 @@ function handleAddButtonClick() {
   showCreateVariableModal.value = true
 }
 
-// Drag handlers
+// Handle variable drag start - just mark it as a variable drag
 function onVariableDragStart(event: DragEvent, variable: Variable) {
-  if (!event.dataTransfer) return
+  if (!event.dataTransfer) return;
 
-  // Create a node representation of this variable
-  const nodeData = {
+  // Store variable info for the drag operation
+  draggedVariable.value = variable;
+
+  // CRITICAL: Set a completely different format type for variables
+  // This prevents canvas from processing it as a regular node
+  event.dataTransfer.setData('application/x-blueprint-variable', JSON.stringify(variable));
+
+  // Don't set application/json at all for variables
+  // This prevents the canvas from auto-creating nodes
+
+  // Set appearance for the drag operation
+  const dragImage = document.createElement('div');
+  dragImage.textContent = variable.name;
+  dragImage.style.backgroundColor = '#333';
+  dragImage.style.color = 'white';
+  dragImage.style.padding = '8px';
+  dragImage.style.borderRadius = '4px';
+  dragImage.style.position = 'absolute';
+  dragImage.style.top = '-1000px';
+  document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(dragImage, 0, 0);
+  setTimeout(() => document.body.removeChild(dragImage), 0);
+
+  event.dataTransfer.effectAllowed = 'copy';
+}
+
+// Handle variable drag end - show the Get/Set menu
+function onVariableDragEnd(event: DragEvent, variable: Variable) {
+  // Prevent default to avoid any node creation by the canvas drop handlers
+  event.preventDefault()
+
+  const canvas = document.querySelector('.blueprint-canvas');
+  const canvasRect = canvas.getBoundingClientRect()
+  const dropX = event.clientX - canvasRect.left
+  const dropY = event.clientY - canvasRect.top
+
+  // Store the canvas position for node creation
+  dropPosition.value = { x: dropX, y: dropY }
+
+  // Open the variable menu at the client (screen) position
+  variableMenuPosition.value = { x: event.clientX, y: event.clientY }
+  showVariableMenu.value = true
+
+  // Add event listener to close the menu when clicking elsewhere
+  document.addEventListener('click', closeVariableMenu, { once: true })
+
+  // Prevent immediate propagation to avoid any other handlers
+  event.stopPropagation()
+}
+
+// Close the variable action menu
+function closeVariableMenu() {
+  showVariableMenu.value = false
+}
+
+// Create a Get Variable node
+function createGetVariableNode() {
+  if (!draggedVariable.value) return;
+
+  // Create a Get Variable node with the correct position
+  const node = {
     id: uuid(),
-    type: `variable-${variable.type}`,
-    position: { x: 0, y: 0 },
+    type: 'variable-get',
+    position: dropPosition.value,
     properties: [
-      { name: 'variableId', value: variable.id },
-      { name: 'variableName', value: variable.name }
+      { name: 'variableId', value: draggedVariable.value.id },
+      { name: 'input_name', value:  draggedVariable.value.name},
     ]
-  }
+  };
 
-  event.dataTransfer.setData('application/json', JSON.stringify(nodeData))
-  event.dataTransfer.effectAllowed = 'copy'
+  // Add the node to the blueprint
+  emit('add-node', node);
+
+  // Close the menu and reset
+  closeVariableMenu();
+  draggedVariable.value = null;
+}
+
+// Create a Set Variable node
+function createSetVariableNode() {
+  if (!draggedVariable.value) return;
+
+  // Create a Set Variable node with the correct position
+  const node = {
+    id: uuid(),
+    type: 'variable-set',
+    position: dropPosition.value,
+    properties: [
+      { name: 'variableId', value: draggedVariable.value.id },
+      { name: 'input_name', value:  draggedVariable.value.name},
+    ]
+  };
+
+  // Add the node to the blueprint
+  emit('add-node', node);
+
+  // Close the menu and reset
+  closeVariableMenu();
+  draggedVariable.value = null;
 }
 
 function onFunctionDragStart(event: DragEvent, func: any) {
@@ -524,6 +627,18 @@ function createVariable() {
 function createFunction() {
   // Implement function creation in your store
   console.log('Creating function:', newFunction.value)
+  // name: string     description: string     version: string     nodes: Node[]     functions: Blueprint[]     connections: Connection[]     variables: Variable[]     metadata: Record<string, string>
+  const fn: Function = {
+    id: uuid(),
+    name: newFunction.value.name,
+    description: newFunction.value.description,
+    nodes: [],
+    connections: [],
+    variables: [],
+    metadata: {}
+  }
+
+  blueprintStore.addFunction(fn)
   showCreateFunctionModal.value = false
 
   // Reset form
@@ -622,6 +737,11 @@ function getDefaultValueForType(type: string): any {
   align-items: center;
   justify-content: center;
   font-size: 12px;
+}
+
+.clear-btn:hover {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .add-btn {
@@ -765,6 +885,35 @@ function getDefaultValueForType(type: string): any {
   height: 8px;
   border-radius: 50%;
   margin-right: 8px;
+}
+
+/* Variable menu styles - similar to Unreal's context menu */
+.variable-menu {
+  position: fixed;
+  z-index: 1000;
+  background-color: #333333;
+  border: 1px solid #555555;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+  animation: menu-appear 0.15s ease-out;
+}
+
+@keyframes menu-appear {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.menu-item {
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  color: #e0e0e0;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background-color: var(--accent-blue);
+  color: white;
 }
 
 /* Modal form styles */
