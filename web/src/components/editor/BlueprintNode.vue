@@ -2,7 +2,7 @@
   <div
       ref="nodeElement"
       class="blueprint-node"
-      :class="[status, { 'selected': selected }]"
+      :class="[status, { 'selected': selected, 'data-node': isDataOnlyNode }]"
       :style="nodeStyle"
       :data-node-id="node.id"
       @mousedown="handleMouseDown"
@@ -13,8 +13,8 @@
     </div>
 
     <div class="node-content">
-      <!-- Execution Input Pins -->
-      <div v-if="hasExecInputs && !(isInFunction && nodeType.category === 'Function')" class="pin-section">
+      <!-- Execution Input Pins - Do not show for data-only nodes -->
+      <div v-if="hasExecInputs && !(isInFunction && nodeType.category === 'Function') && !isDataOnlyNode" class="pin-section">
         <div
             v-for="pin in execInputPins"
             :key="pin.id"
@@ -57,8 +57,8 @@
         </div>
       </div>
 
-      <!-- Divider if both inputs and outputs -->
-      <div v-if="(hasDataInputs || hasExecInputs) && (hasDataOutputs || hasExecOutputs) && (execInputPins.length > 0 && !isInFunction)" class="pin-divider"></div>
+      <!-- Divider if both inputs and outputs and not a data-only node -->
+      <div v-if="(hasDataInputs || (hasExecInputs && !isDataOnlyNode)) && (hasDataOutputs || (hasExecOutputs && !isDataOnlyNode)) && (execInputPins.length > 0 && !isInFunction && !isDataOnlyNode)" class="pin-divider"></div>
 
       <!-- Data Output Pins -->
       <div v-if="hasDataOutputs" class="pin-section">
@@ -81,8 +81,8 @@
         </div>
       </div>
 
-      <!-- Execution Output Pins -->
-      <div v-if="hasExecOutputs" class="pin-section">
+      <!-- Execution Output Pins - Do not show for data-only nodes -->
+      <div v-if="hasExecOutputs && !isDataOnlyNode" class="pin-section">
         <div
             v-for="pin in execOutputPins"
             :key="pin.id"
@@ -152,6 +152,21 @@ const initialPosition = ref({ x: 0, y: 0 })
 
 // Computed properties
 const isInFunction = computed(() => blueprintStore.isFunctionEditing)
+
+// Check if this is a data-only node (like variables)
+const isDataOnlyNode = computed(() => {
+  // Check if node was explicitly created as a data-only node
+  if (props.node.data?.isDataNode) {
+    return true;
+  }
+  
+  // Also consider variable-get and variable-set nodes as data-only
+  if (props.node.type === 'variable-get' || props.node.type === 'variable-set') {
+    return true;
+  }
+  
+  return false;
+})
 
 const nodeTitle = computed(() => {
   return props.nodeType ? props.nodeType.name : props.node.type
@@ -370,6 +385,21 @@ onUnmounted(() => {
     color: var(--text-color);
     font-family: 'Segoe UI', sans-serif;
     font-size: 13px;
+}
+
+/* Special styling for data-only nodes like variables */
+.blueprint-node.data-node {
+    background-color: var(--node-data-bg, #2d394a); /* Use a different color for data nodes */
+    border: 1px solid var(--node-data-border, #44617e);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.blueprint-node.data-node .node-header {
+    background-color: var(--node-data-header, #3a4e63);
+}
+
+.blueprint-node.data-node .pin-circle {
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.5); /* Add glow effect to pins */
 }
 
 .node-header {

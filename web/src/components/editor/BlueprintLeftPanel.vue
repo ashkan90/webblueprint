@@ -396,7 +396,13 @@ const filteredMacros = computed(() => {
 })
 
 const filteredVariables = computed(() => {
-  return blueprintStore.variables.filter(v =>
+  // Ensure variables is an array
+  const variables = blueprintStore.variables || [];
+  
+  // Log for debugging
+  console.log('Filtering variables:', variables);
+  
+  return variables.filter(v =>
       !searchQuery.value || v.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
@@ -521,10 +527,18 @@ function createGetVariableNode() {
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
-      { name: 'input_name', value:  draggedVariable.value.name},
-    ]
+      { name: 'input_name', value: draggedVariable.value.name},
+      // Store variable type to help with type-specific handling
+      { name: 'variableType', value: draggedVariable.value.type }
+    ],
+    // Add data to help with node rendering and connections
+    data: {
+      variableType: draggedVariable.value.type,
+      isDataNode: true, // Flag to indicate this is a pure data node (no execution pins)
+    }
   };
 
+  console.log('Creating variable-get node for:', draggedVariable.value);
   // Add the node to the blueprint
   emit('add-node', node);
 
@@ -544,10 +558,18 @@ function createSetVariableNode() {
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
-      { name: 'input_name', value:  draggedVariable.value.name},
-    ]
+      { name: 'input_name', value: draggedVariable.value.name},
+      // Store variable type to help with type-specific handling
+      { name: 'variableType', value: draggedVariable.value.type }
+    ],
+    // Add data to help with node rendering and connections
+    data: {
+      variableType: draggedVariable.value.type,
+      isDataNode: true, // Flag to indicate this is a pure data node (no execution pins)
+    }
   };
 
+  console.log('Creating variable-set node for:', draggedVariable.value);
   // Add the node to the blueprint
   emit('add-node', node);
 

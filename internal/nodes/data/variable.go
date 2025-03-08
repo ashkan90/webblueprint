@@ -25,12 +25,6 @@ func NewVariableGetNode() node.Node {
 			},
 			Inputs: []types.Pin{
 				{
-					ID:          "exec",
-					Name:        "Execute",
-					Description: "Execution input",
-					Type:        types.PinTypes.Execution,
-				},
-				{
 					ID:          "name",
 					Name:        "Variable Name",
 					Description: "Name of the variable to get",
@@ -38,12 +32,6 @@ func NewVariableGetNode() node.Node {
 				},
 			},
 			Outputs: []types.Pin{
-				{
-					ID:          "then",
-					Name:        "Then",
-					Description: "Execution continues",
-					Type:        types.PinTypes.Execution,
-				},
 				{
 					ID:          "value",
 					Name:        "Value",
@@ -140,8 +128,8 @@ func (n *VariableGetNode) Execute(ctx node.ExecutionContext) error {
 		"exists": exists,
 	})
 
-	// Continue execution
-	return ctx.ActivateOutputFlow("then")
+	// No need to continue execution since we removed the execution pins
+	return nil
 }
 
 // VariableSetNode implements a node that sets a variable value
@@ -162,12 +150,6 @@ func NewVariableSetNode() node.Node {
 			},
 			Inputs: []types.Pin{
 				{
-					ID:          "exec",
-					Name:        "Execute",
-					Description: "Execution input",
-					Type:        types.PinTypes.Execution,
-				},
-				{
 					ID:          "name",
 					Name:        "Variable Name",
 					Description: "Name of the variable to set",
@@ -184,10 +166,10 @@ func NewVariableSetNode() node.Node {
 			},
 			Outputs: []types.Pin{
 				{
-					ID:          "then",
-					Name:        "Then",
-					Description: "Execution continues",
-					Type:        types.PinTypes.Execution,
+					ID:          "result",
+					Name:        "Result",
+					Description: "True if variable was set successfully",
+					Type:        types.PinTypes.Boolean,
 				},
 			},
 		},
@@ -207,13 +189,13 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	// Get the variable value (now optional)
 	value, valueExists := ctx.GetInputValue("value")
 	// Get default value (if provided)
-	defaultValue, defaultValueExists := ctx.GetInputValue("defaultValue")
+	//defaultValue, defaultValueExists := ctx.GetInputValue("defaultValue")
 
 	// Record input values for debugging
 	debugData["inputs"] = map[string]interface{}{
-		"nameExists":         nameExists,
-		"valueExists":        valueExists,
-		"defaultValueExists": defaultValueExists,
+		"nameExists":  nameExists,
+		"valueExists": valueExists,
+		//"defaultValueExists": defaultValueExists,
 	}
 
 	if !nameExists {
@@ -231,23 +213,25 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 			Timestamp:   time.Now(),
 		})
 
+		// Set result output to false
+		ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Boolean, false))
 		return err
 	}
 
 	// Use default value if no value is connected
-	if !valueExists {
-		if defaultValueExists {
-			value = defaultValue
-			valueExists = true
-			debugData["usingDefault"] = true
-		} else {
-			logger.Warn("No value or default value provided, using null", nil)
-			// Create a null value of type Any
-			value = types.NewValue(types.PinTypes.Any, nil)
-			valueExists = true
-			debugData["usingNull"] = true
-		}
-	}
+	//if !valueExists {
+	//	if defaultValueExists {
+	//		value = defaultValue
+	//		valueExists = true
+	//		debugData["usingDefault"] = true
+	//	} else {
+	//		logger.Warn("No value or default value provided, using null", nil)
+	//		// Create a null value of type Any
+	//		value = types.NewValue(types.PinTypes.Any, nil)
+	//		valueExists = true
+	//		debugData["usingNull"] = true
+	//	}
+	//}
 
 	// Convert name to string
 	varName, err := nameValue.AsString()
@@ -265,6 +249,8 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 			Timestamp:   time.Now(),
 		})
 
+		// Set result output to false
+		ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Boolean, false))
 		return err
 	}
 
@@ -277,6 +263,9 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 
 	// Set the variable
 	ctx.SetVariable(varName, value)
+
+	// Set result output to true
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Boolean, true))
 
 	// Record debug info
 	ctx.RecordDebugInfo(types.DebugInfo{
@@ -292,6 +281,6 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 		"value": value.RawValue,
 	})
 
-	// Continue execution
-	return ctx.ActivateOutputFlow("then")
+	// No need to continue execution since we removed the execution pins
+	return nil
 }

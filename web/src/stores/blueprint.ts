@@ -23,10 +23,15 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     const currentEditingFunction = ref<string | null>(null)
 
     // Getters
-    const nodes = computed(() => blueprint.value.nodes)
-    const connections = computed(() => blueprint.value.connections)
-    const variables = computed(() => blueprint.value.variables || [])
-    const functions = computed(() => blueprint.value.functions)
+    const nodes = computed(() => blueprint.value.nodes || [])
+    const connections = computed(() => blueprint.value.connections || [])
+    const variables = computed(() => {
+        if (!blueprint.value.variables) {
+            blueprint.value.variables = [];
+        }
+        return blueprint.value.variables;
+    })
+    const functions = computed(() => blueprint.value.functions || [])
 
     const getNodeById = computed(() => (id: string) => {
         return blueprint.value.nodes.find(node => node.id === id)
@@ -113,6 +118,26 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             }
 
             blueprint.value = await response.json()
+            
+            // Ensure the blueprint structure is complete
+            if (!blueprint.value.variables) {
+                console.log('Variables array not found in blueprint response, creating empty array');
+                blueprint.value.variables = [];
+            }
+            
+            if (!blueprint.value.functions) {
+                blueprint.value.functions = [];
+            }
+            
+            if (!blueprint.value.connections) {
+                blueprint.value.connections = [];
+            }
+            
+            if (!blueprint.value.nodes) {
+                blueprint.value.nodes = [];
+            }
+            
+            console.log('Blueprint structure after loading:', blueprint.value);
         } catch (err) {
             error.value = err instanceof Error ? err.message : String(err)
             console.error('Error loading blueprint:', err)
@@ -144,6 +169,24 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             }
 
             blueprint.value = await response.json()
+            
+            // Ensure the blueprint structure is complete after saving
+            if (!blueprint.value.variables) {
+                console.log('Variables array not found in blueprint response after saving, creating empty array');
+                blueprint.value.variables = [];
+            }
+            
+            if (!blueprint.value.functions) {
+                blueprint.value.functions = [];
+            }
+            
+            if (!blueprint.value.connections) {
+                blueprint.value.connections = [];
+            }
+            
+            if (!blueprint.value.nodes) {
+                blueprint.value.nodes = [];
+            }
         } catch (err) {
             error.value = err instanceof Error ? err.message : String(err)
             console.error('Error saving blueprint:', err)
@@ -244,7 +287,15 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     }
 
     function addVariable(variable: Variable) {
-        blueprint.value.variables.push(variable)
+        // Ensure variables array exists
+        if (!blueprint.value.variables) {
+            console.log('Creating variables array before adding variable');
+            blueprint.value.variables = [];
+        }
+        
+        // Add the variable
+        console.log('Adding variable to blueprint:', variable);
+        blueprint.value.variables.push(variable);
     }
 
     function addFunction(fn: Function) {
