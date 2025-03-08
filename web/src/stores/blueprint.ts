@@ -248,17 +248,60 @@ export const useBlueprintStore = defineStore('blueprint', () => {
     }
 
     function addFunction(fn: Function) {
+        // Ensure function has execution pins
+        let hasExecutionInput = false;
+        let hasExecutionOutput = false;
+        
+        for (const input of fn.nodeType.inputs) {
+            if (input.type?.id === 'execution') {
+                hasExecutionInput = true;
+                break;
+            }
+        }
+        
+        for (const output of fn.nodeType.outputs) {
+            if (output.type?.id === 'execution') {
+                hasExecutionOutput = true;
+                break;
+            }
+        }
+        
+        // Add default execution input if needed
+        if (!hasExecutionInput) {
+            fn.nodeType.inputs.push({
+                id: 'exec',
+                name: 'Execute',
+                description: 'Execution continues',
+                type: {
+                    id: 'execution',
+                    name: 'Execution',
+                    description: 'Controls execution flow',
+                },
+                optional: false
+            });
+        }
+        
+        // Add default execution output if needed
+        if (!hasExecutionOutput) {
+            fn.nodeType.outputs.push({
+                id: 'then',
+                name: 'Then',
+                description: 'Execution continues',
+                type: {
+                    id: 'execution',
+                    name: 'Execution',
+                    description: 'Controls execution flow',
+                },
+                optional: false
+            });
+        }
+        
         blueprint.value.functions.push(fn)
     }
 
     function addNodeToFunction(fnID: string, node: Node) {
         const fnIdx = blueprint.value.functions.findIndex((fn: Function) => fn.id === fnID)
         blueprint.value.functions[fnIdx].nodes.push(node)
-    }
-
-    function createFunction(fn: Function, constructor: Node) {
-        const method = 'POST';
-        const url = '';
     }
 
     return {

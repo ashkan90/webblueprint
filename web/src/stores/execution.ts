@@ -132,6 +132,44 @@ export const useExecutionStore = defineStore('execution', () => {
         }
     }
 
+    function clearDebugData() {
+        nodeStatuses.value = {}
+        debugData.value = {}
+        dataFlows.value = []
+        currentExecutionId.value = null
+        executionStatus.value = 'idle'
+        executionStartTime.value = null
+        executionEndTime.value = null
+    }
+
+    // Fetch debug data for a node
+    async function fetchNodeDebugData(executionId: string, nodeId: string) {
+        try {
+            const response = await fetch(`/api/executions/${executionId}/nodes/${nodeId}`)
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch debug data`)
+            }
+
+            const data = await response.json()
+
+            updateNodeDebugData({
+                nodeId: data.nodeId,
+                executionId: data.executionId,
+                timestamp: new Date(),
+                inputs: data.debug?.inputs,
+                outputs: data.debug?.outputs,
+                internalState: data.debug?.internalState,
+                snapshots: data.debug?.snapshots || []
+            })
+
+            return data
+        } catch (error) {
+            console.error('Error fetching node debug data:', error)
+            throw error
+        }
+    }
+
     function recordDataFlow(flow: DataFlow) {
         // Store the flow
         dataFlows.value.push(flow)
@@ -245,6 +283,8 @@ export const useExecutionStore = defineStore('execution', () => {
         updateNodeStatus,
         updateNodeDebugData,
         recordDataFlow,
+        clearDebugData,
+        fetchNodeDebugData,
         logs,
         addLogEntry,
         clearLogs,

@@ -559,12 +559,21 @@ function createSetVariableNode() {
 function onFunctionDragStart(event: DragEvent, func: Function) {
   if (!event.dataTransfer) return
 
-  console.log(func)
+  console.log('Dragging function:', func)
+
+  // CRITICAL: Ensure the function's node type is properly registered
+  // This is necessary when dragging functions after page refresh
+  if (func.nodeType) {
+    console.log('Ensuring function node type is registered:', func.nodeType);
+    nodeTypeStore.registerNodeType(func.nodeType);
+  }
 
   // Create a node representation of this function
+  // IMPORTANT: The 'type' must match the nodeType.typeId that was registered
+  // with the node registry, which is the function name
   const nodeData = {
     id: uuid(),
-    type: func.id,
+    type: func.name, // Use function name (not ID) as the type
     position: { x: 0, y: 0 },
     properties: [
       { name: 'functionId', value: func.id },
@@ -572,6 +581,7 @@ function onFunctionDragStart(event: DragEvent, func: Function) {
     ]
   }
 
+  console.log('Creating function node with type:', nodeData.type)
   event.dataTransfer.setData('application/json', JSON.stringify(nodeData))
   event.dataTransfer.effectAllowed = 'copy'
 }
@@ -693,10 +703,19 @@ function createFunction() {
     properties: []
   }
 
+  // Register the node type with the node registry
+  console.log('Registering function node type with typeId:', fnNodeType.typeId);
   nodeTypeStore.registerNodeType(fnNodeType)
 
+  // Add the function to the blueprint store
   blueprintStore.addFunction(fn)
+  
+  // Add a constructor node for the function
   blueprintStore.addNodeToFunction(fn.id, constructNode)
+  
+  // Ensure the function node can be dragged and dropped properly
+  const functionNode = nodeTypeStore.getNodeTypeById(fn.name);
+  console.log('Registered function node type:', functionNode);
 
   showCreateFunctionModal.value = false
 

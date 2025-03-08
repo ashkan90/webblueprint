@@ -315,7 +315,33 @@ const filteredCategories = computed(() => {
 
 // Methods
 function getNodeType(typeId: string): NodeTypeDefinition | null {
-  return nodeRegistryStore.getNodeTypeById(typeId)
+  // First try to get the node type directly
+  const nodeType = nodeRegistryStore.getNodeTypeById(typeId);
+  if (nodeType) {
+    return nodeType;
+  }
+  
+  // If not found, it might be a user-defined function with a different ID format
+  // Try to find it by name in the registry
+  console.log('Node type not found directly:', typeId);
+  
+  // Log all available node types for debugging
+  console.log('Available node types:', Object.keys(nodeRegistryStore.nodeTypes));
+  
+  // Check if this is a node created from a dragged function
+  // If it's a function node, its id in the node registry would be the function name
+  const nodeTypeValues = Object.values(nodeRegistryStore.nodeTypes);
+  const matchingNodeType = nodeTypeValues.find(nt => 
+    nt.name === typeId || // Match by name
+    nt.typeId === typeId  // Match by typeId
+  );
+  
+  if (matchingNodeType) {
+    console.log('Found matching node type by name:', matchingNodeType);
+    return matchingNodeType;
+  }
+  
+  return null;
 }
 
 function getNodeStatus(nodeId: string): string {
