@@ -236,6 +236,15 @@ func (ctx *DefaultExecutionContext) GetExecutionID() string {
 	return ctx.executionID
 }
 
+// GetOutputs returns all outputs from this execution context
+func (ctx *DefaultExecutionContext) GetOutputs() map[string]types.Value {
+	outputsCopy := make(map[string]types.Value)
+	for k, v := range ctx.outputs {
+		outputsCopy[k] = v
+	}
+	return outputsCopy
+}
+
 // DefaultLogger is a simple logger implementation
 type DefaultLogger struct {
 	nodeID string

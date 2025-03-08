@@ -11,7 +11,7 @@ type BlueprintDB map[string]*blueprint.Blueprint
 var Blueprints = make(BlueprintDB)
 
 func (b BlueprintDB) AddBlueprint(bp *blueprint.Blueprint) {
-	b[bp.Name] = bp
+	b[bp.ID] = bp
 }
 
 func (b BlueprintDB) GetBlueprint(name string) (*blueprint.Blueprint, error) {

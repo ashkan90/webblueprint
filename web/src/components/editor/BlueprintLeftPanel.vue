@@ -559,10 +559,12 @@ function createSetVariableNode() {
 function onFunctionDragStart(event: DragEvent, func: Function) {
   if (!event.dataTransfer) return
 
+  console.log(func)
+
   // Create a node representation of this function
   const nodeData = {
     id: uuid(),
-    type: func.name,
+    type: func.id,
     position: { x: 0, y: 0 },
     properties: [
       { name: 'functionId', value: func.id },

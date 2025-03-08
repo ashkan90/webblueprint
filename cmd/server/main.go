@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"webblueprint/internal/api"
 	"webblueprint/internal/engine"
+	"webblueprint/internal/node"
 	"webblueprint/internal/nodes/data"
 	"webblueprint/internal/nodes/logic"
 	"webblueprint/internal/nodes/math"
 	"webblueprint/internal/nodes/utility"
 	"webblueprint/internal/nodes/web"
+	"webblueprint/internal/registry"
 )
 
 func main() {
@@ -48,39 +50,42 @@ func main() {
 	executionEventListener := api.NewExecutionEventListener(wsManager)
 	executionEngine.AddExecutionListener(executionEventListener)
 
+	// Get global node registry
+	globalRegistry := registry.GetInstance()
+
 	// Register node types
 	// Logic nodes
-	apiServer.RegisterNodeType("if-condition", logic.NewIfConditionNode)
-	apiServer.RegisterNodeType("loop", logic.NewLoopNode)
-	apiServer.RegisterNodeType("sequence", logic.NewSequenceNode)
-	apiServer.RegisterNodeType("branch", logic.NewBranchNode)
+	registerNodeType(apiServer, globalRegistry, "if-condition", logic.NewIfConditionNode)
+	registerNodeType(apiServer, globalRegistry, "loop", logic.NewLoopNode)
+	registerNodeType(apiServer, globalRegistry, "sequence", logic.NewSequenceNode)
+	registerNodeType(apiServer, globalRegistry, "branch", logic.NewBranchNode)
 
 	// Web nodes
-	apiServer.RegisterNodeType("http-request", web.NewHTTPRequestNode)
-	apiServer.RegisterNodeType("dom-element", web.NewDOMElementNode)
-	apiServer.RegisterNodeType("dom-event", web.NewDOMEventNode)
-	apiServer.RegisterNodeType("storage", web.NewStorageNode)
+	registerNodeType(apiServer, globalRegistry, "http-request", web.NewHTTPRequestNode)
+	registerNodeType(apiServer, globalRegistry, "dom-element", web.NewDOMElementNode)
+	registerNodeType(apiServer, globalRegistry, "dom-event", web.NewDOMEventNode)
+	registerNodeType(apiServer, globalRegistry, "storage", web.NewStorageNode)
 
 	// Data nodes
-	apiServer.RegisterNodeType("constant-string", data.NewStringConstantNode)
-	apiServer.RegisterNodeType("constant-number", data.NewNumberConstantNode)
-	apiServer.RegisterNodeType("constant-boolean", data.NewBooleanConstantNode)
-	apiServer.RegisterNodeType("variable-get", data.NewVariableGetNode)
-	apiServer.RegisterNodeType("variable-set", data.NewVariableSetNode)
-	apiServer.RegisterNodeType("json-processor", data.NewJSONNode)
-	apiServer.RegisterNodeType("array-operations", data.NewArrayNode)
-	apiServer.RegisterNodeType("object-operations", data.NewObjectNode)
-	apiServer.RegisterNodeType("type-conversion", data.NewTypeConversionNode)
+	registerNodeType(apiServer, globalRegistry, "constant-string", data.NewStringConstantNode)
+	registerNodeType(apiServer, globalRegistry, "constant-number", data.NewNumberConstantNode)
+	registerNodeType(apiServer, globalRegistry, "constant-boolean", data.NewBooleanConstantNode)
+	registerNodeType(apiServer, globalRegistry, "variable-get", data.NewVariableGetNode)
+	registerNodeType(apiServer, globalRegistry, "variable-set", data.NewVariableSetNode)
+	registerNodeType(apiServer, globalRegistry, "json-processor", data.NewJSONNode)
+	registerNodeType(apiServer, globalRegistry, "array-operations", data.NewArrayNode)
+	registerNodeType(apiServer, globalRegistry, "object-operations", data.NewObjectNode)
+	registerNodeType(apiServer, globalRegistry, "type-conversion", data.NewTypeConversionNode)
 
 	// Math nodes
-	apiServer.RegisterNodeType("math-add", math.NewAddNode)
-	apiServer.RegisterNodeType("math-subtract", math.NewSubtractNode)
-	apiServer.RegisterNodeType("math-multiply", math.NewMultiplyNode)
-	apiServer.RegisterNodeType("math-divide", math.NewDivideNode)
+	registerNodeType(apiServer, globalRegistry, "math-add", math.NewAddNode)
+	registerNodeType(apiServer, globalRegistry, "math-subtract", math.NewSubtractNode)
+	registerNodeType(apiServer, globalRegistry, "math-multiply", math.NewMultiplyNode)
+	registerNodeType(apiServer, globalRegistry, "math-divide", math.NewDivideNode)
 
 	// Utility nodes
-	apiServer.RegisterNodeType("print", utility.NewPrintNode)
-	apiServer.RegisterNodeType("timer", utility.NewTimerNode)
+	registerNodeType(apiServer, globalRegistry, "print", utility.NewPrintNode)
+	registerNodeType(apiServer, globalRegistry, "timer", utility.NewTimerNode)
 
 	// Set up routes
 	router := apiServer.SetupRoutes()
@@ -122,4 +127,9 @@ func main() {
 	addr := fmt.Sprintf(":%s", serverPort)
 	log.Printf("WebBlueprint server starting on http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, router))
+}
+
+// Helper function to register a node type with both the API server and global registry
+func registerNodeType(apiServer *api.APIServer, globalRegistry *registry.GlobalNodeRegistry, typeID string, factory func() node.Node) {
+	apiServer.RegisterNodeType(typeID, factory)
 }

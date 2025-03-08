@@ -4,59 +4,15 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"sync"
 	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
-	"webblueprint/internal/node"
 	"webblueprint/internal/nodes/utility"
+	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
 
 	"github.com/gorilla/mux"
 )
-
-// APIServer handles HTTP API requests
-type APIServer struct {
-	executionEngine *engine.ExecutionEngine
-	nodeRegistry    map[string]node.NodeFactory
-	wsManager       *WebSocketManager
-	debugManager    *engine.DebugManager
-	rw              *sync.RWMutex
-}
-
-// NewAPIServer creates a new API server
-func NewAPIServer(executionEngine *engine.ExecutionEngine, wsManager *WebSocketManager, debugManager *engine.DebugManager) *APIServer {
-	return &APIServer{
-		executionEngine: executionEngine,
-		nodeRegistry:    make(map[string]node.NodeFactory),
-		wsManager:       wsManager,
-		debugManager:    debugManager,
-		rw:              &sync.RWMutex{},
-	}
-}
-
-// RegisterNodeType registers a node type with both the execution engine and API server
-func (s *APIServer) RegisterNodeType(typeID string, factory node.NodeFactory) {
-	s.nodeRegistry[typeID] = factory
-	s.executionEngine.RegisterNodeType(typeID, factory)
-
-	// Create a node instance to get metadata
-	nodeInstance := factory()
-	metadata := nodeInstance.GetMetadata()
-
-	// Broadcast node type to connected clients
-	s.wsManager.BroadcastMessage(MsgTypeNodeIntro, map[string]interface{}{
-		"typeId":      metadata.TypeID,
-		"name":        metadata.Name,
-		"description": metadata.Description,
-		"category":    metadata.Category,
-		"version":     metadata.Version,
-		"inputs":      convertPinsToInfo(nodeInstance.GetInputPins()),
-		"outputs":     convertPinsToInfo(nodeInstance.GetOutputPins()),
-	})
-}
-
-func (s *APIServer) RegisterBrowserContentType(typeID string, factory node.NodeFactory) {}
 
 // convertPinsToInfo converts pins to a format suitable for the client
 func convertPinsToInfo(pins []types.Pin) []map[string]interface{} {
@@ -222,9 +178,66 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	//for _, function := range bp.Functions {
-	//	s.RegisterNodeType(function.ID, utility.NewUserFunctionNode(function))
-	//}
+	// Process functions in the blueprint
+	for i, function := range bp.Functions {
+		log.Printf("Registering user function: %s", function.Name)
+
+		// Ensure functions have execution pins in their NodeType
+		hasExecutionInput := false
+		hasExecutionOutput := false
+
+		for _, input := range function.NodeType.Inputs {
+			if input.Type != nil && input.Type.ID == "execution" {
+				hasExecutionInput = true
+				break
+			}
+		}
+
+		for _, output := range function.NodeType.Outputs {
+			if output.Type != nil && output.Type.ID == "execution" {
+				hasExecutionOutput = true
+				break
+			}
+		}
+
+		// Add default execution input if needed
+		if !hasExecutionInput {
+			bp.Functions[i].NodeType.Inputs = append(bp.Functions[i].NodeType.Inputs,
+				blueprint.NodePin{
+					ID:          "execute",
+					Name:        "Execute",
+					Description: "Execution input",
+					Type: &blueprint.NodePinType{
+						ID:          "execution",
+						Name:        "Execution",
+						Description: "Execution flow",
+					},
+					Optional: false,
+				})
+		}
+
+		// Add default execution output if needed
+		if !hasExecutionOutput {
+			bp.Functions[i].NodeType.Outputs = append(bp.Functions[i].NodeType.Outputs,
+				blueprint.NodePin{
+					ID:          "then",
+					Name:        "Then",
+					Description: "Execution output",
+					Type: &blueprint.NodePinType{
+						ID:          "execution",
+						Name:        "Execution",
+						Description: "Execution flow",
+					},
+					Optional: false,
+				})
+		}
+
+		// Register the function as a node type
+		nodeFactory := utility.NewUserFunctionNode(bp.Functions[i])
+
+		// Register with API server (which will also register with the global registry)
+		s.RegisterNodeType(function.Name, nodeFactory)
+	}
 
 	// Store blueprint
 	s.rw.Lock()
@@ -268,8 +281,65 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	for _, function := range bp.Functions {
-		s.RegisterNodeType(function.Name, utility.NewUserFunctionNode(function))
+	// Process functions in the blueprint
+	for i, function := range bp.Functions {
+		log.Printf("Registering user function: %s", function.Name)
+
+		// Ensure functions have execution pins in their NodeType
+		hasExecutionInput := false
+		hasExecutionOutput := false
+
+		for _, input := range function.NodeType.Inputs {
+			if input.Type != nil && input.Type.ID == "execution" {
+				hasExecutionInput = true
+				break
+			}
+		}
+
+		for _, output := range function.NodeType.Outputs {
+			if output.Type != nil && output.Type.ID == "execution" {
+				hasExecutionOutput = true
+				break
+			}
+		}
+
+		// Add default execution input if needed
+		if !hasExecutionInput {
+			bp.Functions[i].NodeType.Inputs = append(bp.Functions[i].NodeType.Inputs,
+				blueprint.NodePin{
+					ID:          "execute",
+					Name:        "Execute",
+					Description: "Execution input",
+					Type: &blueprint.NodePinType{
+						ID:          "execution",
+						Name:        "Execution",
+						Description: "Execution flow",
+					},
+					Optional: false,
+				})
+		}
+
+		// Add default execution output if needed
+		if !hasExecutionOutput {
+			bp.Functions[i].NodeType.Outputs = append(bp.Functions[i].NodeType.Outputs,
+				blueprint.NodePin{
+					ID:          "then",
+					Name:        "Then",
+					Description: "Execution output",
+					Type: &blueprint.NodePinType{
+						ID:          "execution",
+						Name:        "Execution",
+						Description: "Execution flow",
+					},
+					Optional: false,
+				})
+		}
+
+		// Register the function as a node type
+		nodeFactory := utility.NewUserFunctionNode(bp.Functions[i])
+
+		// Register with API server (which will also register with the global registry)
+		s.RegisterNodeType(function.Name, nodeFactory)
 	}
 
 	// Update blueprint
@@ -281,6 +351,7 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 	err := s.executionEngine.LoadBlueprint(&bp)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	respondWithJSON(w, http.StatusOK, bp)
@@ -311,9 +382,12 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	s.rw.Lock()
-	defer s.rw.Unlock()
-	if _, exists := db.Blueprints[id]; !exists {
+	// Get the blueprint
+	s.rw.RLock()
+	bp, exists := db.Blueprints[id]
+	s.rw.RUnlock()
+
+	if !exists {
 		respondWithError(w, http.StatusNotFound, "Blueprint not found")
 		return
 	}
@@ -349,6 +423,71 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 		}
 
 		initialVars[k] = types.NewValue(pinType, v)
+	}
+
+	// Ensure all functions in the blueprint are registered
+	for i, function := range bp.Functions {
+		// Check if the function is already registered
+		globalRegistry := registry.GetInstance()
+		if _, exists := globalRegistry.GetNodeFactory(function.Name); !exists {
+			log.Printf("Registering missing user function: %s", function.Name)
+
+			// Ensure functions have execution pins in their NodeType
+			hasExecutionInput := false
+			hasExecutionOutput := false
+
+			for _, input := range function.NodeType.Inputs {
+				if input.Type != nil && input.Type.ID == "execution" {
+					hasExecutionInput = true
+					break
+				}
+			}
+
+			for _, output := range function.NodeType.Outputs {
+				if output.Type != nil && output.Type.ID == "execution" {
+					hasExecutionOutput = true
+					break
+				}
+			}
+
+			// Add default execution input if needed
+			if !hasExecutionInput {
+				bp.Functions[i].NodeType.Inputs = append(bp.Functions[i].NodeType.Inputs,
+					blueprint.NodePin{
+						ID:          "execute",
+						Name:        "Execute",
+						Description: "Execution input",
+						Type: &blueprint.NodePinType{
+							ID:          "execution",
+							Name:        "Execution",
+							Description: "Execution flow",
+						},
+						Optional: false,
+					})
+			}
+
+			// Add default execution output if needed
+			if !hasExecutionOutput {
+				bp.Functions[i].NodeType.Outputs = append(bp.Functions[i].NodeType.Outputs,
+					blueprint.NodePin{
+						ID:          "then",
+						Name:        "Then",
+						Description: "Execution output",
+						Type: &blueprint.NodePinType{
+							ID:          "execution",
+							Name:        "Execution",
+							Description: "Execution flow",
+						},
+						Optional: false,
+					})
+			}
+
+			// Register the function as a node type
+			nodeFactory := utility.NewUserFunctionNode(bp.Functions[i])
+
+			// Register with API server
+			s.RegisterNodeType(function.Name, nodeFactory)
+		}
 	}
 
 	// Execute the blueprint
