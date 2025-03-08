@@ -298,6 +298,8 @@ import { useBlueprintStore } from '../../stores/blueprint'
 import type {Variable, Function, Node} from '../../types/blueprint'
 import {useNodeRegistryStore} from "../../stores/nodeRegistry";
 import {NodeTypeDefinition} from "../../types/nodes";
+import router from "../../router";
+import {useRoute} from "vue-router";
 
 const emit = defineEmits<{
   (e: 'add-node', data: any): void
@@ -305,6 +307,7 @@ const emit = defineEmits<{
   (e: 'function-double-clicked', functionId: string): void
 }>()
 
+const route = useRoute()
 // Blueprint store
 const blueprintStore = useBlueprintStore()
 // Node Type store
@@ -523,7 +526,7 @@ function createGetVariableNode() {
   // Create a Get Variable node with the correct position
   const node = {
     id: uuid(),
-    type: 'variable-get',
+    type: `get-variable-${draggedVariable.value.name}`,
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
@@ -554,7 +557,7 @@ function createSetVariableNode() {
   // Create a Set Variable node with the correct position
   const node = {
     id: uuid(),
-    type: 'variable-set',
+    type: `set-variable-${draggedVariable.value.name}`,
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
@@ -650,7 +653,7 @@ function openFunctionEditor(func: Function) {
 }
 
 // Creation methods
-function createVariable() {
+async function createVariable() {
   const newVar: Variable = {
     id: uuid(),
     name: newVariable.value.name,
@@ -658,7 +661,11 @@ function createVariable() {
     value: getDefaultValueForType(newVariable.value.type)
   }
 
-  blueprintStore.addVariable(newVar)
+  await blueprintStore.addVariable(newVar)
+  if (route.params.id !== blueprintStore.blueprint.id) {
+    await router.push(`/editor/${blueprintStore.blueprint.id}`)
+  }
+
   showCreateVariableModal.value = false
 
   // Reset form

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
+	"webblueprint/internal/nodes/data"
 	"webblueprint/internal/nodes/utility"
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
@@ -58,6 +59,7 @@ func (s *APIServer) SetupRoutes() *mux.Router {
 	api.HandleFunc("/blueprints/{id}", s.handleGetBlueprint).Methods("GET")
 	api.HandleFunc("/blueprints/{id}", s.handleUpdateBlueprint).Methods("PUT")
 	api.HandleFunc("/blueprints/{id}", s.handleDeleteBlueprint).Methods("DELETE")
+	api.HandleFunc("/blueprints/{id}/variable", s.handleCreateVariable).Methods("POST")
 	api.HandleFunc("/blueprints/{id}/execute", s.handleExecuteBlueprint).Methods("POST")
 
 	// Debug data
@@ -239,6 +241,19 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 		s.RegisterNodeType(function.Name, nodeFactory)
 	}
 
+	// Process variables in the blueprint
+	for _, variable := range bp.Variables {
+		log.Printf("Registering variable nodes for: %s", variable.Name)
+
+		// Create node factories for this variable
+		getterFactory := data.NewVariableGetNodeFor(variable.Name, variable.Type)
+		setterFactory := data.NewVariableSetNodeFor(variable.Name, variable.Type)
+
+		// Register with API server (which will also register with the global registry)
+		s.RegisterNodeType("get-variable-"+variable.Name, getterFactory)
+		s.RegisterNodeType("set-variable-"+variable.Name, setterFactory)
+	}
+
 	// Store blueprint
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -342,6 +357,19 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 		s.RegisterNodeType(function.Name, nodeFactory)
 	}
 
+	// Process variables in the blueprint
+	for _, variable := range bp.Variables {
+		log.Printf("Registering variable nodes for: %s", variable.Name)
+
+		// Create node factories for this variable
+		getterFactory := data.NewVariableGetNodeFor(variable.Name, variable.Type)
+		setterFactory := data.NewVariableSetNodeFor(variable.Name, variable.Type)
+
+		// Register with API server (which will also register with the global registry)
+		s.RegisterNodeType("get-variable-"+variable.Name, getterFactory)
+		s.RegisterNodeType("set-variable-"+variable.Name, setterFactory)
+	}
+
 	// Update blueprint
 	s.rw.Lock()
 	defer s.rw.Unlock()
@@ -371,6 +399,52 @@ func (s *APIServer) handleDeleteBlueprint(w http.ResponseWriter, r *http.Request
 	delete(db.Blueprints, id)
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type CreateBlueprintVariableReqeust struct {
+	Name  string      `json:"name"`
+	Type  string      `json:"type"`
+	Value interface{} `json:"value"`
+}
+
+func (s *APIServer) handleCreateVariable(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	s.rw.RLock()
+	bp, exists := db.Blueprints[id]
+	s.rw.RUnlock()
+	if !exists {
+		respondWithError(w, http.StatusNotFound, "Blueprint not found")
+		return
+	}
+
+	var req CreateBlueprintVariableReqeust
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload "+err.Error())
+		return
+	}
+
+	s.rw.Lock()
+	defer s.rw.Unlock()
+	variable := blueprint.Variable{
+		Name:  req.Name,
+		Type:  req.Type,
+		Value: req.Value,
+	}
+	bp.Variables = append(bp.Variables, variable)
+
+	log.Printf("Registering variable nodes for: %s", req.Name)
+
+	// Create node factories for this variable
+	getterFactory := data.NewVariableGetNodeFor(req.Name, req.Type)
+	setterFactory := data.NewVariableSetNodeFor(req.Name, req.Type)
+
+	// Register with API server (which will also register with the global registry)
+	s.RegisterNodeType("get-variable-"+req.Name, getterFactory)
+	s.RegisterNodeType("set-variable-"+req.Name, setterFactory)
+
+	respondWithJSON(w, http.StatusCreated, variable)
 }
 
 // Blueprint execution
@@ -487,6 +561,26 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 
 			// Register with API server
 			s.RegisterNodeType(function.Name, nodeFactory)
+		}
+	}
+
+	// Ensure all variables in the blueprint are registered
+	for _, variable := range bp.Variables {
+		// Check if variable nodes are already registered
+		globalRegistry := registry.GetInstance()
+		getterName := "get-variable-" + variable.Name
+		setterName := "set-variable-" + variable.Name
+
+		if _, getExists := globalRegistry.GetNodeFactory(getterName); !getExists {
+			log.Printf("Registering missing variable getter: %s", getterName)
+			getterFactory := data.NewVariableGetNodeFor(variable.Name, variable.Type)
+			s.RegisterNodeType(getterName, getterFactory)
+		}
+
+		if _, setExists := globalRegistry.GetNodeFactory(setterName); !setExists {
+			log.Printf("Registering missing variable setter: %s", setterName)
+			setterFactory := data.NewVariableSetNodeFor(variable.Name, variable.Type)
+			s.RegisterNodeType(setterName, setterFactory)
 		}
 	}
 

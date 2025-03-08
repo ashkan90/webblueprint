@@ -286,16 +286,35 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         )
     }
 
-    function addVariable(variable: Variable) {
-        // Ensure variables array exists
-        if (!blueprint.value.variables) {
-            console.log('Creating variables array before adding variable');
-            blueprint.value.variables = [];
+    async function addVariable(variable: Variable) {
+        // [sink] try to save blueprint before saving variable
+        await saveBlueprint()
+
+        try {
+            const url = `/api/blueprints/${blueprint.value.id}/variable`
+            const variableResponse = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(variable),
+            })
+
+            if (!variableResponse.ok) {
+                throw new Error('Failed to add variable into blueprint')
+            }
+            // Ensure variables array exists
+            if (!blueprint.value.variables) {
+                console.log('Creating variables array before adding variable');
+                blueprint.value.variables = [];
+            }
+
+            // Add the variable
+            console.log('Adding variable to blueprint:', variable);
+            blueprint.value.variables.push(await variableResponse.json());
+        } catch (e) {
+            console.log('Something went wrong while adding variable to blueprint', e)
         }
-        
-        // Add the variable
-        console.log('Adding variable to blueprint:', variable);
-        blueprint.value.variables.push(variable);
     }
 
     function addFunction(fn: Function) {

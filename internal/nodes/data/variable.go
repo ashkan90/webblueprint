@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"strings"
 	"time"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
@@ -23,23 +24,72 @@ func NewVariableGetNode() node.Node {
 				Category:    "Data",
 				Version:     "1.0.0",
 			},
-			Inputs: []types.Pin{
-				{
-					ID:          "name",
-					Name:        "Variable Name",
-					Description: "Name of the variable to get",
-					Type:        types.PinTypes.String,
-				},
-			},
+			Inputs:  []types.Pin{},
 			Outputs: []types.Pin{
-				{
-					ID:          "value",
-					Name:        "Value",
-					Description: "Variable value",
-					Type:        types.PinTypes.Any,
-				},
+				//{
+				//	ID:          "value",
+				//	Name:        "Value",
+				//	Description: "Variable value",
+				//	Type:        types.PinTypes.Any,
+				//},
 			},
 		},
+	}
+}
+
+// NewVariableGetNodeFor creates a specialized VariableGetNode for a specific variable
+func NewVariableGetNodeFor(varName, varType string) func() node.Node {
+	return func() node.Node {
+		// Create a new node based on the generic VariableGetNode
+		node := NewVariableGetNode().(*VariableGetNode)
+
+		// Customize metadata for this variable
+		node.Metadata.TypeID = "get-variable-" + varName
+		node.Metadata.Name = "Get " + varName
+		node.Metadata.Description = "Gets the value of variable '" + varName + "'"
+
+		// Set default input for "name" to this variable's name
+		//for i, pin := range node.Inputs {
+		//	if pin.ID == "name" {
+		//		// Create a copy of the pin
+		//		updatedPin := pin
+		//		updatedPin.Default = varName
+		//		node.Inputs[i] = updatedPin
+		//	}
+		//}
+
+		// Determine output type based on variable type
+		pinType := types.PinTypes.Any
+		switch varType {
+		case "string":
+			pinType = types.PinTypes.String
+		case "number":
+			pinType = types.PinTypes.Number
+		case "boolean":
+			pinType = types.PinTypes.Boolean
+		case "object":
+			pinType = types.PinTypes.Object
+		case "array":
+			pinType = types.PinTypes.Array
+		}
+		node.Outputs = append(node.Outputs, types.Pin{
+			ID:          strings.ToLower(varName),
+			Name:        varName,
+			Description: fmt.Sprintf("Gets the value of variable '%s'", varName),
+			Type:        pinType,
+		})
+
+		// Update output pin type
+		//for i, pin := range node.Outputs {
+		//	if pin.ID == "value" {
+		//		// Create a copy of the pin
+		//		updatedPin := pin
+		//		updatedPin.Type = pinType
+		//		node.Outputs[i] = updatedPin
+		//	}
+		//}
+
+		return node
 	}
 }
 
@@ -149,20 +199,20 @@ func NewVariableSetNode() node.Node {
 				Version:     "1.0.0",
 			},
 			Inputs: []types.Pin{
-				{
-					ID:          "name",
-					Name:        "Variable Name",
-					Description: "Name of the variable to set",
-					Type:        types.PinTypes.String,
-					Optional:    true,
-				},
-				{
-					ID:          "value",
-					Name:        "Value",
-					Description: "Value to set",
-					Type:        types.PinTypes.Any,
-					Optional:    true,
-				},
+				//{
+				//	ID:          "name",
+				//	Name:        "Variable Name",
+				//	Description: "Name of the variable to set",
+				//	Type:        types.PinTypes.String,
+				//	Optional:    true,
+				//},
+				//{
+				//	ID:          "value",
+				//	Name:        "Value",
+				//	Description: "Value to set",
+				//	Type:        types.PinTypes.Any,
+				//	Optional:    true,
+				//},
 			},
 			Outputs: []types.Pin{
 				{
@@ -176,6 +226,45 @@ func NewVariableSetNode() node.Node {
 	}
 }
 
+// NewVariableSetNodeFor creates a specialized VariableSetNode for a specific variable
+func NewVariableSetNodeFor(varName, varType string) func() node.Node {
+	return func() node.Node {
+		// Create a new node based on the generic VariableSetNode
+		node := NewVariableSetNode().(*VariableSetNode)
+
+		// Customize metadata for this variable
+		node.Metadata.TypeID = "set-variable-" + varName
+		node.Metadata.Name = "Set " + varName
+		node.Metadata.Description = "Sets the value of variable '" + varName + "'"
+
+		// Determine input type based on variable type
+		pinType := types.PinTypes.Any
+		switch varType {
+		case "string":
+			pinType = types.PinTypes.String
+		case "number":
+			pinType = types.PinTypes.Number
+		case "boolean":
+			pinType = types.PinTypes.Boolean
+		case "object":
+			pinType = types.PinTypes.Object
+		case "array":
+			pinType = types.PinTypes.Array
+		}
+
+		// Update input value pin type
+		node.Inputs = append(node.Inputs, types.Pin{
+			ID:          strings.ToLower(varName),
+			Name:        varName,
+			Description: fmt.Sprintf("Sets the value of variable '%s'", varName),
+			Type:        pinType,
+			Optional:    true,
+		})
+
+		return node
+	}
+}
+
 // Execute runs the node logic
 func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	logger := ctx.Logger()
@@ -186,16 +275,14 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 
 	// Get the variable name
 	nameValue, nameExists := ctx.GetInputValue("name")
+
 	// Get the variable value (now optional)
 	value, valueExists := ctx.GetInputValue("value")
-	// Get default value (if provided)
-	//defaultValue, defaultValueExists := ctx.GetInputValue("defaultValue")
 
 	// Record input values for debugging
 	debugData["inputs"] = map[string]interface{}{
 		"nameExists":  nameExists,
 		"valueExists": valueExists,
-		//"defaultValueExists": defaultValueExists,
 	}
 
 	if !nameExists {
@@ -217,21 +304,6 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 		ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Boolean, false))
 		return err
 	}
-
-	// Use default value if no value is connected
-	//if !valueExists {
-	//	if defaultValueExists {
-	//		value = defaultValue
-	//		valueExists = true
-	//		debugData["usingDefault"] = true
-	//	} else {
-	//		logger.Warn("No value or default value provided, using null", nil)
-	//		// Create a null value of type Any
-	//		value = types.NewValue(types.PinTypes.Any, nil)
-	//		valueExists = true
-	//		debugData["usingNull"] = true
-	//	}
-	//}
 
 	// Convert name to string
 	varName, err := nameValue.AsString()
@@ -255,14 +327,24 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	}
 
 	// Update debug data with actual values
-	debugData["inputs"] = map[string]interface{}{
-		"name":  varName,
-		"value": value.RawValue,
-		"type":  value.Type.Name,
-	}
+	if valueExists {
+		debugData["inputs"] = map[string]interface{}{
+			"name":  varName,
+			"value": value.RawValue,
+			"type":  value.Type.Name,
+		}
 
-	// Set the variable
-	ctx.SetVariable(varName, value)
+		// Set the variable
+		ctx.SetVariable(varName, value)
+	} else {
+		debugData["inputs"] = map[string]interface{}{
+			"name":  varName,
+			"value": nil,
+		}
+
+		// Set the variable to nil
+		ctx.SetVariable(varName, types.NewValue(types.PinTypes.Any, nil))
+	}
 
 	// Set result output to true
 	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Boolean, true))
@@ -276,9 +358,8 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	})
 
 	logger.Info("Set variable value", map[string]interface{}{
-		"name":  varName,
-		"type":  value.Type.Name,
-		"value": value.RawValue,
+		"name":        varName,
+		"valueExists": valueExists,
 	})
 
 	// No need to continue execution since we removed the execution pins

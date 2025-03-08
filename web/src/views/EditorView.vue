@@ -425,7 +425,7 @@ async function saveBlueprint() {
 
     // Update the route if this is a new blueprint
     if (route.params.id !== blueprintStore.blueprint.id) {
-      router.push(`/editor/${blueprintStore.blueprint.id}`)
+      await router.push(`/editor/${blueprintStore.blueprint.id}`)
     }
   } catch (error) {
     console.error('Failed to save blueprint:', error)
