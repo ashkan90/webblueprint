@@ -111,27 +111,12 @@ Let me create a comprehensive roadmap for developing this system in stages:
 
 2. Nodes used in functions/macros are came from Backend declared nodes
 
-### Real-Time Execution Visualization
-1. Node status highlighting:
-    - Executing (yellow glow)
-    - Completed (green flash)
-    - Error (red glow)
-
-2. Connection visualization:
-    - Highlight active connections
-    - Animate data flow
-
 ### Debug Panel
 1. Create interactive debug panel:
     - Overview tab with execution status
     - Node data tab with inputs/outputs
     - Data flow visualization
     - Execution timeline
-
-2. Implement JSON tree viewer:
-    - Collapsible/expandable object view
-    - Type highlighting
-    - Value inspection
 
 ### Execution Control
 1. Add execution control capabilities:
