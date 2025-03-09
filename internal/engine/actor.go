@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"webblueprint/internal/db"
@@ -497,9 +498,37 @@ func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool
 		return value, true
 	}
 
+	// If the value doesn't exist in direct inputs, try to find it from connected variable nodes
+	// Get the blueprint
+	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
+	if err == nil {
+		// Get input connections for this node
+		inputConnections := bp.GetNodeInputConnections(ctx.GetNodeID())
+
+		// Look for connections to this pin from variable nodes
+		for _, conn := range inputConnections {
+			if conn.TargetPinID == pinID && conn.ConnectionType == "data" {
+				// Check if the source node is a variable getter
+				sourceNode := bp.FindNode(conn.SourceNodeID)
+				if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+					// Extract variable name from the node type
+					varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+
+					// Try to get the variable value from the execution context
+					if varValue, varExists := ctx.GetVariable(varName); varExists {
+						// Log the access
+						//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+						//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, varValue.RawValue)
+						//}
+						return varValue, true
+					}
+				}
+			}
+		}
+	}
+
 	// If the value doesn't exist, try to find a default value
 	// First check the node properties for input_[pinID]
-	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
 	if err != nil {
 		return types.Value{}, false
 	}

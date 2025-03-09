@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"webblueprint/internal/db"
@@ -57,9 +58,8 @@ func NewExecutionContext(
 
 // GetInputValue retrieves an input value by pin ID
 func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
+	// First check if we have the value in our inputs
 	value, exists := ctx.inputs[pinID]
-
-	// If the value exists, return it
 	if exists {
 		// Log the input access
 		if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
@@ -68,9 +68,37 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 		return value, true
 	}
 
+	// If the value doesn't exist in direct inputs, try to find it from connected variable nodes
+	// Get the blueprint
+	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
+	if err == nil {
+		// Get input connections for this node
+		inputConnections := bp.GetNodeInputConnections(ctx.GetNodeID())
+
+		// Look for connections to this pin from variable nodes
+		for _, conn := range inputConnections {
+			if conn.TargetPinID == pinID && conn.ConnectionType == "data" {
+				// Check if the source node is a variable getter
+				sourceNode := bp.FindNode(conn.SourceNodeID)
+				if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+					// Extract variable name from the node type
+					varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+
+					// Try to get the variable value from the execution context
+					if varValue, varExists := ctx.GetVariable(varName); varExists {
+						// Log the access
+						if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+							ctx.hooks.OnPinValue(ctx.nodeID, pinID, varValue.RawValue)
+						}
+						return varValue, true
+					}
+				}
+			}
+		}
+	}
+
 	// If the value doesn't exist, try to find a default value
 	// First check the node properties for input_[pinID]
-	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
 	if err != nil {
 		return types.Value{}, false
 	}
@@ -197,6 +225,21 @@ func (ctx *DefaultExecutionContext) GetVariable(name string) (types.Value, bool)
 // SetVariable sets a variable by name
 func (ctx *DefaultExecutionContext) SetVariable(name string, value types.Value) {
 	ctx.variables[name] = value
+
+	// Also find and update any get-variable nodes that are reading this variable
+	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
+	if err == nil {
+		// Find all variable getter nodes for this variable
+		for _, node := range bp.Nodes {
+			if node.Type == fmt.Sprintf("get-variable-%s", name) {
+				// Store the output value in the debug manager so other nodes can access it
+				if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
+					// Use the variable name as the output pin ID
+					ctx.hooks.OnPinValue(node.ID, strings.ToLower(name), value.RawValue)
+				}
+			}
+		}
+	}
 }
 
 // Logger returns the execution logger

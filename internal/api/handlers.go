@@ -243,15 +243,16 @@ func (s *APIServer) handleCreateBlueprint(w http.ResponseWriter, r *http.Request
 
 	// Process variables in the blueprint
 	for _, variable := range bp.Variables {
-		log.Printf("Registering variable nodes for: %s", variable.Name)
-
 		// Create node factories for this variable
 		getterFactory := data.NewVariableGetNodeFor(variable.Name, variable.Type)
 		setterFactory := data.NewVariableSetNodeFor(variable.Name, variable.Type)
 
 		// Register with API server (which will also register with the global registry)
-		s.RegisterNodeType("get-variable-"+variable.Name, getterFactory)
-		s.RegisterNodeType("set-variable-"+variable.Name, setterFactory)
+		getterTypeID := "get-variable-" + variable.Name
+		setterTypeID := "set-variable-" + variable.Name
+
+		s.RegisterNodeType(getterTypeID, getterFactory)
+		s.RegisterNodeType(setterTypeID, setterFactory)
 	}
 
 	// Store blueprint
@@ -359,15 +360,16 @@ func (s *APIServer) handleUpdateBlueprint(w http.ResponseWriter, r *http.Request
 
 	// Process variables in the blueprint
 	for _, variable := range bp.Variables {
-		log.Printf("Registering variable nodes for: %s", variable.Name)
-
 		// Create node factories for this variable
 		getterFactory := data.NewVariableGetNodeFor(variable.Name, variable.Type)
 		setterFactory := data.NewVariableSetNodeFor(variable.Name, variable.Type)
 
 		// Register with API server (which will also register with the global registry)
-		s.RegisterNodeType("get-variable-"+variable.Name, getterFactory)
-		s.RegisterNodeType("set-variable-"+variable.Name, setterFactory)
+		getterTypeID := "get-variable-" + variable.Name
+		setterTypeID := "set-variable-" + variable.Name
+
+		s.RegisterNodeType(getterTypeID, getterFactory)
+		s.RegisterNodeType(setterTypeID, setterFactory)
 	}
 
 	// Update blueprint
