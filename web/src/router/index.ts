@@ -10,6 +10,11 @@ const router = createRouter({
             component: HomeView
         },
         {
+            path: '/content',
+            name: 'content',
+            component: () => import('../views/ContentBrowserView.vue')
+        },
+        {
             path: '/editor/:id?',
             name: 'editor',
             component: () => import('../views/EditorView.vue')

@@ -73,6 +73,12 @@
         :execution-id="currentExecutionId"
         :selected-node-id="selectedNodeId"
     />
+    
+    <div class="content-browser-container">
+      <ContentBrowserPanel
+          @asset-opened="handleAssetOpened"
+      />
+    </div>
 
     <!-- Execution result modal -->
     <div v-if="showResultModal" class="modal-backdrop">
@@ -120,10 +126,12 @@ import { useNodeRegistryStore } from '../stores/nodeRegistry'
 import { useExecutionStore } from '../stores/execution'
 import type { Node, Connection } from '../types/blueprint'
 import type { NodeTypeDefinition } from '../types/nodes'
+import { Asset, AssetType } from '../types/mockPersistent'
 import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
 import NodeProperties from '../components/editor/NodeProperties.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
 import BlueprintLeftPanel from "../components/editor/BlueprintLeftPanel.vue"
+import ContentBrowserPanel from "../components/ContentBrowserPanel.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -472,6 +480,18 @@ function openDebugPanelWithResult() {
   closeResultModal()
 }
 
+function handleAssetOpened(asset: Asset) {
+  if (asset.type === AssetType.BLUEPRINT) {
+    // If we're already editing a function, go back to main editor
+    if (currentEditingFunction.value) {
+      backToMainEditor();
+    }
+    
+    // Navigate to the editor with the selected blueprint ID
+    router.push(`/editor/${asset.id}`);
+  }
+}
+
 // Load blueprint on mount
 onMounted(async () => {
   // Load node types
@@ -501,6 +521,13 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 50px); /* Subtract header height */
+  overflow: hidden;
+}
+
+/* The editor container is flexible and will adjust based on content browser height */
+.editor-container {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -571,6 +598,16 @@ onMounted(async () => {
 
 .editor-container.with-debug {
   height: 70%;
+}
+
+.content-browser-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 100;
 }
 
 .node-palette {

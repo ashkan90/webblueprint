@@ -5,7 +5,8 @@
       <p class="subtitle">Visual Programming for the Web</p>
 
       <div class="actions">
-        <router-link to="/editor" class="btn primary">Create New Blueprint</router-link>
+        <router-link to="/content" class="btn primary">Open Content Browser</router-link>
+        <router-link to="/editor" class="btn">Create New Blueprint</router-link>
         <button class="btn" @click="openLoadModal">Load Blueprint</button>
       </div>
     </div>
