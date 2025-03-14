@@ -1,259 +1,328 @@
 <template>
   <div class="debug-view">
-    <div class="debug-header">
-      <h1>Execution Debug</h1>
-
-      <div v-if="executionId" class="execution-info">
-        <div class="info-row">
-          <div class="info-label">Execution ID:</div>
-          <div class="info-value">{{ executionId }}</div>
-        </div>
-
-        <div class="info-row">
-          <div class="info-label">Status:</div>
-          <div :class="['info-value', statusClass]">{{ executionStatus }}</div>
-        </div>
-
-        <div class="info-row" v-if="startTime">
-          <div class="info-label">Started:</div>
-          <div class="info-value">{{ formatDateTime(startTime) }}</div>
-        </div>
-
-        <div class="info-row" v-if="endTime">
-          <div class="info-label">Ended:</div>
-          <div class="info-value">{{ formatDateTime(endTime) }}</div>
-        </div>
-
-        <div class="info-row" v-if="duration !== null">
-          <div class="info-label">Duration:</div>
-          <div class="info-value">{{ formatDuration(duration) }}</div>
-        </div>
-
-        <div v-if="errorMessage" class="error-message">
-          <div class="info-label">Error:</div>
-          <div class="info-value error">{{ errorMessage }}</div>
-        </div>
-
-        <div class="actions">
-          <button class="btn" @click="goToEditor">
-            <span class="icon">✏️</span> Edit Blueprint
-          </button>
-          <button class="btn" @click="rerunExecution">
-            <span class="icon">🔄</span> Re-run
-          </button>
-        </div>
+    <div class="toolbar">
+      <h1>WebBlueprint Debugging</h1>
+      <div class="view-tabs">
+        <button 
+          @click="activeTab = 'logs'" 
+          :class="{ active: activeTab === 'logs' }"
+        >
+          Logs
+        </button>
+        <button 
+          @click="activeTab = 'errors'" 
+          :class="{ active: activeTab === 'errors' }"
+        >
+          Errors
+          <span v-if="errorCount > 0" class="badge">{{ errorCount }}</span>
+        </button>
+        <button 
+          @click="activeTab = 'execution'" 
+          :class="{ active: activeTab === 'execution' }"
+        >
+          Execution
+        </button>
+        <button 
+          @click="activeTab = 'testing'" 
+          :class="{ active: activeTab === 'testing' }"
+        >
+          Testing
+        </button>
       </div>
-
-      <div v-else class="no-execution">
-        <p>No execution found. Please specify an execution ID.</p>
-        <button class="btn" @click="goToHome">Go to Home</button>
+      <div class="actions">
+        <button @click="clearAll" class="clear-button">
+          <span class="icon">🗑️</span> Clear All
+        </button>
       </div>
     </div>
-
-    <DebugPanel
-        v-if="executionId"
-        :execution-id="executionId"
-        :selected-node-id="selectedNodeId"
-        @select-node="handleSelectNode"
-    />
+    
+    <div class="debug-content">
+      <LogPanel 
+        v-show="activeTab === 'logs'" 
+        :executionId="selectedExecutionId"
+      />
+      
+      <ErrorPanel 
+        v-show="activeTab === 'errors'" 
+        :executionId="selectedExecutionId"
+        @highlight-node="highlightNode"
+        @recover-error="recoverFromError"
+      />
+      
+<!--      <ExecutionPanel -->
+<!--        v-show="activeTab === 'execution'" -->
+<!--        :executionId="selectedExecutionId"-->
+<!--      />-->
+      
+      <div v-show="activeTab === 'testing'" class="testing-panel">
+        <ErrorTestingPanel />
+      </div>
+    </div>
+    
+    <div class="status-bar">
+      <div class="status-item">
+        <span class="label">Execution:</span>
+        <select v-model="selectedExecutionId">
+          <option v-for="id in executionIds" :key="id" :value="id">
+            {{ id }}
+          </option>
+        </select>
+      </div>
+      
+      <div class="status-item">
+        <span class="label">Status:</span>
+        <span 
+          class="status-badge" 
+          :class="executionStatus"
+        >
+          {{ executionStatus }}
+        </span>
+      </div>
+      
+      <div class="status-item">
+        <span class="label">Errors:</span>
+        <span 
+          class="status-badge" 
+          :class="errorCount > 0 ? 'error' : 'success'"
+        >
+          {{ errorCount }}
+        </span>
+      </div>
+      
+      <div class="status-item">
+        <span class="label">Logs:</span>
+        <span class="status-badge">{{ logCount }}</span>
+      </div>
+    </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useExecutionStore } from '../stores/execution'
-import { useBlueprintStore } from '../stores/blueprint'
-import DebugPanel from '../components/debug/DebugPanel.vue'
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import LogPanel from '../components/debug/LogPanel.vue';
+import ErrorPanel from '../components/debug/ErrorPanel.vue';
+// import ExecutionPanel from '../components/debug/ExecutionPanel.vue';
+import ErrorTestingPanel from '../components/debug/ErrorTestingPanel.vue';
 
-// Router
-const route = useRoute()
-const router = useRouter()
+import { useExecutionStore } from '../stores/execution';
+import { useErrorStore } from '../stores/errorHandler';
+import { useErrorViewStore } from '../stores/errorView';
 
 // Stores
-const executionStore = useExecutionStore()
-const blueprintStore = useBlueprintStore()
+const executionStore = useExecutionStore();
+const errorStore = useErrorStore();
+const errorViewStore = useErrorViewStore();
 
 // State
-const selectedNodeId = ref<string | null>(null)
+const activeTab = ref('logs');
+const selectedExecutionId = ref('');
 
 // Computed
-const executionId = computed(() => route.params.executionId as string)
-const executionStatus = computed(() => executionStore.executionStatus)
-const startTime = computed(() => executionStore.executionStartTime)
-const endTime = computed(() => executionStore.executionEndTime)
-const duration = computed(() => executionStore.executionDuration)
-const errorMessage = computed(() => executionStore.errorMessage)
-
-const statusClass = computed(() => {
-  switch (executionStatus.value) {
-    case 'running':
-      return 'status-running'
-    case 'completed':
-      return 'status-completed'
-    case 'error':
-      return 'status-error'
-    default:
-      return 'status-idle'
-  }
-})
+const executionIds = computed(() => executionStore.executionIds || []);
+const executionStatus = computed(() => executionStore.executionStatus || 'idle');
+const errorCount = computed(() => errorStore.errors.length);
+const logCount = computed(() => executionStore.logs.length);
 
 // Methods
-function handleSelectNode(nodeId: string) {
-  selectedNodeId.value = nodeId
+function clearAll() {
+  executionStore.clearLogs();
+  errorStore.clearErrors();
+  errorStore.clearRecoveryAttempts();
 }
 
-function goToEditor() {
-  const blueprintId = executionStore.blueprintId
-  if (blueprintId) {
-    router.push(`/editor/${blueprintId}`)
-  }
+function highlightNode(nodeId) {
+  errorViewStore.selectNode(nodeId);
+  // Emit to parent component to handle highlighting in the editor
+  // In a real implementation, this would communicate with the editor view
+  console.log('Highlight node:', nodeId);
 }
 
-function goToHome() {
-  router.push('/')
-}
-
-async function rerunExecution() {
+async function recoverFromError(error) {
+  if (!error.recoverable) return;
+  
   try {
-    const blueprintId = executionStore.blueprintId
-    if (blueprintId) {
-      const result = await executionStore.executeBlueprint(blueprintId)
-      // Update URL to the new execution
-      router.push(`/debug/${result.executionId}`)
+    const result = await errorViewStore.recoverFromError(error);
+    console.log('Recovery result:', result);
+    
+    if (result && result.success) {
+      // Switch to logs tab to see recovery details
+      activeTab.value = 'logs';
     }
-  } catch (error) {
-    console.error('Failed to re-run execution:', error)
-    alert('Failed to re-run execution. Please try again.')
+  } catch (err) {
+    console.error('Failed to recover from error:', err);
   }
 }
 
-function formatDateTime(date: Date | null): string {
-  if (!date) return ''
-  return date.toLocaleString()
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '0ms'
-
-  if (ms < 1000) {
-    return `${ms}ms`
-  } else if (ms < 60000) {
-    return `${(ms / 1000).toFixed(2)}s`
-  } else {
-    const minutes = Math.floor(ms / 60000)
-    const seconds = ((ms % 60000) / 1000).toFixed(2)
-    return `${minutes}m ${seconds}s`
+// Lifecycle
+onMounted(() => {
+  // Set up WebSocket listeners for error notifications
+  errorViewStore.setupWebSocketListeners();
+  
+  // Set first execution ID if available
+  if (executionIds.value.length > 0) {
+    selectedExecutionId.value = executionIds.value[0];
   }
-}
-
-// Initialize
-onMounted(async () => {
-  if (executionId.value) {
-    try {
-      // Load execution data
-      await executionStore.loadExecution(executionId.value)
-    } catch (error) {
-      console.error('Failed to load execution:', error)
-      router.push('/')
-    }
-  }
-})
+});
 </script>
 
 <style scoped>
 .debug-view {
-  height: calc(100vh - 50px);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-.debug-header {
-  padding: 20px;
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
   background-color: #2d2d2d;
   border-bottom: 1px solid #3d3d3d;
+  height: 60px;
 }
 
-h1 {
-  font-size: 1.8rem;
-  margin-bottom: 1rem;
-  color: var(--accent-blue);
-}
-
-.execution-info {
-  background-color: #333;
-  padding: 15px;
-  border-radius: 6px;
-}
-
-.info-row {
-  display: flex;
-  margin-bottom: 8px;
-}
-
-.info-label {
-  width: 100px;
-  color: #aaa;
+.toolbar h1 {
+  font-size: 1.2rem;
+  margin: 0;
+  margin-right: 24px;
   font-weight: 500;
 }
 
-.info-value {
-  flex: 1;
+.view-tabs {
+  display: flex;
+  gap: 4px;
 }
 
-.info-value.status-running {
-  color: var(--accent-yellow);
+.view-tabs button {
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-radius: 4px;
+  position: relative;
 }
 
-.info-value.status-completed {
-  color: var(--accent-green);
+.view-tabs button:hover {
+  background-color: #3a3a3a;
 }
 
-.info-value.status-error {
-  color: var(--accent-red);
+.view-tabs button.active {
+  background-color: #3c3c3c;
+  font-weight: 500;
 }
 
-.error-message .info-value {
-  color: var(--accent-red);
-  font-weight: bold;
+.badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background-color: #e74c3c;
+  color: white;
+  font-size: 0.7rem;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
 }
 
 .actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 15px;
+  margin-left: auto;
 }
 
-.btn {
+.clear-button {
   background-color: #444;
   border: none;
-  color: white;
-  padding: 8px 12px;
+  color: #e0e0e0;
+  padding: 6px 12px;
   border-radius: 4px;
-  font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: background-color 0.2s;
+  font-size: 0.8rem;
 }
 
-.btn:hover {
+.clear-button:hover {
   background-color: #555;
 }
 
-.btn .icon {
-  margin-right: 4px;
+.debug-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
 }
 
-.no-execution {
-  text-align: center;
-  padding: 2rem;
-  color: #aaa;
+.testing-panel {
+  padding: 16px;
+  overflow: auto;
+  height: 100%;
 }
 
-.no-execution p {
-  margin-bottom: 1rem;
+.status-bar {
+  height: 30px;
+  background-color: #2d2d2d;
+  border-top: 1px solid #3d3d3d;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 0.8rem;
+  color: #bbb;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  margin-right: 20px;
+}
+
+.status-item .label {
+  margin-right: 6px;
+}
+
+.status-item select {
+  background-color: #333;
+  border: 1px solid #444;
+  color: #e0e0e0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.status-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: #333;
+}
+
+.status-badge.running {
+  background-color: #3498db;
+  color: white;
+}
+
+.status-badge.completed {
+  background-color: #2ecc71;
+  color: white;
+}
+
+.status-badge.failed {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.status-badge.success {
+  background-color: #2ecc71;
+  color: white;
+}
+
+.status-badge.error {
+  background-color: #e74c3c;
+  color: white;
 }
 </style>

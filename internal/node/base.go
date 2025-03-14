@@ -26,3 +26,7 @@ func (n *BaseNode) GetInputPins() []types.Pin {
 func (n *BaseNode) GetOutputPins() []types.Pin {
 	return n.Outputs
 }
+
+func (n *BaseNode) GetProperties() []types.Property {
+	return n.Properties
+}

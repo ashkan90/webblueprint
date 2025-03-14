@@ -13,7 +13,7 @@ function isNodeStatusData(data: unknown): data is {
     message?: string,
     errorDetails?: any
 } {
-    return typeof data === 'object' && data !== null && 'nodeId' in data
+    return typeof data === 'object' && data !== null && 'nodeId' in data && data.nodeId !== undefined
 }
 
 function normalizeNodeStatus(status: unknown): NodeStatus {
@@ -25,6 +25,7 @@ function normalizeNodeStatus(status: unknown): NodeStatus {
 
 export const useExecutionStore = defineStore('execution', () => {
     const currentExecutionId = ref<string | null>(null)
+    const executionIds = ref<string[]>()
     const blueprintId = ref<string | null>(null)
     const executionStatus = ref<'idle' | 'running' | 'completed' | 'error'>('idle')
     const nodeStatuses = ref<Record<string, NodeExecutionStatus>>({})
@@ -178,7 +179,7 @@ export const useExecutionStore = defineStore('execution', () => {
         // This is important for visualizing active connections
 
         // Ensure we have statuses for both source and target nodes
-        if (!nodeStatuses.value[flow.sourceNodeId]) {
+        if (!nodeStatuses.value[flow.sourceNodeId] && flow.sourceNodeId !== undefined) {
             nodeStatuses.value[flow.sourceNodeId] = {
                 nodeId: flow.sourceNodeId,
                 status: 'completed', // Assume completed if we're getting data from it
@@ -186,7 +187,7 @@ export const useExecutionStore = defineStore('execution', () => {
             }
         }
 
-        if (!nodeStatuses.value[flow.targetNodeId]) {
+        if (!nodeStatuses.value[flow.targetNodeId] && flow.targetNodeId !== undefined) {
             nodeStatuses.value[flow.targetNodeId] = {
                 nodeId: flow.targetNodeId,
                 status: 'executing', // Assume executing if we're sending data to it
@@ -206,6 +207,7 @@ export const useExecutionStore = defineStore('execution', () => {
             const data = await response.json()
 
             currentExecutionId.value = executionId
+            executionIds.value.push(executionId)
             blueprintId.value = data.blueprintId
             executionStatus.value = data.status
             executionStartTime.value = new Date(data.startTime)
@@ -234,17 +236,23 @@ export const useExecutionStore = defineStore('execution', () => {
 
     function setupWebSocketListeners() {
         websocketStore.on(WebSocketEvents.EXEC_START, (data: unknown) => {
-            const execData = data as { executionId?: string }
-            if (execData.executionId) {
-                startExecution(execData.executionId)
+            const execData = data as { executionID?: string }
+            if (execData.executionID) {
+                startExecution(execData.executionID)
             }
         })
 
         websocketStore.on(WebSocketEvents.EXEC_END, (data: unknown) => {
-            const execData = data as { success?: boolean, error?: string }
+            const execData = data as { 
+                success?: boolean, 
+                error?: string,
+                // Add support for errorMessage field from the WebSocket API
+                errorMessage?: string
+            }
             endExecution(
                 safeBoolean(execData.success) ? 'completed' : 'error',
-                safeString(execData.error)
+                // Use errorMessage if available, fall back to error
+                execData.errorMessage || safeString(execData.error)
             )
         })
 
@@ -269,6 +277,7 @@ export const useExecutionStore = defineStore('execution', () => {
 
     return {
         currentExecutionId,
+        executionIds,
         blueprintId,
         executionStatus,
         nodeStatuses,

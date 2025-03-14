@@ -38,8 +38,10 @@ type Position struct {
 
 // NodeProperty represents a property of a node
 type NodeProperty struct {
-	Name  string      `json:"name"`
-	Value interface{} `json:"value"`
+	Name        string       `json:"name"`
+	Description string       `json:"description"`
+	Value       interface{}  `json:"value"`
+	Type        *NodePinType `json:"type"`
 }
 
 // Connection represents a connection between nodes

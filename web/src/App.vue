@@ -3,12 +3,12 @@
   <div class="app">
     <header class="app-header">
       <div class="logo">
-        <h1>WebBlueprint</h1>
+        <router-link to="/" class="logo-link">
+          <h1>{{ appTitle }}</h1>
+        </router-link>
       </div>
       <nav>
-        <RouterLink to="/">Home</RouterLink>
         <RouterLink to="/content">Content Browser</RouterLink>
-        <RouterLink to="/editor">Editor</RouterLink>
         <RouterLink to="/about">About</RouterLink>
       </nav>
       <div class="connection-status" :class="connectionStatus">
@@ -35,12 +35,18 @@ import {ref, onMounted, onBeforeUnmount, computed} from 'vue'
 import { executionManager, initializeBlueprintSystem, cleanupBlueprintSystem } from './bootstrap/blueprintSystem'
 import { WebSocketExecutionBridge } from './services/websocketBridge'
 import {useWebSocketStore} from "./stores/websocket";
-
+import {useWorkspaceStore} from "./stores/workspace";
 
 const websocketStore = useWebSocketStore()
+const workspaceStore = useWorkspaceStore()
 
 // State
 const isInitializing = ref(true)
+
+// Computed properties
+const appTitle = computed(() => {
+  return workspaceStore.currentWorkspace ? workspaceStore.currentWorkspace.name : 'WebBlueprint';
+})
 
 // Initialize the system on component mount
 onMounted(async () => {
@@ -86,26 +92,26 @@ onBeforeUnmount(() => {
 
 <style>
 :root {
-  /* Colors */
+  /* Colors - Updated for Unreal Engine look */
   --bg-color: #1e1e1e;
   --text-color: #e0e0e0;
-  --node-bg: #333333;
-  --node-header: #444444;
-  --node-selected: #1a73e8;
-  --grid-color: rgba(80, 80, 80, 0.2);
-  --conn-color: #8ab4f8;
+  --node-bg: #252526;
+  --node-header: #333333;
+  --node-selected: #0078d4;
+  --grid-color: rgba(60, 60, 60, 0.2);
+  --conn-color: #00a8ff;
   --conn-exec: #fff;
   --exec-pin: #fff;
-  --input-pin: #f0883e;
-  --output-pin: #6ed69a;
-  --context-menu-bg: #333333;
-  --context-menu-hover: #444444;
+  --input-pin: #ff9f43;
+  --output-pin: #2ed573;
+  --context-menu-bg: #252526;
+  --context-menu-hover: #333333;
 
   /* Accent colors */
-  --accent-blue: #3498db;
-  --accent-green: #2ecc71;
-  --accent-red: #e74c3c;
-  --accent-yellow: #f1c40f;
+  --accent-blue: #0078d4;
+  --accent-green: #2ed573;
+  --accent-red: #ff4757;
+  --accent-yellow: #ffa502;
 
   /* Spacing */
   --space-xs: 4px;
@@ -137,15 +143,26 @@ html, body {
   align-items: center;
   padding: 0 20px;
   height: 50px;
-  background-color: #242424;
+  background-color: #1a1a1a;
   border-bottom: 1px solid #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.logo a {
+.logo .logo-link {
+  text-decoration: none;
+}
+
+.logo h1 {
   font-size: 1.2rem;
   font-weight: bold;
   color: var(--accent-blue);
-  text-decoration: none;
+  margin: 0;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.logo h1:hover {
+  color: #0090ff;
 }
 
 nav {
@@ -156,15 +173,19 @@ nav {
 nav a {
   color: #bbb;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 0.2s, border-bottom 0.2s;
+  padding: 8px 0;
+  border-bottom: 2px solid transparent;
 }
 
 nav a:hover {
   color: white;
+  border-bottom: 2px solid rgba(0, 120, 212, 0.5);
 }
 
 nav a.router-link-active {
   color: var(--accent-blue);
+  border-bottom: 2px solid var(--accent-blue);
 }
 
 .app-content {
@@ -227,23 +248,55 @@ nav a.router-link-active {
 
 .connection-status.connected .status-indicator {
   background-color: var(--accent-green);
-  box-shadow: 0 0 5px rgba(46, 204, 113, 0.8);
+  box-shadow: 0 0 5px rgba(46, 213, 115, 0.8);
 }
 
 .connection-status.connecting .status-indicator {
   background-color: var(--accent-yellow);
-  box-shadow: 0 0 5px rgba(241, 196, 15, 0.8);
+  box-shadow: 0 0 5px rgba(255, 165, 2, 0.8);
   animation: pulse 1s infinite;
 }
 
 .connection-status.disconnected .status-indicator {
   background-color: var(--accent-red);
-  box-shadow: 0 0 5px rgba(231, 76, 60, 0.8);
+  box-shadow: 0 0 5px rgba(255, 71, 87, 0.8);
 }
 
 @keyframes pulse {
   0% { opacity: 0.4; }
   50% { opacity: 1; }
   100% { opacity: 0.4; }
+}
+
+/* Scrollbars - Unreal Engine style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+/* Buttons and interactive elements */
+button, 
+.btn {
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* Form elements */
+input, textarea, select {
+  font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
 }
 </style>

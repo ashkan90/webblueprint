@@ -300,6 +300,7 @@ import {useNodeRegistryStore} from "../../stores/nodeRegistry";
 import {NodeTypeDefinition} from "../../types/nodes";
 import router from "../../router";
 import {useRoute} from "vue-router";
+import {useWorkspaceStore} from "../../stores/workspace";
 
 const emit = defineEmits<{
   (e: 'add-node', data: any): void
@@ -310,6 +311,8 @@ const emit = defineEmits<{
 const route = useRoute()
 // Blueprint store
 const blueprintStore = useBlueprintStore()
+// Workspace store
+const workspaceStore = useWorkspaceStore()
 // Node Type store
 const nodeTypeStore = useNodeRegistryStore()
 
@@ -661,7 +664,7 @@ async function createVariable() {
     value: getDefaultValueForType(newVariable.value.type)
   }
 
-  await blueprintStore.addVariable(newVar)
+  await blueprintStore.addVariable(workspaceStore.currentWorkspace.id, newVar)
   if (route.params.id !== blueprintStore.blueprint.id) {
     await router.push(`/editor/${blueprintStore.blueprint.id}`)
   }

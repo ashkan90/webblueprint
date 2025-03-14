@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/google/uuid"
 	"log"
 	"net/http"
 	"webblueprint/internal/db"
@@ -34,6 +35,34 @@ func convertPinsToInfo(pins []types.Pin) []map[string]interface{} {
 
 		if pin.Default != nil {
 			result[i]["default"] = pin.Default
+		}
+	}
+
+	return result
+}
+
+func convertPropertiesToInfo(pins []types.Property) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(pins))
+	defaultType := map[string]string{
+		"id":          types.PinTypes.Any.ID,
+		"name":        types.PinTypes.Any.Name,
+		"description": types.PinTypes.Any.Description,
+	}
+
+	for i, pin := range pins {
+		if pin.Type != nil {
+			defaultType = map[string]string{
+				"id":          pin.Type.ID,
+				"name":        pin.Type.Name,
+				"description": pin.Type.Description,
+			}
+		}
+
+		result[i] = map[string]interface{}{
+			"name":        pin.Name,
+			"description": pin.Description,
+			"value":       pin.Value,
+			"type":        defaultType,
 		}
 	}
 
@@ -82,7 +111,6 @@ func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.WriteHeader(status)
 
 	err := json.NewEncoder(w).Encode(payload)
-	//response, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("Error marshaling response: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -587,7 +615,7 @@ func (s *APIServer) handleExecuteBlueprint(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Execute the blueprint
-	result, err := s.executionEngine.Execute(id, initialVars)
+	result, err := s.executionEngine.Execute(bp, uuid.New().String(), initialVars)
 	if err != nil {
 		log.Printf("Error executing blueprint: %v", err)
 		respondWithError(w, http.StatusInternalServerError, "Execution failed: "+err.Error())

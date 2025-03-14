@@ -174,7 +174,7 @@ import { v4 as uuid } from 'uuid'
 import { validateConnection } from '../../utils/connectionValidator';
 import { useNodeRegistryStore } from '../../stores/nodeRegistry'
 import type {Node, Connection, Position, NodeProperty} from '../../types/blueprint'
-import type {NodeTypeDefinition, PinDefinition} from '../../types/nodes'
+import type {NodePropertyDefinition, NodeTypeDefinition, PinDefinition} from '../../types/nodes'
 import type { NodeExecutionStatus } from '../../types/execution'
 import BlueprintNode from './BlueprintNode.vue'
 import ConnectionValueTooltip from './ConnectionValueTooltip.vue';
@@ -812,6 +812,15 @@ function handleAddSpecificNode(nodeType: NodeTypeDefinition) {
     type: nodeType.typeId,
     position: { x: dragStart.value.x, y: dragStart.value.y },
     properties: []
+  }
+
+  if (nodeType.properties) {
+    nodeType.properties.forEach((prop) => {
+      node.properties.push({
+        name: prop.name,
+        value: prop.value,
+      })
+    })
   }
 
   nodeType.inputs.forEach((input: PinDefinition) => {

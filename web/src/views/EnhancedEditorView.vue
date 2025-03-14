@@ -25,17 +25,21 @@
           {{ isExecuting ? 'Running...' : 'Execute' }}
         </button>
 
-        <button @click="saveBlueprint" :disabled="isExecuting" class="btn">
+        <button @click="saveBlueprint" :disabled="isExecuting" class="btn" :class="{ 'has-changes': blueprintStore.hasUnsavedChanges }">
           <span class="icon">💾</span> Save
         </button>
 
         <button @click="toggleDebugPanel" class="btn" :class="{ 'active': showDebugPanel }">
           <span class="icon">🔍</span> Debug
         </button>
+        
+        <button @click="toggleVersionsPanel" class="btn" :class="{ 'active': showVersionsPanel }">
+          <span class="icon">📋</span> Versions
+        </button>
       </div>
     </div>
 
-    <div class="editor-container" :class="{ 'with-debug': showDebugPanel }">
+    <div class="editor-container" :class="{ 'with-debug': showDebugPanel || showVersionsPanel }">
       <div class="node-palette">
         <EnhancedNodePalette @node-added="handleNodeAdded" />
       </div>
@@ -68,12 +72,17 @@
       </div>
     </div>
 
-    <DebugPanel
-        v-if="showDebugPanel"
-        :execution-id="currentExecutionId"
-        :selected-node-id="selectedNodeId"
-        @select-node="handleDebugNodeSelected"
-    />
+    <div v-if="showDebugPanel" class="bottom-panel">
+      <DebugPanel
+          :execution-id="currentExecutionId"
+          :selected-node-id="selectedNodeId"
+          @select-node="handleDebugNodeSelected"
+      />
+    </div>
+    
+    <div v-if="showVersionsPanel" class="bottom-panel versions-panel-container">
+      <VersionsPanel />
+    </div>
 
     <!-- Execution result modal -->
     <div v-if="showResultModal" class="modal-backdrop">
@@ -123,12 +132,14 @@ import { v4 as uuid } from 'uuid'
 import { useBlueprintStore } from '../stores/blueprint'
 import { useNodeRegistryStore } from '../stores/nodeRegistry'
 import { useExecutionStore } from '../stores/execution'
+import { useWorkspaceStore } from '../stores/workspace'
 import type { Node, Connection } from '../types/blueprint'
 import type { NodeTypeDefinition } from '../types/nodes'
 import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
 import EnhancedNodePalette from '../components/editor/EnhancedNodePalette.vue'
 import EnhancedPropertyEditor from '../components/editor/EnhancedPropertyEditor.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
+import VersionsPanel from '../components/VersionsPanel.vue' // Import the new versions panel
 import {
   executeBlueprint as executeBlueprintFn,
   executionManager,
@@ -142,11 +153,13 @@ const router = useRouter()
 const blueprintStore = useBlueprintStore()
 const nodeRegistryStore = useNodeRegistryStore()
 const executionStore = useExecutionStore()
+const workspaceStore = useWorkspaceStore()
 
 // State
 const blueprintName = ref('')
 const selectedNodeId = ref<string | null>(null)
 const showDebugPanel = ref(false)
+const showVersionsPanel = ref(false) // New state for versions panel
 const canvas = ref<InstanceType<typeof BlueprintCanvas> | null>(null)
 const canvasContainer = ref<HTMLElement | null>(null)
 const showResultModal = ref(false)
@@ -267,7 +280,13 @@ async function saveBlueprint() {
       blueprintStore.blueprint.name = blueprintName.value
     }
 
-    await blueprintStore.saveBlueprint()
+    // Get the current workspace ID
+    const workspaceId = workspaceStore.currentWorkspace?.id
+    if (!workspaceId) {
+      throw new Error('No active workspace found')
+    }
+
+    await blueprintStore.saveBlueprint(workspaceId)
 
     // Update the route if this is a new blueprint
     if (route.params.id !== blueprintStore.blueprint.id) {
@@ -282,7 +301,7 @@ async function saveBlueprint() {
 async function executeBlueprint() {
   try {
     // Save the blueprint first if it has changes
-    if (!blueprintStore.blueprint.id) {
+    if (!blueprintStore.blueprint.id || blueprintStore.hasUnsavedChanges) {
       await saveBlueprint()
     }
 
@@ -308,6 +327,16 @@ async function executeBlueprint() {
 
 function toggleDebugPanel() {
   showDebugPanel.value = !showDebugPanel.value
+  if (showDebugPanel.value) {
+    showVersionsPanel.value = false
+  }
+}
+
+function toggleVersionsPanel() {
+  showVersionsPanel.value = !showVersionsPanel.value
+  if (showVersionsPanel.value) {
+    showDebugPanel.value = false
+  }
 }
 
 function closeResultModal() {
@@ -316,6 +345,7 @@ function closeResultModal() {
 
 function openDebugPanelWithResult() {
   showDebugPanel.value = true
+  showVersionsPanel.value = false
   closeResultModal()
 }
 
@@ -409,7 +439,20 @@ onMounted(async () => {
 }
 
 .editor-container.with-debug {
-  height: 70%;
+  height: 60%;
+}
+
+.bottom-panel {
+  height: 40%;
+  border-top: 1px solid #3d3d3d;
+  background-color: #2d2d2d;
+  overflow: hidden;
+}
+
+.versions-panel-container {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .node-palette {
@@ -468,6 +511,10 @@ onMounted(async () => {
 .btn.active {
   background-color: #555;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn.has-changes {
+  background-color: #3a8cd7;
 }
 
 .icon {

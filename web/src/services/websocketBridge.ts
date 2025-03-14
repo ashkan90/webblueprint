@@ -81,7 +81,7 @@ export class WebSocketExecutionBridge {
         if (!nodeId) return;
 
         // Update execution store
-        this.executionManager.executionStore.updateNodeStatus({
+        this.executionManager.getExecutionStore().updateNodeStatus({
             nodeId,
             status: 'completed',
             timestamp: new Date(data.timestamp || Date.now()),
@@ -100,7 +100,7 @@ export class WebSocketExecutionBridge {
         if (!nodeId) return;
 
         // Update execution store
-        this.executionManager.executionStore.updateNodeStatus({
+        this.executionManager.getExecutionStore().updateNodeStatus({
             nodeId,
             status: 'error',
             timestamp: new Date(data.timestamp || Date.now()),
@@ -132,7 +132,7 @@ export class WebSocketExecutionBridge {
         };
 
         // Add to execution store
-        this.executionManager.executionStore.recordDataFlow(dataFlow);
+        this.executionManager.getExecutionStore().recordDataFlow(dataFlow);
 
         // Find the corresponding connection
         // We need to identify it to animate the connection
@@ -152,11 +152,11 @@ export class WebSocketExecutionBridge {
      * Handle execution start event
      */
     private handleExecutionStart(data: any): void {
-        const executionId = data?.executionId;
+        const executionId = data?.executionID;
         if (!executionId) return;
 
         // Start execution in the store
-        this.executionManager.executionStore.startExecution(executionId);
+        this.executionManager.getExecutionStore().startExecution(executionId);
 
         // Clear any previous execution visualization state
         this.executionManager.clearActiveStates();
@@ -167,7 +167,7 @@ export class WebSocketExecutionBridge {
      */
     private handleExecutionEnd(data: any): void {
         // End execution in the store
-        this.executionManager.executionStore.endExecution(
+        this.executionManager.getExecutionStore().endExecution(
             data.success ? 'completed' : 'error',
             data.error || data.errorMessage
         );
@@ -180,7 +180,7 @@ export class WebSocketExecutionBridge {
         if (!data.nodeId) return;
 
         // Update node debug data in the store
-        this.executionManager.executionStore.updateNodeDebugData({
+        this.executionManager.getExecutionStore().updateNodeDebugData({
             nodeId: data.nodeId,
             executionId: data.executionId,
             timestamp: new Date(data.timestamp || Date.now()),

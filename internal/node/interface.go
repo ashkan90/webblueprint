@@ -24,6 +24,9 @@ type Node interface {
 	// GetOutputPins returns the output pins for this node
 	GetOutputPins() []types.Pin
 
+	// GetProperties returns the node properties
+	GetProperties() []types.Property
+
 	// Execute runs the node's logic with the given execution context
 	Execute(ctx ExecutionContext) error
 }

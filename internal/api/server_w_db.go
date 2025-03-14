@@ -1,0 +1,204 @@
+package api
+
+import (
+	"github.com/gorilla/mux"
+	"net/http"
+	"sync"
+	"webblueprint/internal/bperrors"
+	"webblueprint/internal/engine"
+	"webblueprint/internal/node"
+	"webblueprint/internal/registry"
+	"webblueprint/pkg/repository"
+	"webblueprint/pkg/service"
+)
+
+// APIServer handles HTTP API requests with repository integration
+type APIServerWithDB struct {
+	executionEngine  *engine.ExecutionEngine
+	errorAwareEngine *engine.ErrorAwareExecutionEngine
+	nodeRegistry     map[string]node.NodeFactory
+	wsManager        *WebSocketManager
+	debugManager     *engine.DebugManager
+	errorManager     *bperrors.ErrorManager
+	recoveryManager  *bperrors.RecoveryManager
+	errorHandler     *ErrorWebSocketHandler
+	repoFactory      repository.RepositoryFactory
+	blueprintService *service.BlueprintService
+	userService      *service.UserService
+	workspaceService *service.WorkspaceService
+	executionService *service.ExecutionService
+	rw               *sync.RWMutex
+}
+
+// NewAPIServerWithDB creates a new API server with database integration
+func NewAPIServerWithDB(
+	executionEngine *engine.ExecutionEngine,
+	wsManager *WebSocketManager,
+	debugManager *engine.DebugManager,
+	repoFactory repository.RepositoryFactory,
+	errorAwareEngine *engine.ErrorAwareExecutionEngine, // Add errorAwareEngine parameter
+) *APIServerWithDB {
+	// Create the blueprint service
+	blueprintService := service.NewBlueprintService(
+		repoFactory.GetBlueprintRepository(),
+		repoFactory.GetWorkspaceRepository(),
+		repoFactory.GetAssetRepository(),
+		repoFactory.GetExecutionRepository(),
+	)
+
+	userService := service.NewUserService(repoFactory.GetUserRepository())
+	executionService := service.NewExecutionService(
+		repoFactory.GetExecutionRepository(),
+		repoFactory.GetBlueprintRepository(),
+		executionEngine,
+	)
+
+	// Pass the blueprint repository to the workspace service
+	workspaceService := service.NewWorkspaceService(
+		repoFactory.GetWorkspaceRepository(),
+		repoFactory.GetUserRepository(),
+		repoFactory.GetAssetRepository(),
+		repoFactory.GetBlueprintRepository(),
+	)
+
+	// Get error handling components from the errorAwareEngine
+	errorManager := errorAwareEngine.GetErrorManager()
+	recoveryManager := errorAwareEngine.GetRecoveryManager()
+
+	// Create error websocket handler
+	errorHandler := NewErrorWebSocketHandler(wsManager)
+	errorHandler.RegisterWithErrorManager(errorManager)
+
+	return &APIServerWithDB{
+		executionEngine:  executionEngine,
+		errorAwareEngine: errorAwareEngine,
+		nodeRegistry:     make(map[string]node.NodeFactory),
+		wsManager:        wsManager,
+		debugManager:     debugManager,
+		errorManager:     errorManager,
+		recoveryManager:  recoveryManager,
+		errorHandler:     errorHandler,
+		repoFactory:      repoFactory,
+		blueprintService: blueprintService,
+		userService:      userService,
+		workspaceService: workspaceService,
+		executionService: executionService,
+		rw:               &sync.RWMutex{},
+	}
+}
+
+// RegisterNodeType registers a node type with both the execution engine and API server
+func (s *APIServerWithDB) RegisterNodeType(typeID string, factory node.NodeFactory) {
+	// This method stays the same as the original API server
+	// Store locally
+	s.nodeRegistry[typeID] = factory
+
+	// Register with execution engine
+	s.executionEngine.RegisterNodeType(typeID, factory)
+
+	// Create a node instance to get metadata
+	nodeInstance := factory()
+	metadata := nodeInstance.GetMetadata()
+
+	// Broadcast node type to connected clients
+	s.wsManager.BroadcastMessage(MsgTypeNodeIntro, map[string]interface{}{
+		"typeId":      metadata.TypeID,
+		"name":        metadata.Name,
+		"description": metadata.Description,
+		"category":    metadata.Category,
+		"version":     metadata.Version,
+		"inputs":      convertPinsToInfo(nodeInstance.GetInputPins()),
+		"outputs":     convertPinsToInfo(nodeInstance.GetOutputPins()),
+	})
+}
+
+// SetupRoutes sets up the HTTP routes for the API server
+func (s *APIServerWithDB) SetupRoutes() *mux.Router {
+	r := mux.NewRouter()
+
+	// WebSocket endpoint
+	r.HandleFunc("/ws", s.wsManager.HandleWebSocket)
+
+	// Create a blueprint handler
+	blueprintHandler := NewBlueprintHandler(s.blueprintService)
+	blueprintHandler.RegisterRoutes(r)
+
+	userHandler := NewUserHandler(s.userService)
+	userHandler.RegisterRoutes(r)
+
+	workspaceHandler := NewWorkspaceHandler(s.workspaceService)
+	workspaceHandler.RegisterRoutes(r)
+
+	executionHandler := NewExecutionHandler(s.executionService)
+	executionHandler.RegisterRoutes(r)
+
+	// API endpoints that aren't handled by the blueprint handler
+	api := r.PathPrefix("/api").Subrouter()
+
+	// Node types
+	api.HandleFunc("/nodes", s.handleGetNodeTypes).Methods("GET")
+
+	// Setup error API
+	s.setupErrorAPI(api)
+
+	// Serve static files for the frontend
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
+
+	return r
+}
+
+// setupErrorAPI sets up API endpoints for error handling
+func (s *APIServerWithDB) setupErrorAPI(router *mux.Router) {
+	// Create API handler for errors
+	errorAPI := NewErrorHandlingAPI(
+		s.errorManager,
+		s.recoveryManager,
+		nil, // We'll need to implement this if needed
+	)
+
+	// Register API routes for error handling
+	router.HandleFunc("/errors/list", errorAPI.HandleListErrors).Methods("GET")
+	router.HandleFunc("/errors/analysis", errorAPI.HandleGetErrorAnalysis).Methods("GET")
+	router.HandleFunc("/errors/info", errorAPI.HandleGetExecutionInfo).Methods("GET")
+	router.HandleFunc("/errors/recover", errorAPI.HandleAttemptRecovery).Methods("POST")
+	router.HandleFunc("/errors/clear", errorAPI.HandleClearErrors).Methods("POST")
+
+	// Setup test API for development
+	testErrorAPI := NewTestErrorHandler(
+		s.wsManager,
+		s.errorManager,
+		s.recoveryManager,
+	)
+
+	router.HandleFunc("/test/generate-error", testErrorAPI.HandleGenerateTestError).Methods("POST")
+	router.HandleFunc("/test/generate-scenario", testErrorAPI.HandleGenerateErrorScenario).Methods("POST")
+}
+
+func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *http.Request) {
+	nodeTypes := make([]map[string]interface{}, 0)
+
+	for _, factory := range registry.GetInstance().GetAllNodeFactories() {
+		_node := factory()
+		metadata := _node.GetMetadata()
+
+		nodeType := map[string]interface{}{
+			"typeId":      metadata.TypeID,
+			"name":        metadata.Name,
+			"description": metadata.Description,
+			"category":    metadata.Category,
+			"version":     metadata.Version,
+			"inputs":      convertPinsToInfo(_node.GetInputPins()),
+			"outputs":     convertPinsToInfo(_node.GetOutputPins()),
+			"properties":  convertPropertiesToInfo(_node.GetProperties()),
+		}
+
+		nodeTypes = append(nodeTypes, nodeType)
+	}
+
+	respondWithJSON(w, http.StatusOK, nodeTypes)
+}
+
+// GetErrorAwareEngine returns the error-aware execution engine
+func (s *APIServerWithDB) GetErrorAwareEngine() *engine.ErrorAwareExecutionEngine {
+	return s.errorAwareEngine
+}

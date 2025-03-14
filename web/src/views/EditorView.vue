@@ -24,7 +24,7 @@
           {{ isExecuting ? 'Running...' : 'Execute' }}
         </button>
 
-        <button @click="saveBlueprint" :disabled="isExecuting" class="btn">
+        <button @click="saveBlueprint" :disabled="isExecuting" class="btn" :class="{ 'has-changes': blueprintStore.hasUnsavedChanges }">
           <span class="icon">💾</span> Save
         </button>
 
@@ -74,11 +74,17 @@
         :selected-node-id="selectedNodeId"
     />
     
-    <div class="content-browser-container">
-      <ContentBrowserPanel
-          @asset-opened="handleAssetOpened"
-      />
-    </div>
+    <!-- Bottom Drawer with Content and Versions tabs -->
+    <BottomDrawer v-if="!currentEditingFunction">
+      <template #content>
+        <ContentBrowserPanel
+            @asset-opened="handleAssetOpened"
+        />
+      </template>
+      <template #versions>
+        <VersionsPanel />
+      </template>
+    </BottomDrawer>
 
     <!-- Execution result modal -->
     <div v-if="showResultModal" class="modal-backdrop">
@@ -130,12 +136,16 @@ import { Asset, AssetType } from '../types/mockPersistent'
 import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
 import NodeProperties from '../components/editor/NodeProperties.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
+import VersionsPanel from '../components/VersionsPanel.vue'
 import BlueprintLeftPanel from "../components/editor/BlueprintLeftPanel.vue"
 import ContentBrowserPanel from "../components/ContentBrowserPanel.vue"
+import BottomDrawer from "../components/drawer/BottomDrawer.vue"
+import {useWorkspaceStore} from "../stores/workspace";
 
 const route = useRoute()
 const router = useRouter()
 const blueprintStore = useBlueprintStore()
+const workspaceStore = useWorkspaceStore()
 const nodeRegistryStore = useNodeRegistryStore()
 const executionStore = useExecutionStore()
 
@@ -429,7 +439,7 @@ async function saveBlueprint() {
       blueprintStore.blueprint.name = blueprintName.value
     }
 
-    await blueprintStore.saveBlueprint()
+    await blueprintStore.saveBlueprint(workspaceStore.currentWorkspace.id)
 
     // Update the route if this is a new blueprint
     if (route.params.id !== blueprintStore.blueprint.id) {
@@ -444,7 +454,7 @@ async function saveBlueprint() {
 async function executeBlueprint() {
   try {
     // Save the blueprint first if it has changes
-    if (!blueprintStore.blueprint.id) {
+    if (!blueprintStore.blueprint.id || blueprintStore.hasUnsavedChanges) {
       await saveBlueprint()
     }
 
@@ -597,17 +607,14 @@ onMounted(async () => {
 }
 
 .editor-container.with-debug {
-  height: 70%;
+  height: 60%;
 }
 
-.content-browser-container {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  z-index: 100;
+.bottom-panel {
+  height: 30%;
+  border-top: 1px solid #3d3d3d;
+  background-color: #2d2d2d;
+  overflow: hidden;
 }
 
 .node-palette {
@@ -666,6 +673,10 @@ onMounted(async () => {
 .btn.active {
   background-color: #555;
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.btn.has-changes {
+  background-color: #3a8cd7;
 }
 
 .icon {

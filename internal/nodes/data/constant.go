@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-	"webblueprint/internal/db"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
@@ -27,27 +26,21 @@ func NewConstantNode() node.Node {
 				Category:    "Data",
 				Version:     "1.0.0",
 			},
-			Inputs: []types.Pin{
-				{
-					ID:          "exec",
-					Name:        "Execute",
-					Description: "Execution input",
-					Type:        types.PinTypes.Execution,
-				},
-			},
+			// No inputs - constants don't need execution inputs
 			Outputs: []types.Pin{
-				{
-					ID:          "then",
-					Name:        "Then",
-					Description: "Execution continues",
-					Type:        types.PinTypes.Execution,
-				},
 				{
 					ID:          "value",
 					Name:        "Value",
 					Description: "Constant value output",
 					Type:        types.PinTypes.Any,
-					Optional:    true,
+				},
+			},
+			Properties: []types.Property{
+				{
+					Name:        "constantValue",
+					Description: "Default value",
+					Value:       "",
+					Type:        types.PinTypes.Any,
 				},
 			},
 		},
@@ -64,17 +57,15 @@ func NewStringConstantNode() node.Node {
 	node.Metadata.Description = "Outputs a constant string value"
 	node.ValueType = types.PinTypes.String
 	node.Value = ""
-	node.Outputs[1].Type = types.PinTypes.String
+	node.Outputs[0].Type = types.PinTypes.String
 
-	// Add an input for setting the value via property
-	node.Inputs = append(node.Inputs, types.Pin{
-		ID:          "constantValue",
-		Name:        "Value",
-		Description: "The constant string value to output",
+	// Set default property value
+	node.Properties[0] = types.Property{
+		Name:        "constantValue",
+		Description: "Default value",
+		Value:       "",
 		Type:        types.PinTypes.String,
-		Optional:    true,
-		Default:     "",
-	})
+	}
 
 	return node
 }
@@ -87,17 +78,15 @@ func NewNumberConstantNode() node.Node {
 	node.Metadata.Description = "Outputs a constant numeric value"
 	node.ValueType = types.PinTypes.Number
 	node.Value = 0.0
-	node.Outputs[1].Type = types.PinTypes.Number
+	node.Outputs[0].Type = types.PinTypes.Number
 
-	// Add an input for setting the value via property
-	node.Inputs = append(node.Inputs, types.Pin{
-		ID:          "constantValue",
-		Name:        "Value",
-		Description: "The constant numeric value to output",
+	// Set default property value
+	node.Properties[0] = types.Property{
+		Name:        "constantValue",
+		Description: "Default value",
+		Value:       0.0,
 		Type:        types.PinTypes.Number,
-		Optional:    true,
-		Default:     0.0,
-	})
+	}
 
 	return node
 }
@@ -110,22 +99,22 @@ func NewBooleanConstantNode() node.Node {
 	node.Metadata.Description = "Outputs a constant boolean value"
 	node.ValueType = types.PinTypes.Boolean
 	node.Value = false
-	node.Outputs[1].Type = types.PinTypes.Boolean
+	node.Outputs[0].Type = types.PinTypes.Boolean
 
-	// Add an input for setting the value via property
-	node.Inputs = append(node.Inputs, types.Pin{
-		ID:          "constantValue",
-		Name:        "Value",
-		Description: "The constant boolean value to output",
+	// Set default property value
+	node.Properties[0] = types.Property{
+		Name:        "constantValue",
+		Description: "Default value",
+		Value:       false,
 		Type:        types.PinTypes.Boolean,
-		Optional:    true,
-		Default:     false,
-	})
+	}
 
 	return node
 }
 
 // Execute runs the node logic
+// For constant nodes, we'll immediately set the output value on execution
+// and won't activate any flows (since it doesn't have execution outputs)
 func (n *ConstantNode) Execute(ctx node.ExecutionContext) error {
 	logger := ctx.Logger()
 	logger.Debug("Executing Constant node", nil)
@@ -133,42 +122,36 @@ func (n *ConstantNode) Execute(ctx node.ExecutionContext) error {
 	// Collect debug data
 	debugData := make(map[string]interface{})
 
-	bp, _ := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
-	_ = bp
-
-	// Try to get value from node properties
+	// Start with the default value from the node definition
 	var value = n.Value
 
-	// First, check if there's a constantValue input
-	if constInput, exists := ctx.GetInputValue("constantValue"); exists {
-		// Use the input value directly since it's already properly typed
-		value = constInput.RawValue
-		debugData["valueSource"] = "input_pin"
-	} else {
-		// Check if the value is stored in the blueprint node properties
-		// This is the preferred way as it allows the value to be edited in the UI
-		nodeProperties := getNodePropertiesFromContext(ctx)
-		if nodeProperties != nil {
-			if constValue, exists := nodeProperties["constantValue"]; exists && constValue != nil {
-				// Convert value based on type if needed
-				typedValue, err := convertValueToType(constValue, n.ValueType)
-				if err == nil {
-					value = typedValue
-					debugData["valueSource"] = "node_properties"
-				} else {
-					logger.Warn("Failed to convert property value to correct type", map[string]interface{}{
-						"error": err.Error(),
-					})
-					debugData["conversionError"] = err.Error()
-				}
-			}
+	// Try to get the constantValue property directly from properties
+	// This is the main path we expect to use for constant nodes
+	if constValue, exists := getPropertyValue(ctx, "constantValue"); exists && constValue != nil {
+		// Convert value based on type if needed
+		typedValue, err := convertValueToType(constValue, n.ValueType)
+		if err == nil {
+			value = typedValue
+			debugData["valueSource"] = "constantValue_property"
+			debugData["propertyValue"] = constValue
+		} else {
+			logger.Warn("Failed to convert property value to correct type", map[string]interface{}{
+				"error": err.Error(),
+			})
+			debugData["conversionError"] = err.Error()
 		}
+	} else {
+		debugData["valueSource"] = "node_default"
 	}
 
-	debugData["initialValue"] = value
+	debugData["finalValue"] = value
+	debugData["valueType"] = fmt.Sprintf("%T", value)
+
+	// Create a properly typed value to output
+	outputValue := types.NewValue(n.ValueType, value)
 
 	// Set output value
-	ctx.SetOutputValue("value", types.NewValue(n.ValueType, value))
+	ctx.SetOutputValue("value", outputValue)
 
 	// Record debug info
 	ctx.RecordDebugInfo(types.DebugInfo{
@@ -187,30 +170,33 @@ func (n *ConstantNode) Execute(ctx node.ExecutionContext) error {
 		"value":     value,
 	})
 
-	// Continue execution
-	return ctx.ActivateOutputFlow("then")
+	// No execution flow to activate - just return success
+	return nil
 }
 
-// Helper function to get node properties from execution context
-func getNodePropertiesFromContext(ctx node.ExecutionContext) map[string]interface{} {
-	// The debug data might contain node properties
+// Helper function to get property value from execution context
+func getPropertyValue(ctx node.ExecutionContext, name string) (interface{}, bool) {
+	// Try to get the property from debug data first (for backwards compatibility)
 	debugData := ctx.GetDebugData()
-	if debugData == nil {
-		return nil
-	}
-
-	// Check if we have a node configuration
 	if nodeConfig, exists := debugData["nodeConfig"]; exists {
 		if configMap, ok := nodeConfig.(map[string]interface{}); ok {
 			if properties, exists := configMap["properties"]; exists {
 				if propsMap, ok := properties.(map[string]interface{}); ok {
-					return propsMap
+					if value, exists := propsMap[name]; exists {
+						return value, true
+					}
 				}
 			}
 		}
 	}
 
-	return nil
+	// As an alternative, check for the property directly in the input value
+	// This matches how the execution context now looks for properties
+	if value, exists := ctx.GetInputValue(name); exists {
+		return value.RawValue, true
+	}
+
+	return nil, false
 }
 
 // Helper function to convert a value to the expected type

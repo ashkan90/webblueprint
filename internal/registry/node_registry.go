@@ -19,13 +19,21 @@ var (
 	once     sync.Once
 )
 
-// GetInstance returns the singleton instance of GlobalNodeRegistry
-func GetInstance() *GlobalNodeRegistry {
+func Make(def ...map[string]node.NodeFactory) {
 	once.Do(func() {
+		var factories = make(map[string]node.NodeFactory)
+		if len(def) == 1 {
+			factories = def[0]
+		}
+
 		instance = &GlobalNodeRegistry{
-			factories: make(map[string]node.NodeFactory),
+			factories: factories,
 		}
 	})
+}
+
+// GetInstance returns the singleton instance of GlobalNodeRegistry
+func GetInstance() *GlobalNodeRegistry {
 	return instance
 }
 

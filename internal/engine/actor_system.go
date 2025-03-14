@@ -2,9 +2,9 @@ package engine
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
+	"webblueprint/internal/common"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
@@ -85,10 +85,9 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// Create actors for all nodes
+	// First pass: create all actors
 	for _, nodeConfig := range bp.Nodes {
 		// Get the node factory
-		log.Println(s.nodeRegistry, nodeConfig.Type)
 		factory, exists := s.nodeRegistry[nodeConfig.Type]
 		if !exists {
 			return fmt.Errorf("node type not registered: %s", nodeConfig.Type)
@@ -107,7 +106,7 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 		actor := NewNodeActor(
 			nodeConfig.ID,
 			nodeConfig.Type,
-			s.blueprintID,
+			bp,
 			s.executionID,
 			nodeInstance,
 			nodeLogger,
@@ -123,7 +122,58 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 		actor.Start()
 	}
 
+	// Second pass: execute data nodes immediately
+	// This ensures that constant values are available right away
+	for _, nodeConfig := range bp.Nodes {
+		actor := s.actors[nodeConfig.ID]
+
+		// Check if this is a data node (like constant-*)
+		// Data nodes are identified by not having execution inputs
+		if isDataNode(nodeConfig.Type) {
+			// Execute the node immediately
+			s.logger.Debug("Executing data node during initialization", map[string]interface{}{
+				"nodeId":   nodeConfig.ID,
+				"nodeType": nodeConfig.Type,
+			})
+
+			// Create execute message
+			msg := NodeMessage{
+				Type:     "execute",
+				Response: make(chan NodeResponse, 1),
+			}
+
+			// Send the message to the actor
+			response := actor.Send(msg)
+
+			if !response.Success {
+				s.logger.Error("Failed to initialize data node", map[string]interface{}{
+					"nodeId": nodeConfig.ID,
+					"error":  response.Error.Error(),
+				})
+			}
+		}
+	}
+
 	return nil
+}
+
+// isDataNode determines if a node is a "data node" that doesn't require execution flow
+func isDataNode(nodeType string) bool {
+	// List of node types that are considered data nodes
+	dataNodeTypes := []string{
+		"constant-string",
+		"constant-number",
+		"constant-boolean",
+		"variable-get",
+	}
+
+	for _, dataType := range dataNodeTypes {
+		if nodeType == dataType {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Execute executes the blueprint starting from the specified entry points
@@ -360,7 +410,7 @@ func (s *ActorSystem) Stop() {
 }
 
 // GetResult returns the execution result
-func (s *ActorSystem) GetResult() ExecutionResult {
+func (s *ActorSystem) GetResult() common.ExecutionResult {
 	// Collect output values from all nodes
 	nodeResults := make(map[string]map[string]interface{})
 
@@ -381,7 +431,7 @@ func (s *ActorSystem) GetResult() ExecutionResult {
 		nodeResults[nodeID] = outputs
 	}
 
-	return ExecutionResult{
+	return common.ExecutionResult{
 		Success:     true,
 		ExecutionID: s.executionID,
 		StartTime:   time.Time{}, // Will be set by the caller

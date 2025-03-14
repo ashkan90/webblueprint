@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"webblueprint/internal/common"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
@@ -53,16 +54,6 @@ type NodeStatus struct {
 	Error     error
 	StartTime time.Time
 	EndTime   time.Time
-}
-
-// ExecutionResult represents the result of executing a blueprint
-type ExecutionResult struct {
-	Success     bool
-	ExecutionID string
-	StartTime   time.Time
-	EndTime     time.Time
-	Error       error
-	NodeResults map[string]map[string]interface{} // NodeID -> PinID -> Value
 }
 
 // ExecutionMode defines the execution engine to use
@@ -155,6 +146,10 @@ func (e *ExecutionEngine) EmitEvent(event ExecutionEvent) {
 	}
 }
 
+func (e *ExecutionEngine) GetLogger() node.Logger {
+	return e.logger
+}
+
 // GetNodeStatus returns the current execution status of a node
 func (e *ExecutionEngine) GetNodeStatus(executionID, nodeID string) (NodeStatus, bool) {
 	e.mutex.RLock()
@@ -188,18 +183,10 @@ func (e *ExecutionEngine) GetNodeDebugData(executionID, nodeID string) (map[stri
 }
 
 // Execute runs a blueprint
-func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]types.Value) (ExecutionResult, error) {
+func (e *ExecutionEngine) Execute(bp *blueprint.Blueprint, executionID string, initialData map[string]types.Value) (common.ExecutionResult, error) {
 	e.mutex.Lock()
 
-	// Check if blueprint exists
-	bp, exists := e.blueprints[blueprintID]
-	if !exists {
-		e.mutex.Unlock()
-		return ExecutionResult{}, fmt.Errorf("blueprint not found: %s", blueprintID)
-	}
-
-	// Create a unique execution ID
-	executionID := fmt.Sprintf("%s-%d", blueprintID, time.Now().UnixNano())
+	blueprintID := bp.ID
 
 	// Initialize execution status
 	status := &ExecutionStatus{
@@ -212,7 +199,7 @@ func (e *ExecutionEngine) Execute(blueprintID string, initialData map[string]typ
 	e.mutex.Unlock()
 
 	// Initialize result
-	result := ExecutionResult{
+	result := common.ExecutionResult{
 		ExecutionID: executionID,
 		StartTime:   status.StartTime,
 		NodeResults: make(map[string]map[string]interface{}),

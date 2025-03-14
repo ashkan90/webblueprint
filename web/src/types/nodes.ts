@@ -25,11 +25,10 @@ export interface PinTypeDefinition {
 
 // Node property definition
 export interface NodePropertyDefinition {
-    id: string;
     name: string;
     description: string;
     type: string; // 'string', 'number', 'boolean', 'select', etc.
-    default?: any;
+    value?: any;
     options?: string[]; // For select property type
 }
 

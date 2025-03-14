@@ -123,4 +123,8 @@ export class ExecutionManager {
         this.activeNodes.clear();
         this.activePins.clear();
     }
+
+    getExecutionStore() {
+        return this.executionStore
+    }
 }

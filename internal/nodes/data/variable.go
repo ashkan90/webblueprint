@@ -228,6 +228,12 @@ func NewVariableSetNode() node.Node {
 			},
 			Inputs: []types.Pin{
 				{
+					ID:          "exec",
+					Name:        "Execute",
+					Description: "Execution input",
+					Type:        types.PinTypes.Execution,
+				},
+				{
 					ID:          "name",
 					Name:        "Variable Name",
 					Description: "Name of the variable to set",
@@ -241,6 +247,12 @@ func NewVariableSetNode() node.Node {
 				},
 			},
 			Outputs: []types.Pin{
+				{
+					ID:          "then",
+					Name:        "Then",
+					Description: "Execution continues",
+					Type:        types.PinTypes.Execution,
+				},
 				{
 					ID:          "result",
 					Name:        "Result",
@@ -281,8 +293,14 @@ func NewVariableSetNodeFor(varName, varType string) func() node.Node {
 			pinType = types.PinTypes.Array
 		}
 
-		// For specialized nodes, create a single input with the variable name
+		// For specialized nodes, we still need the execution pin
 		node.Inputs = []types.Pin{
+			{
+				ID:          "exec",
+				Name:        "Execute",
+				Description: "Execution input",
+				Type:        types.PinTypes.Execution,
+			},
 			{
 				ID:          strings.ToLower(varName),
 				Name:        varName,
@@ -291,7 +309,21 @@ func NewVariableSetNodeFor(varName, varType string) func() node.Node {
 			},
 		}
 
-		// Output remains the same (result)
+		// Keep the execution output
+		node.Outputs = []types.Pin{
+			{
+				ID:          "then",
+				Name:        "Then",
+				Description: "Execution continues",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "result",
+				Name:        "Result",
+				Description: "True if variable was set successfully",
+				Type:        types.PinTypes.Boolean,
+			},
+		}
 
 		return node
 	}
@@ -409,6 +441,6 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 		Timestamp:   time.Now(),
 	})
 
-	// No execution flow activation needed - this is a pure data node
-	return nil
+	// Continue execution flow
+	return ctx.ActivateOutputFlow("then")
 }

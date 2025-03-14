@@ -2,6 +2,8 @@ import {defineStore} from 'pinia'
 import {computed, ref} from 'vue'
 import type {Blueprint, Function, Connection, Node, Position, Variable} from '../types/blueprint'
 import {v4 as uuid} from 'uuid'
+import {useWorkspaceStore} from "./workspace";
+import {isEqual} from 'lodash' // Need to add this import for comparing objects
 
 export const useBlueprintStore = defineStore('blueprint', () => {
     // State
@@ -17,10 +19,16 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         metadata: {}
     })
 
+    // Track the latest saved state of the blueprint for comparison
+    const latestSavedBlueprint = ref<Blueprint | null>(null)
+    
     const isLoading = ref(false)
     const error = ref<string | null>(null)
 
     const currentEditingFunction = ref<string | null>(null)
+    
+    // Track available versions for the current blueprint
+    const availableVersions = ref<{versionNumber: number, createdAt: string, comment: string}[]>([])
 
     // Getters
     const nodes = computed(() => blueprint.value.nodes || [])
@@ -32,6 +40,14 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         return blueprint.value.variables;
     })
     const functions = computed(() => blueprint.value.functions || [])
+
+    // Check if there are unsaved changes by comparing with the last saved state
+    const hasUnsavedChanges = computed(() => {
+        if (!latestSavedBlueprint.value) return true;
+        
+        // Perform a deep comparison between current blueprint and latest saved
+        return !isEqual(blueprint.value, latestSavedBlueprint.value);
+    })
 
     const getNodeById = computed(() => (id: string) => {
         return blueprint.value.nodes.find(node => node.id === id)
@@ -105,6 +121,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             variables: [],
             metadata: {}
         }
+        // Reset the saved state
+        latestSavedBlueprint.value = null;
+        // Reset available versions
+        availableVersions.value = [];
     }
 
     async function loadBlueprint(id: string) {
@@ -138,6 +158,12 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             }
             
             console.log('Blueprint structure after loading:', blueprint.value);
+            
+            // Save the loaded blueprint as the latest saved state
+            latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
+            
+            // Load available versions
+            await loadBlueprintVersions(id);
         } catch (err) {
             error.value = err instanceof Error ? err.message : String(err)
             console.error('Error loading blueprint:', err)
@@ -146,15 +172,83 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         }
     }
 
-    async function saveBlueprint() {
-        isLoading.value = true
-        error.value = null
+    async function loadBlueprintVersions(blueprintId: string) {
+        try {
+            const response = await fetch(`/api/blueprints/${blueprintId}/versions`);
+            if (!response.ok) {
+                throw new Error(`Failed to load blueprint versions: ${response.statusText}`);
+            }
+            
+            availableVersions.value = await response.json();
+            console.log('Loaded versions:', availableVersions.value);
+        } catch (err) {
+            console.error('Error loading blueprint versions:', err);
+        }
+    }
+
+    async function loadBlueprintVersion(blueprintId: string, versionNumber: number) {
+        isLoading.value = true;
+        error.value = null;
 
         try {
-            const method = blueprint.value.id ? 'PUT' : 'POST'
+            const response = await fetch(`/api/blueprints/${blueprintId}/versions/${versionNumber}`);
+            if (!response.ok) {
+                throw new Error(`Failed to load blueprint version: ${response.statusText}`);
+            }
+
+            blueprint.value = await response.json();
+            
+            // Ensure the blueprint structure is complete
+            if (!blueprint.value.variables) {
+                blueprint.value.variables = [];
+            }
+            
+            if (!blueprint.value.functions) {
+                blueprint.value.functions = [];
+            }
+            
+            if (!blueprint.value.connections) {
+                blueprint.value.connections = [];
+            }
+            
+            if (!blueprint.value.nodes) {
+                blueprint.value.nodes = [];
+            }
+            
+            // Update the latest saved blueprint to match this version
+            latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
+            
+            console.log(`Loaded blueprint version ${versionNumber}`);
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : String(err);
+            console.error('Error loading blueprint version:', err);
+        } finally {
+            isLoading.value = false;
+        }
+    }
+
+    async function saveBlueprint(workspaceId?: string) {
+        isLoading.value = true;
+        error.value = null;
+
+        try {
+            // If there are no unsaved changes, skip saving
+            if (latestSavedBlueprint.value && !hasUnsavedChanges.value) {
+                console.log('No changes detected, skipping save operation');
+                isLoading.value = false;
+                return blueprint.value;
+            }
+
+            // Get workspace ID if not provided
+            const workspace = workspaceId || useWorkspaceStore().currentWorkspace?.id;
+            if (!workspace) {
+                throw new Error('No workspace specified for saving blueprint');
+            }
+
+            const method = blueprint.value.id ? 'PUT' : 'POST';
             const url = blueprint.value.id
-                ? `/api/blueprints/${blueprint.value.id}`
-                : '/api/blueprints'
+                ? `/api/blueprints/${blueprint.value.id}?workspace=${workspace}`
+                : `/api/blueprints?workspace=${workspace}`;
 
             const response = await fetch(url, {
                 method,
@@ -162,13 +256,13 @@ export const useBlueprintStore = defineStore('blueprint', () => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(blueprint.value)
-            })
+            });
 
             if (!response.ok) {
-                throw new Error(`Failed to save blueprint: ${response.statusText}`)
+                throw new Error(`Failed to save blueprint: ${response.statusText}`);
             }
 
-            blueprint.value = await response.json()
+            blueprint.value = await response.json();
             
             // Ensure the blueprint structure is complete after saving
             if (!blueprint.value.variables) {
@@ -187,12 +281,62 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             if (!blueprint.value.nodes) {
                 blueprint.value.nodes = [];
             }
+            
+            // Update the latest saved state
+            latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
+            
+            // Refresh available versions
+            await loadBlueprintVersions(blueprint.value.id);
+            
+            return blueprint.value;
         } catch (err) {
-            error.value = err instanceof Error ? err.message : String(err)
-            console.error('Error saving blueprint:', err)
-            throw err
+            error.value = err instanceof Error ? err.message : String(err);
+            console.error('Error saving blueprint:', err);
+            throw err;
         } finally {
-            isLoading.value = false
+            isLoading.value = false;
+        }
+    }
+
+    // Function to manually create a new version with a comment
+    async function createNewVersion(comment: string = 'Manual save') {
+        if (!blueprint.value.id) {
+            error.value = 'Cannot create a version for an unsaved blueprint';
+            return;
+        }
+
+        isLoading.value = true;
+        error.value = null;
+
+        try {
+            const response = await fetch(`/api/blueprints/${blueprint.value.id}/versions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ comment })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to create blueprint version: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log('Created new version:', result);
+            
+            // Refresh available versions
+            await loadBlueprintVersions(blueprint.value.id);
+            
+            // Update the latest saved state
+            latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
+            
+            return result.versionNumber;
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : String(err);
+            console.error('Error creating blueprint version:', err);
+            throw err;
+        } finally {
+            isLoading.value = false;
         }
     }
 
@@ -286,9 +430,9 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         )
     }
 
-    async function addVariable(variable: Variable) {
+    async function addVariable(workspaceId: string, variable: Variable) {
         // [sink] try to save blueprint before saving variable
-        await saveBlueprint()
+        await saveBlueprint(workspaceId)
 
         try {
             const url = `/api/blueprints/${blueprint.value.id}/variable`
@@ -312,6 +456,9 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             // Add the variable
             console.log('Adding variable to blueprint:', variable);
             blueprint.value.variables.push(await variableResponse.json());
+            
+            // Update the latest saved state
+            latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
         } catch (e) {
             console.log('Something went wrong while adding variable to blueprint', e)
         }
@@ -388,9 +535,14 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         isNodePinConnected,
         isFunctionEditing,
         findEntryPoints,
+        hasUnsavedChanges,
+        availableVersions,
         createBlueprint,
         loadBlueprint,
+        loadBlueprintVersion,
+        loadBlueprintVersions,
         saveBlueprint,
+        createNewVersion,
         addNode,
         updateNode,
         updateNodePosition,

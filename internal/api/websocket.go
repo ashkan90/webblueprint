@@ -19,6 +19,7 @@ type WebSocketManager struct {
 	unregister chan *WebSocketClient
 	broadcast  chan []byte
 	mutex      sync.RWMutex
+	Logger     Logger // Logger interface for error handling
 }
 
 // WebSocketClient represents a connected WebSocket client
@@ -73,42 +74,42 @@ func NewWebSocketManager() *WebSocketManager {
 }
 
 // run handles client registration and broadcasting
-func (m *WebSocketManager) run() {
+func (h *WebSocketManager) run() {
 	for {
 		select {
-		case client := <-m.register:
-			m.mutex.Lock()
-			m.clients[client.clientID] = client
-			m.mutex.Unlock()
+		case client := <-h.register:
+			h.mutex.Lock()
+			h.clients[client.clientID] = client
+			h.mutex.Unlock()
 			log.Printf("Client connected: %s", client.clientID)
 
-		case client := <-m.unregister:
-			m.mutex.Lock()
-			if _, ok := m.clients[client.clientID]; ok {
-				delete(m.clients, client.clientID)
+		case client := <-h.unregister:
+			h.mutex.Lock()
+			if _, ok := h.clients[client.clientID]; ok {
+				delete(h.clients, client.clientID)
 				close(client.send)
 			}
-			m.mutex.Unlock()
+			h.mutex.Unlock()
 			log.Printf("Client disconnected: %s", client.clientID)
 
-		case message := <-m.broadcast:
-			m.mutex.RLock()
-			for _, client := range m.clients {
+		case message := <-h.broadcast:
+			h.mutex.RLock()
+			for _, client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
 					// Channel full, close connection
 					close(client.send)
-					delete(m.clients, client.clientID)
+					delete(h.clients, client.clientID)
 				}
 			}
-			m.mutex.RUnlock()
+			h.mutex.RUnlock()
 		}
 	}
 }
 
 // HandleWebSocket handles a new WebSocket connection
-func (m *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+func (h *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -119,14 +120,14 @@ func (m *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 	// Create a new client
 	clientID := fmt.Sprintf("client-%d", time.Now().UnixNano())
 	client := &WebSocketClient{
-		manager:  m,
+		manager:  h,
 		conn:     conn,
 		send:     make(chan []byte, 256),
 		clientID: clientID,
 	}
 
 	// Register client
-	m.register <- client
+	h.register <- client
 
 	// Start client handlers
 	go client.readPump()
@@ -140,7 +141,7 @@ func (m *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 }
 
 // BroadcastMessage sends a message to all connected clients
-func (m *WebSocketManager) BroadcastMessage(messageType string, payload interface{}) {
+func (h *WebSocketManager) BroadcastMessage(messageType string, payload interface{}) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		log.Printf("Error marshaling message payload: %v", err)
@@ -158,7 +159,7 @@ func (m *WebSocketManager) BroadcastMessage(messageType string, payload interfac
 		return
 	}
 
-	m.broadcast <- msgData
+	h.broadcast <- msgData
 }
 
 // readPump handles messages from the client

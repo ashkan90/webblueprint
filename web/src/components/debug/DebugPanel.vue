@@ -209,7 +209,7 @@
       <div v-if="activeTab === 'timeline'" class="tab-content">
         <h3>Execution Timeline</h3>
 
-        <div v-if="timelineEvents.length === 0" class="empty-state">
+        <div v-if="timelineEvents?.length === 0" class="empty-state">
           No execution events recorded yet.
         </div>
 
@@ -361,7 +361,8 @@ const timelineEvents = computed(() => {
   })
 
   // Sort by timestamp
-  return events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+  return events
+  // return events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 })
 
 // Methods

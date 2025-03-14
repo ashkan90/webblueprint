@@ -362,10 +362,15 @@ type Pin struct {
 	Default     interface{} // Default value if not connected
 }
 
-// Property ...
+// Property represents a configurable property of a node
 type Property struct {
-	Name  string      `json:"name"`
-	Value interface{} `json:"value"`
+	Name         string      `json:"name"`              // Identifier for the property
+	DisplayName  string      `json:"displayName"`       // Human-friendly name for display in UI
+	Description  string      `json:"description"`       // Description of what the property does
+	Value        interface{} `json:"value"`             // Current value of the property
+	DefaultValue interface{} `json:"defaultValue"`      // Default value if not set
+	Type         *PinType    `json:"type"`              // Type of data for this property
+	Options      []string    `json:"options,omitempty"` // For select type, available options
 }
 
 // DebugInfo stores debug information during execution

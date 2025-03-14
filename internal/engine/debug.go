@@ -14,14 +14,18 @@ type DebugManager struct {
 	// Maps: executionID -> nodeID -> pinID -> value
 	outputValues map[string]map[string]map[string]interface{}
 
+	// Maps: executionID -> data
+	executionData map[string]map[string]interface{}
+
 	mutex sync.RWMutex
 }
 
 // NewDebugManager creates a new debug manager
 func NewDebugManager() *DebugManager {
 	return &DebugManager{
-		debugData:    make(map[string]map[string]map[string]interface{}),
-		outputValues: make(map[string]map[string]map[string]interface{}),
+		debugData:     make(map[string]map[string]map[string]interface{}),
+		outputValues:  make(map[string]map[string]map[string]interface{}),
+		executionData: make(map[string]map[string]interface{}),
 	}
 }
 
@@ -42,6 +46,25 @@ func (dm *DebugManager) StoreNodeDebugData(executionID, nodeID string, data map[
 	// Store data with timestamp
 	for key, value := range data {
 		dm.debugData[executionID][nodeID][key] = map[string]interface{}{
+			"value":     value,
+			"timestamp": time.Now(),
+		}
+	}
+}
+
+// StoreExecutionDebugData stores debug data for an entire execution
+func (dm *DebugManager) StoreExecutionDebugData(executionID string, data map[string]interface{}) {
+	dm.mutex.Lock()
+	defer dm.mutex.Unlock()
+
+	// Initialize map if needed
+	if _, exists := dm.executionData[executionID]; !exists {
+		dm.executionData[executionID] = make(map[string]interface{})
+	}
+
+	// Store data with timestamp
+	for key, value := range data {
+		dm.executionData[executionID][key] = map[string]interface{}{
 			"value":     value,
 			"timestamp": time.Now(),
 		}
@@ -107,6 +130,23 @@ func (dm *DebugManager) GetNodeDebugData(executionID, nodeID string) (map[string
 	return nil, false
 }
 
+// GetExecutionDebugData retrieves debug data for an execution
+func (dm *DebugManager) GetExecutionDebugData(executionID string) map[string]interface{} {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
+	if execData, exists := dm.executionData[executionID]; exists {
+		// Create a copy to avoid race conditions
+		result := make(map[string]interface{})
+		for key, value := range execData {
+			result[key] = value
+		}
+		return result
+	}
+
+	return nil
+}
+
 // GetNodeOutputValue retrieves an output value for a node
 func (dm *DebugManager) GetNodeOutputValue(executionID, nodeID, pinID string) (interface{}, bool) {
 	dm.mutex.RLock()
@@ -161,8 +201,8 @@ func (dm *DebugManager) GetAllNodeOutputValues(executionID, nodeID string) (map[
 	return nil, false
 }
 
-// GetExecutionDebugData retrieves all debug data for an execution
-func (dm *DebugManager) GetExecutionDebugData(executionID string) map[string]map[string]interface{} {
+// GetAllNodeDebugData retrieves all debug data for all nodes in an execution
+func (dm *DebugManager) GetAllNodeDebugData(executionID string) map[string]map[string]interface{} {
 	dm.mutex.RLock()
 	defer dm.mutex.RUnlock()
 
@@ -208,6 +248,7 @@ func (dm *DebugManager) ClearExecutionData(executionID string) {
 
 	delete(dm.debugData, executionID)
 	delete(dm.outputValues, executionID)
+	delete(dm.executionData, executionID)
 }
 
 // ClearAllData removes all debug data
@@ -217,4 +258,5 @@ func (dm *DebugManager) ClearAllData() {
 
 	dm.debugData = make(map[string]map[string]map[string]interface{})
 	dm.outputValues = make(map[string]map[string]map[string]interface{})
+	dm.executionData = make(map[string]map[string]interface{})
 }

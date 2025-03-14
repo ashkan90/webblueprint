@@ -5,18 +5,18 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"webblueprint/internal/db"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	"webblueprint/pkg/blueprint"
 )
 
 // NodeActor represents a single node in the actor model system
 type NodeActor struct {
 	NodeID      string
 	NodeType    string
-	BlueprintID string
 	ExecutionID string
 	node        node.Node
+	bp          *blueprint.Blueprint
 	mailbox     chan NodeMessage
 	inputs      map[string]types.Value
 	outputs     map[string]types.Value
@@ -28,6 +28,7 @@ type NodeActor struct {
 	debugMgr    *DebugManager
 	done        chan struct{}
 	mutex       sync.RWMutex
+	properties  []types.Property // Store node properties from the blueprint
 }
 
 // NodeMessage represents a message that can be sent to a NodeActor
@@ -48,7 +49,9 @@ type NodeResponse struct {
 
 // NewNodeActor creates a new actor for a node
 func NewNodeActor(
-	nodeID, nodeType, blueprintID, executionID string,
+	nodeID, nodeType string,
+	bp *blueprint.Blueprint,
+	executionID string,
 	nodeInstance node.Node,
 	logger node.Logger,
 	listeners []ExecutionListener,
@@ -61,12 +64,27 @@ func NewNodeActor(
 		varsCopy[k] = v
 	}
 
+	// Load node properties from blueprint
+	var properties []types.Property
+	if node := bp.FindNode(nodeID); node != nil {
+		for _, property := range node.Properties {
+			properties = append(properties, types.Property{
+				Name:  property.Name,
+				Value: property.Value,
+			})
+		}
+		logger.Debug("Loaded node properties", map[string]interface{}{
+			"nodeId":          nodeID,
+			"propertiesCount": len(properties),
+		})
+	}
+
 	return &NodeActor{
 		NodeID:      nodeID,
 		NodeType:    nodeType,
-		BlueprintID: blueprintID,
 		ExecutionID: executionID,
 		node:        nodeInstance,
+		bp:          bp,
 		mailbox:     make(chan NodeMessage, 50), // Buffer for handling multiple messages
 		inputs:      make(map[string]types.Value),
 		outputs:     make(map[string]types.Value),
@@ -75,10 +93,11 @@ func NewNodeActor(
 			NodeID: nodeID,
 			Status: "idle",
 		},
-		logger:    logger,
-		listeners: listeners,
-		debugMgr:  debugMgr,
-		done:      make(chan struct{}),
+		logger:     logger,
+		listeners:  listeners,
+		debugMgr:   debugMgr,
+		done:       make(chan struct{}),
+		properties: properties,
 	}
 }
 
@@ -88,7 +107,7 @@ func (a *NodeActor) Start() {
 	a.ctx = NewActorExecutionContext(
 		a.NodeID,
 		a.NodeType,
-		a.BlueprintID,
+		a.bp.ID,
 		a.ExecutionID,
 		a.logger,
 		a,
@@ -154,6 +173,16 @@ func (a *NodeActor) SendAsync(msg NodeMessage) bool {
 		})
 		return false
 	}
+}
+
+// GetProperty retrieves a property value by name
+func (a *NodeActor) GetProperty(name string) (interface{}, bool) {
+	for _, prop := range a.properties {
+		if prop.Name == name {
+			return prop.Value, true
+		}
+	}
+	return nil, false
 }
 
 // processMessages handles messages from the mailbox
@@ -273,13 +302,13 @@ func (a *NodeActor) handleInputMessage(msg NodeMessage) NodeResponse {
 		}
 	}
 
-	if msg.Value.Type == nil || msg.Value.RawValue == nil {
-		a.logger.Warn("Received nil value for pin", map[string]interface{}{
+	if msg.Value.Type == nil {
+		a.logger.Warn("Received nil type for pin", map[string]interface{}{
 			"pinId": msg.PinID,
 		})
 	}
 
-	// Store the input value
+	// Store the input value - even if it's an empty string, as long as the type is valid
 	a.mutex.Lock()
 	a.inputs[msg.PinID] = msg.Value
 	a.mutex.Unlock()
@@ -436,10 +465,6 @@ func NewActorExecutionContext(
 	}
 	actor.mutex.RUnlock()
 
-	//for _, pin := range actor.node.GetInputPins() {
-	//
-	//}
-
 	return &ActorExecutionContext{
 		nodeID:         nodeID,
 		nodeType:       nodeType,
@@ -473,11 +498,19 @@ func (ctx *ActorExecutionContext) GetActivatedOutputFlows() []string {
 	return flows
 }
 
+func (ctx *ActorExecutionContext) GetBlueprint() *blueprint.Blueprint {
+	ctx.mutex.RLock()
+	defer ctx.mutex.RUnlock()
+	return ctx.actor.bp
+}
+
 // Implementation of node.ExecutionContext interface for ActorExecutionContext
 
 // GetInputValue retrieves an input value by pin ID
 func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
+	ctx.mutex.RLock()
 	value, exists := ctx.inputs[pinID]
+	ctx.mutex.RUnlock()
 
 	// If the value exists, return it
 	if exists {
@@ -500,86 +533,111 @@ func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool
 
 	// If the value doesn't exist in direct inputs, try to find it from connected variable nodes
 	// Get the blueprint
-	bp, err := db.Blueprints.GetBlueprint(ctx.GetBlueprintID())
-	if err == nil {
-		// Get input connections for this node
-		inputConnections := bp.GetNodeInputConnections(ctx.GetNodeID())
+	bp := ctx.GetBlueprint()
+	// Get input connections for this node
+	inputConnections := bp.GetNodeInputConnections(ctx.GetNodeID())
 
-		// Look for connections to this pin from variable nodes
-		for _, conn := range inputConnections {
-			if conn.TargetPinID == pinID && conn.ConnectionType == "data" {
-				// Check if the source node is a variable getter
-				sourceNode := bp.FindNode(conn.SourceNodeID)
-				if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
-					// Extract variable name from the node type
-					varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+	// Look for connections to this pin from variable nodes
+	for _, conn := range inputConnections {
+		if conn.TargetPinID == pinID && conn.ConnectionType == "data" {
+			// Check if the source node is a variable getter
+			sourceNode := bp.FindNode(conn.SourceNodeID)
+			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+				// Extract variable name from the node type
+				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
 
-					// Try to get the variable value from the execution context
-					if varValue, varExists := ctx.GetVariable(varName); varExists {
-						// Log the access
-						//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
-						//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, varValue.RawValue)
-						//}
-						return varValue, true
-					}
+				// Try to get the variable value from the execution context
+				if varValue, varExists := ctx.GetVariable(varName); varExists {
+					return varValue, true
+				}
+			}
+
+			if sourceNode != nil {
+				for _, property := range sourceNode.Properties {
+					var propType = ctx.resolveConstantType(ctx.nodeType)
+					return types.NewValue(propType, property.Value), true
 				}
 			}
 		}
 	}
 
-	// If the value doesn't exist, try to find a default value
-	// First check the node properties for input_[pinID]
-	if err != nil {
-		return types.Value{}, false
+	// Check for property-based defaults
+
+	// First, check if there's a node property for this input
+	// Check for "input_[pinID]" property (used for print's message input)
+	if propValue, exists := ctx.getPropertyValue(fmt.Sprintf("input_%s", pinID)); exists {
+		// Get appropriate pin type based on the node and pin
+		pinType := ctx.getPinTypeForInput(pinID)
+		defaultValue := types.NewValue(pinType, propValue)
+
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.nodeID,
+			PinID:       pinID,
+			Description: "Property default value used",
+			Value: map[string]interface{}{
+				"default": propValue,
+				"source":  "node property input_" + pinID,
+			},
+			Timestamp: time.Now(),
+		})
+
+		return defaultValue, true
 	}
 
-	_node := bp.FindNode(ctx.GetNodeID())
-	if _node == nil {
-		return types.Value{}, false
-	}
+	// For constant nodes, check "constantValue" property
+	if strings.HasPrefix(ctx.nodeType, "constant-") && (pinID == "value" || pinID == "constantValue") {
+		if propValue, exists := ctx.getPropertyValue("constantValue"); exists {
+			// Determine the type based on the node type
+			var pinType = ctx.resolveConstantType(ctx.nodeType)
+			// şş
 
-	for _, prop := range _node.Properties {
-		if prop.Name == fmt.Sprintf("input_%s", pinID) || prop.Name == "constantValue" {
-			// Create a value from the default
-			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+			defaultValue := types.NewValue(pinType, propValue)
 
-			//// Log the default value usage
-			//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
-			//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
-			//}
-
-			// Add to debug data
 			ctx.RecordDebugInfo(types.DebugInfo{
 				NodeID:      ctx.nodeID,
 				PinID:       pinID,
-				Description: "Default value used",
+				Description: "Constant default value used",
 				Value: map[string]interface{}{
-					"default": defaultValue.RawValue,
-					"source":  "node property",
+					"default": propValue,
+					"source":  "constantValue property",
 				},
 				Timestamp: time.Now(),
 			})
 
 			return defaultValue, true
 		}
+	}
 
-		if prop.Name == fmt.Sprintf("_loop_%s", pinID) {
-			// Create a value from the default
-			defaultValue := types.NewValue(types.PinTypes.Any, prop.Value)
+	// Check for a loop-specific property
+	if propValue, exists := ctx.getPropertyValue(fmt.Sprintf("_loop_%s", pinID)); exists {
+		defaultValue := types.NewValue(types.PinTypes.Any, propValue)
 
-			//// Log the default value usage
-			//if ctx.hooks != nil && ctx.hooks.OnPinValue != nil {
-			//	ctx.hooks.OnPinValue(ctx.nodeID, pinID, defaultValue.RawValue)
-			//}
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.nodeID,
+			PinID:       pinID,
+			Description: "Loop default value used",
+			Value: map[string]interface{}{
+				"default": propValue,
+				"source":  "loop property",
+			},
+			Timestamp: time.Now(),
+		})
 
-			// Add to debug data
+		return defaultValue, true
+	}
+
+	// Check for defaults from node definition if we still haven't found a value
+	for _, pin := range ctx.actor.node.GetInputPins() {
+		if pin.ID == pinID && pin.Default != nil {
+			defaultValue := types.NewValue(pin.Type, pin.Default)
+
 			ctx.RecordDebugInfo(types.DebugInfo{
 				NodeID:      ctx.nodeID,
 				PinID:       pinID,
-				Description: "Default value used",
+				Description: "Pin default value used",
 				Value: map[string]interface{}{
-					"default": defaultValue.RawValue,
-					"source":  "node property",
+					"default": pin.Default,
+					"source":  "pin definition",
 				},
 				Timestamp: time.Now(),
 			})
@@ -590,6 +648,52 @@ func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool
 
 	// No value or default found
 	return types.Value{}, false
+}
+
+func (ctx *ActorExecutionContext) resolveConstantType(nodeType string) *types.PinType {
+	switch nodeType {
+	case "constant-string":
+		return types.PinTypes.String
+	case "constant-number":
+		return types.PinTypes.Number
+	case "constant-boolean":
+		return types.PinTypes.Boolean
+	default:
+		return types.PinTypes.Any
+	}
+}
+
+// getPropertyValue retrieves a property value from the actor's properties
+func (ctx *ActorExecutionContext) getPropertyValue(name string) (interface{}, bool) {
+	return ctx.actor.GetProperty(name)
+}
+
+// getPinTypeForInput determines the appropriate type for an input pin
+func (ctx *ActorExecutionContext) getPinTypeForInput(pinID string) *types.PinType {
+	// Try to get the type from pin definitions
+	for _, pin := range ctx.actor.node.GetInputPins() {
+		if pin.ID == pinID {
+			return pin.Type
+		}
+	}
+
+	// Default to appropriate type based on node type and pin ID
+	if ctx.nodeType == "print" && pinID == "message" {
+		return types.PinTypes.Any // Print accepts any type
+	} else if strings.HasPrefix(ctx.nodeType, "constant-") {
+		// Set type based on constant type
+		switch ctx.nodeType {
+		case "constant-string":
+			return types.PinTypes.String
+		case "constant-number":
+			return types.PinTypes.Number
+		case "constant-boolean":
+			return types.PinTypes.Boolean
+		}
+	}
+
+	// Default to Any if we can't determine a specific type
+	return types.PinTypes.Any
 }
 
 // SetOutputValue sets an output value by pin ID

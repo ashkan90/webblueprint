@@ -1,0 +1,136 @@
+import { defineStore } from 'pinia';
+import {
+  BlueprintError,
+  ErrorAnalysis,
+  RecoveryAttempt,
+  ErrorType,
+  ErrorSeverity,
+  RecoveryStrategy
+} from '../types/errors';
+
+export const useErrorStore = defineStore('errorHandler', {
+  state: () => ({
+    errors: [] as BlueprintError[],
+    errorAnalysis: null as ErrorAnalysis | null,
+    recoveryAttempts: [] as RecoveryAttempt[],
+    selectedError: null as BlueprintError | null,
+  }),
+  
+  getters: {
+    errorsByNode: (state) => {
+      const result: Record<string, BlueprintError[]> = {};
+      
+      state.errors.forEach(error => {
+        if (error.nodeId) {
+          if (!result[error.nodeId]) {
+            result[error.nodeId] = [];
+          }
+          result[error.nodeId].push(error);
+        }
+      });
+      
+      return result;
+    },
+    
+    errorsByType: (state) => {
+      const result: Record<string, BlueprintError[]> = {};
+      
+      state.errors.forEach(error => {
+        if (!result[error.type]) {
+          result[error.type] = [];
+        }
+        result[error.type].push(error);
+      });
+      
+      return result;
+    },
+    
+    recoverableErrors: (state) => {
+      return state.errors.filter(error => error.recoverable);
+    },
+    
+    hasErrors: (state) => state.errors.length > 0,
+    
+    hasCriticalErrors: (state) => {
+      return state.errors.some(error => 
+        error.severity === ErrorSeverity.Critical || 
+        error.severity === ErrorSeverity.High
+      );
+    }
+  },
+  
+  actions: {
+    addError(error: BlueprintError) {
+      // Add expanded property for UI toggling
+      error.expanded = false;
+      this.errors.push(error);
+    },
+    
+    updateErrorAnalysis(analysis: ErrorAnalysis) {
+      this.errorAnalysis = analysis;
+    },
+    
+    addRecoveryAttempt(attempt: RecoveryAttempt) {
+      this.recoveryAttempts.push(attempt);
+    },
+    
+    clearErrors() {
+      this.errors = [];
+      this.errorAnalysis = null;
+    },
+    
+    clearRecoveryAttempts() {
+      this.recoveryAttempts = [];
+    },
+    
+    selectError(error: BlueprintError) {
+      this.selectedError = error;
+    },
+    
+    clearSelectedError() {
+      this.selectedError = null;
+    },
+    
+    getErrorsForNode(nodeId: string): BlueprintError[] {
+      return this.errors.filter(error => error.nodeId === nodeId);
+    },
+    
+    getRecoveryAttemptsForNode(nodeId: string): RecoveryAttempt[] {
+      return this.recoveryAttempts.filter(attempt => attempt.nodeId === nodeId);
+    },
+    
+    async recoverFromError(error: BlueprintError, strategy?: RecoveryStrategy) {
+      if (!error.recoverable) return false;
+      
+      // Use the first strategy if none specified
+      if (!strategy && error.recoveryOptions && error.recoveryOptions.length > 0) {
+        strategy = error.recoveryOptions[0];
+      }
+      
+      try {
+        const response = await fetch('/api/errors/recover', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            executionId: error.executionId,
+            nodeId: error.nodeId,
+            errorCode: error.code,
+            strategy
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to recover from error');
+        }
+        
+        const result = await response.json();
+        return result;
+      } catch (err) {
+        console.error('Error recovery failed:', err);
+        return { success: false, error: err };
+      }
+    }
+  }
+});
