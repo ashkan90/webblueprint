@@ -87,19 +87,6 @@ func (dm *DebugManager) StoreNodeOutputValue(executionID, nodeID, pinID string, 
 
 	// Store the value
 	dm.outputValues[executionID][nodeID][pinID] = value
-
-	// Log for debugging
-	fmt.Printf("[DEBUG] Stored output value for %s.%s: %v (type: %T)\n",
-		nodeID, pinID, value, value)
-
-	// Dump the entire outputValues map structure for debugging
-	fmt.Printf("[DEBUG] Current outputValues structure for execution %s:\n", executionID)
-	for n, pins := range dm.outputValues[executionID] {
-		fmt.Printf("  Node %s:\n", n)
-		for p, v := range pins {
-			fmt.Printf("    Pin %s: %v (type: %T)\n", p, v, v)
-		}
-	}
 }
 
 // ClearCachedPinTypes clears any cached type information for a pin

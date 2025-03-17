@@ -5,6 +5,9 @@ import router from './router'
 
 import './assets/scss/style.scss'
 
+// Import error handling setup
+import './error-handling-setup'
+
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)

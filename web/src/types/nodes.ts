@@ -26,6 +26,7 @@ export interface PinTypeDefinition {
 // Node property definition
 export interface NodePropertyDefinition {
     name: string;
+    displayName: string;
     description: string;
     type: string; // 'string', 'number', 'boolean', 'select', etc.
     value?: any;

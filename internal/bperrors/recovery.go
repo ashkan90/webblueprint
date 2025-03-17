@@ -158,8 +158,9 @@ func (rm *RecoveryManager) GetDefaultValue(pinType *types.PinType) (types.Value,
 
 // GetRecoveryAttempts gets recovery attempts for a node in an execution
 func (rm *RecoveryManager) GetRecoveryAttempts(executionID, nodeID string) []RecoveryContext {
-	rm.mutex.RLock()
-	defer rm.mutex.RUnlock()
+	if rm.mutex.TryRLock() {
+		defer rm.mutex.RUnlock()
+	}
 
 	if attempts, ok := rm.recoveryAttempts[executionID]; ok {
 		if nodeAttempts, ok := attempts[nodeID]; ok {
@@ -179,8 +180,6 @@ func (rm *RecoveryManager) ClearRecoveryAttempts(executionID string) {
 
 // CountRecoveryAttempts counts how many times a specific recovery strategy has been attempted
 func (rm *RecoveryManager) CountRecoveryAttempts(executionID, nodeID string, strategy RecoveryStrategy) int {
-	rm.mutex.RLock()
-	defer rm.mutex.RUnlock()
 
 	count := 0
 	attempts := rm.GetRecoveryAttempts(executionID, nodeID)

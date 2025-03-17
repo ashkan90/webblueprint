@@ -105,8 +105,8 @@ import ErrorPanel from '../components/debug/ErrorPanel.vue';
 import ErrorTestingPanel from '../components/debug/ErrorTestingPanel.vue';
 
 import { useExecutionStore } from '../stores/execution';
-import { useErrorStore } from '../stores/errorHandler';
-import { useErrorViewStore } from '../stores/errorView';
+import { useErrorStore } from '../stores/errorStore';
+import { useErrorViewStore } from '../stores/errorViewStore';
 
 // Stores
 const executionStore = useExecutionStore();

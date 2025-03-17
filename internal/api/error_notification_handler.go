@@ -78,39 +78,17 @@ func (h *ErrorNotificationHandler) HandleExecutionError(executionID string, err 
 
 // sendErrorNotification sends an error notification to clients
 func (h *ErrorNotificationHandler) sendErrorNotification(executionID string, err *errors.BlueprintError) {
-	notification := ErrorNotification{
-		Type:        "error",
-		Error:       err,
-		ExecutionID: executionID,
-	}
-
-	h.wsHandler.BroadcastMessage(MsgTypeNodeError, notification)
+	h.wsHandler.SendErrorNotification(executionID, err)
 }
 
 // sendErrorAnalysisNotification sends an error analysis notification to clients
 func (h *ErrorNotificationHandler) sendErrorAnalysisNotification(executionID string, analysis map[string]interface{}) {
-	notification := ErrorAnalysisNotification{
-		Type:        "error_analysis",
-		Analysis:    analysis,
-		ExecutionID: executionID,
-	}
-
-	h.wsHandler.BroadcastMessage(MsgTypeDebugData, notification)
+	h.wsHandler.SendErrorAnalysisNotification(executionID, analysis)
 }
 
 // sendRecoveryNotification sends a recovery notification to clients
 func (h *ErrorNotificationHandler) sendRecoveryNotification(executionID, nodeID, errorCode, strategy string, successful bool, details map[string]interface{}) {
-	notification := RecoveryNotification{
-		Type:        "recovery_attempt",
-		Successful:  successful,
-		Strategy:    strategy,
-		NodeID:      nodeID,
-		ErrorCode:   errorCode,
-		Details:     details,
-		ExecutionID: executionID,
-	}
-
-	h.wsHandler.BroadcastMessage(MsgTypeExecStatus, notification)
+	h.wsHandler.SendRecoveryNotification(executionID, nodeID, errorCode, strategy, successful, details)
 }
 
 // TestErrorScenario triggers a test error scenario

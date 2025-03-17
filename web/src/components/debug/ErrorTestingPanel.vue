@@ -94,161 +94,129 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref } from 'vue';
-import { ErrorType, ErrorSeverity, BlueprintErrorCode } from '../../types/errors';
+<script setup lang="ts">
+import {ref} from 'vue';
+import {BlueprintErrorCode, ErrorSeverity, ErrorType} from '../../types/errors';
 
-export default defineComponent({
-  name: 'ErrorTestingPanel',
-  
-  setup() {
-    // State
-    const executionId = ref(`test-${Date.now()}`);
-    const errorType = ref(ErrorType.Execution);
-    const errorCode = ref(BlueprintErrorCode.NodeExecutionFailed);
-    const severity = ref(ErrorSeverity.Medium);
-    const nodeId = ref('');
-    const message = ref('Test error message');
-    const recoverable = ref(true);
-    const scenarioType = ref('execution_failure');
-    const result = ref<any>(null);
-    
-    // Error code options for dropdown
-    const errorCodes = [
-      { value: BlueprintErrorCode.NodeExecutionFailed, label: 'E001 - Node Execution Failed' },
-      { value: BlueprintErrorCode.NodeNotFound, label: 'E002 - Node Not Found' },
-      { value: BlueprintErrorCode.NodeTypeNotRegistered, label: 'E003 - Node Type Not Registered' },
-      { value: BlueprintErrorCode.ExecutionTimeout, label: 'E004 - Execution Timeout' },
-      { value: BlueprintErrorCode.ExecutionCancelled, label: 'E005 - Execution Cancelled' },
-      { value: BlueprintErrorCode.NoEntryPoints, label: 'E006 - No Entry Points' },
-      { value: BlueprintErrorCode.InvalidConnection, label: 'C001 - Invalid Connection' },
-      { value: BlueprintErrorCode.CircularDependency, label: 'C002 - Circular Dependency' },
-      { value: BlueprintErrorCode.MissingRequiredInput, label: 'C003 - Missing Required Input' },
-      { value: BlueprintErrorCode.TypeMismatch, label: 'C004 - Type Mismatch' },
-      { value: BlueprintErrorCode.NodeDisconnected, label: 'C005 - Node Disconnected' },
-      { value: BlueprintErrorCode.InvalidBlueprintStructure, label: 'V001 - Invalid Blueprint Structure' },
-      { value: BlueprintErrorCode.InvalidNodeConfiguration, label: 'V002 - Invalid Node Configuration' },
-      { value: BlueprintErrorCode.MissingProperty, label: 'V003 - Missing Property' },
-      { value: BlueprintErrorCode.InvalidPropertyValue, label: 'V004 - Invalid Property Value' },
-      { value: BlueprintErrorCode.DatabaseConnection, label: 'D001 - Database Connection' },
-      { value: BlueprintErrorCode.BlueprintNotFound, label: 'D002 - Blueprint Not Found' },
-      { value: BlueprintErrorCode.BlueprintVersionNotFound, label: 'D003 - Blueprint Version Not Found' },
-      { value: BlueprintErrorCode.DatabaseQuery, label: 'D004 - Database Query' },
-      { value: BlueprintErrorCode.InternalServerError, label: 'S001 - Internal Server Error' },
-      { value: BlueprintErrorCode.ResourceExhausted, label: 'S002 - Resource Exhausted' },
-      { value: BlueprintErrorCode.SystemUnavailable, label: 'S003 - System Unavailable' },
-      { value: BlueprintErrorCode.Unknown, label: 'U001 - Unknown Error' },
-    ];
-    
-    // Generate arrays from enums for dropdowns
-    const errorTypes = Object.values(ErrorType);
-    const severities = Object.values(ErrorSeverity);
-    
-    // Methods
-    async function generateError() {
-      try {
-        // Ensure we have an execution ID
-        if (!executionId.value) {
-          executionId.value = `test-${Date.now()}`;
-        }
-        
-        // Send API request to generate a test error
-        const response = await fetch('/api/test/generate-error', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            executionId: executionId.value,
-            errorType: errorType.value,
-            errorCode: errorCode.value,
-            message: message.value,
-            severity: severity.value,
-            nodeId: nodeId.value,
-            recoverable: recoverable.value
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to generate error: ${response.statusText}`);
-        }
-        
-        // Parse response
-        const data = await response.json();
-        result.value = data;
-        
-      } catch (error) {
-        console.error('Error generating test error:', error);
-        result.value = {
-          success: false,
-          error: {
-            message: error instanceof Error ? error.message : String(error)
-          }
-        };
-      }
+const executionId = ref(`test-${Date.now()}`);
+const errorType = ref(ErrorType.Execution);
+const errorCode = ref(BlueprintErrorCode.NodeExecutionFailed);
+const severity = ref(ErrorSeverity.Medium);
+const nodeId = ref('');
+const message = ref('Test error message');
+const recoverable = ref(true);
+const scenarioType = ref('execution_failure');
+const result = ref<any>(null);
+
+// Error code options for dropdown
+const errorCodes = [
+  { value: BlueprintErrorCode.NodeExecutionFailed, label: 'E001 - Node Execution Failed' },
+  { value: BlueprintErrorCode.NodeNotFound, label: 'E002 - Node Not Found' },
+  { value: BlueprintErrorCode.NodeTypeNotRegistered, label: 'E003 - Node Type Not Registered' },
+  { value: BlueprintErrorCode.ExecutionTimeout, label: 'E004 - Execution Timeout' },
+  { value: BlueprintErrorCode.ExecutionCancelled, label: 'E005 - Execution Cancelled' },
+  { value: BlueprintErrorCode.NoEntryPoints, label: 'E006 - No Entry Points' },
+  { value: BlueprintErrorCode.InvalidConnection, label: 'C001 - Invalid Connection' },
+  { value: BlueprintErrorCode.CircularDependency, label: 'C002 - Circular Dependency' },
+  { value: BlueprintErrorCode.MissingRequiredInput, label: 'C003 - Missing Required Input' },
+  { value: BlueprintErrorCode.TypeMismatch, label: 'C004 - Type Mismatch' },
+  { value: BlueprintErrorCode.NodeDisconnected, label: 'C005 - Node Disconnected' },
+  { value: BlueprintErrorCode.InvalidBlueprintStructure, label: 'V001 - Invalid Blueprint Structure' },
+  { value: BlueprintErrorCode.InvalidNodeConfiguration, label: 'V002 - Invalid Node Configuration' },
+  { value: BlueprintErrorCode.MissingProperty, label: 'V003 - Missing Property' },
+  { value: BlueprintErrorCode.InvalidPropertyValue, label: 'V004 - Invalid Property Value' },
+  { value: BlueprintErrorCode.DatabaseConnection, label: 'D001 - Database Connection' },
+  { value: BlueprintErrorCode.BlueprintNotFound, label: 'D002 - Blueprint Not Found' },
+  { value: BlueprintErrorCode.BlueprintVersionNotFound, label: 'D003 - Blueprint Version Not Found' },
+  { value: BlueprintErrorCode.DatabaseQuery, label: 'D004 - Database Query' },
+  { value: BlueprintErrorCode.InternalServerError, label: 'S001 - Internal Server Error' },
+  { value: BlueprintErrorCode.ResourceExhausted, label: 'S002 - Resource Exhausted' },
+  { value: BlueprintErrorCode.SystemUnavailable, label: 'S003 - System Unavailable' },
+  { value: BlueprintErrorCode.Unknown, label: 'U001 - Unknown Error' },
+];
+
+// Generate arrays from enums for dropdowns
+const errorTypes = Object.values(ErrorType);
+const severities = Object.values(ErrorSeverity);
+
+async function generateError() {
+  try {
+    // Ensure we have an execution ID
+    if (!executionId.value) {
+      executionId.value = `test-${Date.now()}`;
     }
-    
-    async function generateScenario() {
-      try {
-        // Ensure we have an execution ID
-        if (!executionId.value) {
-          executionId.value = `test-${Date.now()}`;
-        }
-        
-        // Send API request to generate a test scenario
-        const response = await fetch('/api/test/generate-scenario', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            executionId: executionId.value,
-            scenarioType: scenarioType.value
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to generate scenario: ${response.statusText}`);
-        }
-        
-        // Parse response
-        const data = await response.json();
-        result.value = data;
-        
-      } catch (error) {
-        console.error('Error generating scenario:', error);
-        result.value = {
-          success: false,
-          error: {
-            message: error instanceof Error ? error.message : String(error)
-          }
-        };
-      }
+
+    // Send API request to generate a test error
+    const response = await fetch('/api/test/generate-error', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        executionId: executionId.value,
+        errorType: errorType.value,
+        errorCode: errorCode.value,
+        message: message.value,
+        severity: severity.value,
+        nodeId: nodeId.value,
+        recoverable: recoverable.value
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate error: ${response.statusText}`);
     }
-    
-    return {
-      // State
-      executionId,
-      errorType,
-      errorCode,
-      severity,
-      nodeId,
-      message,
-      recoverable,
-      scenarioType,
-      result,
-      
-      // Data for dropdowns
-      errorCodes,
-      errorTypes,
-      severities,
-      
-      // Methods
-      generateError,
-      generateScenario
+
+    // Parse response
+    result.value = await response.json();
+
+  } catch (error) {
+    console.error('Error generating test error:', error);
+    result.value = {
+      success: false,
+      error: {
+        message: error instanceof Error ? error.message : String(error)
+      }
     };
   }
-});
+}
+
+async function generateScenario() {
+  try {
+    // Ensure we have an execution ID
+    if (!executionId.value) {
+      executionId.value = `test-${Date.now()}`;
+    }
+
+    // Send API request to generate a test scenario
+    const response = await fetch('/api/test/generate-scenario', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        executionId: executionId.value,
+        scenarioType: scenarioType.value
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate scenario: ${response.statusText}`);
+    }
+
+    // Parse response
+    result.value = await response.json();
+
+  } catch (error) {
+    console.error('Error generating scenario:', error);
+    result.value = {
+      success: false,
+      error: {
+        message: error instanceof Error ? error.message : String(error)
+      }
+    };
+  }
+}
 </script>
 
 <style scoped>

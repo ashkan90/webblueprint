@@ -15,13 +15,12 @@ import (
 // APIServer handles HTTP API requests with repository integration
 type APIServerWithDB struct {
 	executionEngine  *engine.ExecutionEngine
-	errorAwareEngine *engine.ErrorAwareExecutionEngine
+	errorAwareEngine *engine.ErrorAwareEngine
 	nodeRegistry     map[string]node.NodeFactory
 	wsManager        *WebSocketManager
 	debugManager     *engine.DebugManager
 	errorManager     *bperrors.ErrorManager
 	recoveryManager  *bperrors.RecoveryManager
-	errorHandler     *ErrorWebSocketHandler
 	repoFactory      repository.RepositoryFactory
 	blueprintService *service.BlueprintService
 	userService      *service.UserService
@@ -36,7 +35,7 @@ func NewAPIServerWithDB(
 	wsManager *WebSocketManager,
 	debugManager *engine.DebugManager,
 	repoFactory repository.RepositoryFactory,
-	errorAwareEngine *engine.ErrorAwareExecutionEngine, // Add errorAwareEngine parameter
+	errorAwareEngine *engine.ErrorAwareEngine, // Add errorAwareEngine parameter
 ) *APIServerWithDB {
 	// Create the blueprint service
 	blueprintService := service.NewBlueprintService(
@@ -65,9 +64,8 @@ func NewAPIServerWithDB(
 	errorManager := errorAwareEngine.GetErrorManager()
 	recoveryManager := errorAwareEngine.GetRecoveryManager()
 
-	// Create error websocket handler
-	errorHandler := NewErrorWebSocketHandler(wsManager)
-	errorHandler.RegisterWithErrorManager(errorManager)
+	// Register WebSocket handlers with error manager
+	wsManager.RegisterErrorHandlers(errorManager, nil)
 
 	return &APIServerWithDB{
 		executionEngine:  executionEngine,
@@ -77,7 +75,6 @@ func NewAPIServerWithDB(
 		debugManager:     debugManager,
 		errorManager:     errorManager,
 		recoveryManager:  recoveryManager,
-		errorHandler:     errorHandler,
 		repoFactory:      repoFactory,
 		blueprintService: blueprintService,
 		userService:      userService,
@@ -109,6 +106,7 @@ func (s *APIServerWithDB) RegisterNodeType(typeID string, factory node.NodeFacto
 		"version":     metadata.Version,
 		"inputs":      convertPinsToInfo(nodeInstance.GetInputPins()),
 		"outputs":     convertPinsToInfo(nodeInstance.GetOutputPins()),
+		"properties":  convertPropertiesToInfo(nodeInstance.GetProperties()),
 	})
 }
 
@@ -165,9 +163,9 @@ func (s *APIServerWithDB) setupErrorAPI(router *mux.Router) {
 
 	// Setup test API for development
 	testErrorAPI := NewTestErrorHandler(
-		s.wsManager,
 		s.errorManager,
 		s.recoveryManager,
+		s.wsManager,
 	)
 
 	router.HandleFunc("/test/generate-error", testErrorAPI.HandleGenerateTestError).Methods("POST")
@@ -199,6 +197,6 @@ func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *htt
 }
 
 // GetErrorAwareEngine returns the error-aware execution engine
-func (s *APIServerWithDB) GetErrorAwareEngine() *engine.ErrorAwareExecutionEngine {
+func (s *APIServerWithDB) GetErrorAwareEngine() *engine.ErrorAwareEngine {
 	return s.errorAwareEngine
 }

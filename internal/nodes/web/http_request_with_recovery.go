@@ -19,6 +19,13 @@ func NewHTTPRequestWithRecoveryNode() node.Node {
 	return &HTTPRequestWithRecoveryNode{}
 }
 
+// NewHttpRequestWithRecoveryNodeFactory returns a factory function for creating HTTP request with recovery nodes
+func NewHttpRequestWithRecoveryNodeFactory() node.NodeFactory {
+	return func() node.Node {
+		return NewHTTPRequestWithRecoveryNode()
+	}
+}
+
 // GetMetadata returns node metadata
 func (n *HTTPRequestWithRecoveryNode) GetMetadata() node.NodeMetadata {
 	return node.NodeMetadata{
@@ -124,24 +131,28 @@ func (n *HTTPRequestWithRecoveryNode) GetOutputPins() []types.Pin {
 func (n *HTTPRequestWithRecoveryNode) GetProperties() []types.Property {
 	return []types.Property{
 		{
-			Name:  "defaultMethod",
-			Type:  types.PinTypes.String,
-			Value: "GET",
+			Name:        "defaultMethod",
+			DisplayName: "Default Method",
+			Type:        types.PinTypes.String,
+			Value:       "GET",
 		},
 		{
-			Name:  "defaultTimeout",
-			Type:  types.PinTypes.Number,
-			Value: 5000,
+			Name:        "defaultTimeout",
+			DisplayName: "Default Timeout",
+			Type:        types.PinTypes.Number,
+			Value:       5000,
 		},
 		{
-			Name:  "retryCount",
-			Type:  types.PinTypes.Number,
-			Value: 3,
+			Name:        "retryCount",
+			DisplayName: "Retry Count",
+			Type:        types.PinTypes.Number,
+			Value:       3,
 		},
 		{
-			Name:  "fallbackUrl",
-			Type:  types.PinTypes.String,
-			Value: "",
+			Name:        "fallbackUrl",
+			DisplayName: "Fallback URL",
+			Type:        types.PinTypes.String,
+			Value:       "",
 		},
 	}
 }

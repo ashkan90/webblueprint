@@ -45,6 +45,7 @@ func convertPropertiesToInfo(pins []types.Property) []map[string]interface{} {
 	result := make([]map[string]interface{}, len(pins))
 	defaultType := map[string]string{
 		"id":          types.PinTypes.Any.ID,
+		"displayName": types.PinTypes.Any.Name,
 		"name":        types.PinTypes.Any.Name,
 		"description": types.PinTypes.Any.Description,
 	}
@@ -60,6 +61,7 @@ func convertPropertiesToInfo(pins []types.Property) []map[string]interface{} {
 
 		result[i] = map[string]interface{}{
 			"name":        pin.Name,
+			"displayName": pin.DisplayName,
 			"description": pin.Description,
 			"value":       pin.Value,
 			"type":        defaultType,

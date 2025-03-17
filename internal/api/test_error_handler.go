@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	errors "webblueprint/internal/bperrors"
+
+	"github.com/gorilla/mux"
 )
 
 // TestErrorHandler provides endpoints for testing error handling
@@ -14,7 +16,7 @@ type TestErrorHandler struct {
 }
 
 // NewTestErrorHandler creates a new test error handler
-func NewTestErrorHandler(wsManager *WebSocketManager, errorManager *errors.ErrorManager, recoveryManager *errors.RecoveryManager) *TestErrorHandler {
+func NewTestErrorHandler(errorManager *errors.ErrorManager, recoveryManager *errors.RecoveryManager, wsManager *WebSocketManager) *TestErrorHandler {
 	return &TestErrorHandler{
 		ErrorManager:    errorManager,
 		RecoveryManager: recoveryManager,
@@ -86,7 +88,7 @@ func (h *TestErrorHandler) HandleGenerateTestError(w http.ResponseWriter, r *htt
 	}
 
 	// Record error
-	h.ErrorManager.RecordError(req.ExecutionID, err)
+	// h.ErrorManager.RecordError(req.ExecutionID, err)
 
 	// Send WebSocket notifications
 	if h.WSManager != nil {
@@ -184,7 +186,7 @@ func (h *TestErrorHandler) HandleGenerateErrorScenario(w http.ResponseWriter, r 
 }
 
 // RegisterRoutes registers the API routes
-func (h *TestErrorHandler) RegisterRoutes(router *http.ServeMux) {
-	router.HandleFunc("/api/test/generate-error", h.HandleGenerateTestError)
-	router.HandleFunc("/api/test/generate-scenario", h.HandleGenerateErrorScenario)
+func (h *TestErrorHandler) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc("/api/test/generate-error", h.HandleGenerateTestError).Methods("POST")
+	router.HandleFunc("/api/test/generate-scenario", h.HandleGenerateErrorScenario).Methods("POST")
 }

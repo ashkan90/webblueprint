@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"webblueprint/internal/bperrors"
 	"webblueprint/internal/engine"
 
 	"github.com/gorilla/websocket"
@@ -160,6 +161,43 @@ func (h *WebSocketManager) BroadcastMessage(messageType string, payload interfac
 	}
 
 	h.broadcast <- msgData
+}
+
+// SendErrorNotification sends an error notification to clients
+func (h *WebSocketManager) SendErrorNotification(executionID string, err *bperrors.BlueprintError) {
+	notification := ErrorNotification{
+		Type:        "error",
+		Error:       err,
+		ExecutionID: executionID,
+	}
+
+	h.BroadcastMessage(MsgTypeNodeError, notification)
+}
+
+// SendErrorAnalysisNotification sends an error analysis notification to clients
+func (h *WebSocketManager) SendErrorAnalysisNotification(executionID string, analysis map[string]interface{}) {
+	notification := ErrorAnalysisNotification{
+		Type:        "error_analysis",
+		Analysis:    analysis,
+		ExecutionID: executionID,
+	}
+
+	h.BroadcastMessage(MsgTypeDebugData, notification)
+}
+
+// SendRecoveryNotification sends a recovery notification to clients
+func (h *WebSocketManager) SendRecoveryNotification(executionID, nodeID, errorCode, strategy string, successful bool, details map[string]interface{}) {
+	notification := RecoveryNotification{
+		Type:        "recovery_attempt",
+		Successful:  successful,
+		Strategy:    strategy,
+		NodeID:      nodeID,
+		ErrorCode:   errorCode,
+		Details:     details,
+		ExecutionID: executionID,
+	}
+
+	h.BroadcastMessage(MsgTypeExecStatus, notification)
 }
 
 // readPump handles messages from the client

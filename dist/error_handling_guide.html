@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebBlueprint Error Handling Guide</title>
+  <style>
+    :root {
+      --primary-color: #3498db;
+      --secondary-color: #2ecc71;
+      --warning-color: #f39c12;
+      --danger-color: #e74c3c;
+      --dark-color: #2c3e50;
+      --light-color: #ecf0f1;
+    }
+    
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    h1, h2, h3, h4 {
+      color: var(--dark-color);
+    }
+    
+    h1 {
+      border-bottom: 2px solid var(--primary-color);
+      padding-bottom: 10px;
+    }
+    
+    h2 {
+      margin-top: 30px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 5px;
+    }
+    
+    code {
+      background-color: #f5f5f5;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+    
+    pre {
+      background-color: #f5f5f5;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      font-family: monospace;
+      border-left: 4px solid var(--primary-color);
+    }
+    
+    .error-type {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin: 2px;
+      color: white;
+      background-color: var(--dark-color);
+    }
+    
+    .severity {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin: 2px;
+      color: white;
+    }
+    
+    .severity.critical {
+      background-color: var(--danger-color);
+    }
+    
+    .severity.high {
+      background-color: #e67e22;
+    }
+    
+    .severity.medium {
+      background-color: var(--warning-color);
+      color: black;
+    }
+    
+    .severity.low {
+      background-color: var(--primary-color);
+    }
+    
+    .recovery {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin: 2px;
+      background-color: var(--secondary-color);
+      color: white;
+    }
+    
+    .flow-diagram {
+      display: block;
+      margin: 30px auto;
+      max-width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    
+    th {
+      background-color: #f5f5f5;
+    }
+    
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .note {
+      background-color: #e8f4f8;
+      border-left: 4px solid var(--primary-color);
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 5px 5px 0;
+    }
+    
+    .warning {
+      background-color: #fff4e5;
+      border-left: 4px solid var(--warning-color);
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 5px 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebBlueprint Enhanced Error Handling Guide</h1>
+  
+  <div class="note">
+    This guide provides an overview of the enhanced error handling system in WebBlueprint, explaining how errors are structured, classified, reported, and recovered from.
+  </div>
+  
+  <h2>Overview</h2>
+  
+  <p>
+    WebBlueprint's enhanced error handling system provides:
+  </p>
+  
+  <ul>
+    <li>Structured error objects with detailed contextual information</li>
+    <li>Error classification by type and severity</li>
+    <li>Recovery mechanisms for common error scenarios</li>
+    <li>Error analysis and diagnostic tools</li>
+    <li>Real-time error notifications via WebSocket</li>
+    <li>Visual error inspection and recovery UI</li>
+  </ul>
+  
+  <h2>Error Types</h2>
+  
+  <p>Errors are classified into the following types:</p>
+  
+  <div>
+    <span class="error-type">execution</span>
+    <span class="error-type">connection</span>
+    <span class="error-type">validation</span>
+    <span class="error-type">permission</span>
+    <span class="error-type">database</span>
+    <span class="error-type">network</span>
+    <span class="error-type">plugin</span>
+    <span class="error-type">system</span>
+    <span class="error-type">unknown</span>
+  </div>
+  
+  <h3>Severity Levels</h3>
+  
+  <p>Each error is assigned a severity level:</p>
+  
+  <div>
+    <span class="severity critical">critical</span>
+    <span class="severity high">high</span>
+    <span class="severity medium">medium</span>
+    <span class="severity low">low</span>
+  </div>
+  
+  <h3>Recovery Strategies</h3>
+  
+  <p>The system supports these recovery strategies:</p>
+  
+  <div>
+    <span class="recovery">retry</span>
+    <span class="recovery">skip_node</span>
+    <span class="recovery">use_default_value</span>
+    <span class="recovery">manual</span>
+    <span class="recovery">none</span>
+  </div>
+  
+  <h2>Error Structure</h2>
+  
+  <pre>
+{
+  "type": "execution",
+  "code": "E001",
+  "message": "Node execution failed: division by zero",
+  "details": {
+    "nodeType": "math-divide",
+    "inputs": { "divisor": 0 }
+  },
+  "severity": "high",
+  "recoverable": true,
+  "recoveryOptions": ["retry", "skip_node"],
+  "nodeId": "node-123",
+  "pinId": "output-1",
+  "blueprintId": "bp-456",
+  "executionId": "exec-789",
+  "timestamp": "2023-06-15T14:30:45.123Z"
+}
+</pre>
+
+  <h2>Error Flow Diagram</h2>
+  
+  <svg class="flow-diagram" width="800" height="500" viewBox="0 0 800 500">
+    <!-- Nodes -->
+    <rect x="300" y="50" width="200" height="60" rx="10" fill="#3498db" />
+    <text x="400" y="85" text-anchor="middle" fill="white" font-weight="bold">Node Execution</text>
+    
+    <rect x="300" y="150" width="200" height="60" rx="10" fill="#e74c3c" />
+    <text x="400" y="185" text-anchor="middle" fill="white" font-weight="bold">Error Occurs</text>
+    
+    <rect x="100" y="250" width="200" height="60" rx="10" fill="#f39c12" />
+    <text x="200" y="285" text-anchor="middle" fill="white" font-weight="bold">Error Manager Records</text>
+    
+    <rect x="500" y="250" width="200" height="60" rx="10" fill="#9b59b6" />
+    <text x="600" y="285" text-anchor="middle" fill="white" font-weight="bold">WebSocket Notification</text>
+    
+    <rect x="100" y="350" width="200" height="60" rx="10" fill="#2ecc71" />
+    <text x="200" y="385" text-anchor="middle" fill="white" font-weight="bold">Recovery Attempt</text>
+    
+    <rect x="500" y="350" width="200" height="60" rx="10" fill="#1abc9c" />
+    <text x="600" y="385" text-anchor="middle" fill="white" font-weight="bold">UI Error Display</text>
+    
+    <path d="M 400 110 L 400 150" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+    
+    <path d="M 300 180 L 200 250" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+    <path d="M 500 180 L 600 250" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+    
+    <path d="M 200 310 L 200 350" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+    <path d="M 600 310 L 600 350" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+    
+    <path d="M 300 380 L 500 380" stroke="#333" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)" />
+    <text x="400" y="370" text-anchor="middle" fill="#333" font-size="12">User Interaction</text>
+    
+    <!-- Arrow marker definition -->
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+        <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+      </marker>
+    </defs>
+  </svg>
+  
+  <h2>Integration Points</h2>
+  
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>Error Handling Feature</th>
+    </tr>
+    <tr>
+      <td>Execution Engine</td>
+      <td>Error recording, classification, and recovery attempts</td>
+    </tr>
+    <tr>
+      <td>API Layer</td>
+      <td>Standardized error responses with correct HTTP status codes</td>
+    </tr>
+    <tr>
+      <td>WebSocket</td>
+      <td>Real-time error notifications and analysis updates</td>
+    </tr>
+    <tr>
+      <td>UI</td>
+      <td>Error visualization, filtering, and manual recovery options</td>
+    </tr>
+    <tr>
+      <td>Node Implementation</td>
+      <td>Context-specific error reporting and recovery strategies</td>
+    </tr>
+  </table>
+  
+  <h2>Using Error Handling in Nodes</h2>
+  
+  <p>When implementing a node that uses the enhanced error handling system:</p>
+  
+  <pre>
+// Cast to error-aware context if available
+errorAwareCtx, isErrorAware := ctx.(*engine.ErrorAwareExecutionContext)
+
+// Report an error with the error-aware context
+if isErrorAware {
+    err := errorAwareCtx.ReportError(
+        errors.ErrorTypeExecution,
+        errors.ErrNodeExecutionFailed,
+        "Failed to process data",
+        originalError,
+    )
+    
+    // Try to recover
+    success, details := errorAwareCtx.AttemptRecovery(err)
+    if success {
+        // Use recovery details to handle the error
+        ctx.Logger().Info("Recovered from error", map[string]interface{}{
+            "strategy": details["recoveryType"],
+        })
+    } else {
+        // Failed to recover, activate error flow
+        ctx.ActivateOutputFlow("catch")
+        return err
+    }
+} else {
+    // Fall back to standard error handling
+    return fmt.Errorf("failed to process data: %w", originalError)
+}
+</pre>
+
+  <h2>Testing Error Handling</h2>
+  
+  <p>Use the test utilities to verify error handling behavior:</p>
+  
+  <pre>
+// Create test error generator
+generator := errors.NewTestErrorGenerator()
+
+// Generate a test scenario
+analysis, err := generator.SimulateErrorScenario(
+    "execution_failure", "test-execution-123")
+
+// Verify error handling
+verifier := errors.NewTestVerifier(
+    generator.GetErrorManager(), 
+    generator.GetRecoveryManager())
+
+// Get verification report
+report := verifier.GenerateVerificationReport("test-execution-123")
+fmt.Println(report)
+</pre>
+
+  <div class="warning">
+    <strong>Note:</strong> In production environments, test error generation should be disabled.
+  </div>
+  
+  <h2>Best Practices</h2>
+  
+  <ol>
+    <li>Use specific error types and codes rather than generic ones</li>
+    <li>Include relevant context in error details</li>
+    <li>Determine recoverability based on the error's nature and severity</li>
+    <li>Prefer automatic recovery for non-critical errors</li>
+    <li>Use manual intervention for critical errors that need human decision making</li>
+    <li>Log all errors, even recoverable ones</li>
+    <li>Test recovery strategies thoroughly</li>
+  </ol>
+  
+  <h2>Further Resources</h2>
+  
+  <ul>
+    <li><a href="README_error_handling.md">Error Handling Architecture Overview</a></li>
+    <li><a href="internal/errors/error_types.go">Error Types Implementation</a></li>
+    <li><a href="internal/errors/recovery.go">Recovery System Implementation</a></li>
+    <li><a href="web/src/components/debug/ErrorPanel.vue">Error Panel UI Component</a></li>
+  </ul>
+</body>
+</html>

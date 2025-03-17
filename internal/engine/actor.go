@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -29,6 +30,12 @@ type NodeActor struct {
 	done        chan struct{}
 	mutex       sync.RWMutex
 	properties  []types.Property // Store node properties from the blueprint
+
+	// Add hooks
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+		inputs, outputs map[string]interface{}) error
+	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
+		details map[string]interface{}) error
 }
 
 // NodeMessage represents a message that can be sent to a NodeActor
@@ -57,6 +64,10 @@ func NewNodeActor(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	variables map[string]types.Value,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+		inputs, outputs map[string]interface{}) error,
+	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
+		details map[string]interface{}) error,
 ) *NodeActor {
 	// Create a deep copy of the variable map to avoid concurrency issues
 	varsCopy := make(map[string]types.Value)
@@ -93,11 +104,13 @@ func NewNodeActor(
 			NodeID: nodeID,
 			Status: "idle",
 		},
-		logger:     logger,
-		listeners:  listeners,
-		debugMgr:   debugMgr,
-		done:       make(chan struct{}),
-		properties: properties,
+		logger:            logger,
+		listeners:         listeners,
+		debugMgr:          debugMgr,
+		done:              make(chan struct{}),
+		properties:        properties,
+		nodeExecutionHook: nodeExecutionHook,
+		anyHook:           anyHook,
 	}
 }
 
@@ -245,6 +258,26 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 	// Mark node as executing
 	a.emitNodeStartedEvent()
 
+	// Record node execution with inputs
+	if a.nodeExecutionHook != nil {
+		// Collect input values
+		a.mutex.RLock()
+		inputMap := make(map[string]interface{})
+		for pinID, value := range a.inputs {
+			inputMap[pinID] = value.RawValue
+		}
+		a.mutex.RUnlock()
+
+		// Call the hook
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, inputMap, nil)
+		if err != nil {
+			a.logger.Debug("Error in node execution hook", map[string]interface{}{
+				"nodeId": a.NodeID,
+				"error":  err.Error(),
+			})
+		}
+	}
+
 	// Execute the node
 	err := a.node.Execute(a.ctx)
 
@@ -255,6 +288,24 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		outputs[k] = v
 	}
 	a.mutex.RUnlock()
+
+	// Record node execution with outputs
+	if a.nodeExecutionHook != nil {
+		// Collect output values
+		outputMap := make(map[string]interface{})
+		for pinID, value := range outputs {
+			outputMap[pinID] = value.RawValue
+		}
+
+		// Call the hook
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, nil, outputMap)
+		if err != nil {
+			a.logger.Debug("Error in node execution hook", map[string]interface{}{
+				"nodeId": a.NodeID,
+				"error":  err.Error(),
+			})
+		}
+	}
 
 	// Store outputs in debug manager
 	if a.debugMgr != nil {
@@ -353,6 +404,14 @@ func (a *NodeActor) emitNodeStartedEvent() {
 			},
 		})
 	}
+
+	// Use the anyHook if provided
+	if a.anyHook != nil {
+		a.anyHook(context.Background(), a.ExecutionID, a.NodeID, "info", string(EventNodeStarted), map[string]interface{}{
+			"nodeType":  a.NodeType,
+			"timestamp": time.Now(),
+		})
+	}
 }
 
 // emitNodeCompletedEvent emits an event when the node completes execution
@@ -366,6 +425,14 @@ func (a *NodeActor) emitNodeCompletedEvent() {
 				"nodeType": a.NodeType,
 				"status":   "completed",
 			},
+		})
+	}
+
+	// Use the anyHook if provided
+	if a.anyHook != nil {
+		a.anyHook(context.Background(), a.ExecutionID, a.NodeID, "info", string(EventNodeCompleted), map[string]interface{}{
+			"nodeType":  a.NodeType,
+			"timestamp": time.Now(),
 		})
 	}
 }
@@ -384,6 +451,13 @@ func (a *NodeActor) emitNodeErrorEvent(err error) {
 			},
 		})
 	}
+
+	// Use the anyHook if provided
+	if a.anyHook != nil {
+		a.anyHook(context.Background(), a.ExecutionID, a.NodeID, "error", string(EventNodeError), map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
 }
 
 // emitValueProducedEvent emits an event when a value is produced on an output pin
@@ -397,6 +471,14 @@ func (a *NodeActor) emitValueProducedEvent(pinID string, value interface{}) {
 				"pinId": pinID,
 				"value": value,
 			},
+		})
+	}
+
+	// Use the anyHook if provided
+	if a.anyHook != nil {
+		a.anyHook(context.Background(), a.ExecutionID, a.NodeID, "debug", string(EventValueProduced), map[string]interface{}{
+			"pinId": pinID,
+			"value": value,
 		})
 	}
 }

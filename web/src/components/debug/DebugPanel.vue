@@ -351,6 +351,10 @@ const timelineEvents = computed(() => {
 
   // Data flow events
   dataFlows.value.forEach((flow) => {
+    if (!flow.sourcePinId || !flow.targetPinId) {
+      return
+    }
+
     events.push({
       type: 'dataFlow',
       timestamp: flow.timestamp,
@@ -361,8 +365,17 @@ const timelineEvents = computed(() => {
   })
 
   // Sort by timestamp
-  return events
-  // return events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+  // return events
+  return events.sort((a, b) => {
+    const _a = (typeof a.timestamp === 'string'
+        ? (new Date(a.timestamp)).getTime()
+        : a.timestamp.getTime())
+    const _b = typeof b.timestamp === 'string'
+        ? (new Date(b.timestamp)).getTime()
+        : b.timestamp.getTime()
+
+    return _a - _b
+  })
 })
 
 // Methods

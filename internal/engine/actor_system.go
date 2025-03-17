@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -24,6 +25,12 @@ type ActorSystem struct {
 	mutex         sync.RWMutex
 	executionDone chan struct{}
 	waitGroup     sync.WaitGroup
+
+	// Add hooks
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+		inputs, outputs map[string]interface{}) error
+	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
+		details map[string]interface{}) error
 }
 
 // Connection represents a connection between nodes
@@ -45,6 +52,10 @@ func NewActorSystem(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	initialVariables map[string]types.Value,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+		inputs, outputs map[string]interface{}) error,
+	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
+		details map[string]interface{}) error,
 ) (*ActorSystem, error) {
 	// Convert blueprint connections to internal format
 	connections := make(map[string][]Connection)
@@ -67,16 +78,18 @@ func NewActorSystem(
 	}
 
 	return &ActorSystem{
-		actors:        make(map[string]*NodeActor),
-		connections:   connections,
-		executionID:   executionID,
-		blueprintID:   bp.ID,
-		nodeRegistry:  nodeRegistry,
-		logger:        logger,
-		listeners:     listeners,
-		debugMgr:      debugMgr,
-		variables:     variables,
-		executionDone: make(chan struct{}),
+		actors:            make(map[string]*NodeActor),
+		connections:       connections,
+		executionID:       executionID,
+		blueprintID:       bp.ID,
+		nodeRegistry:      nodeRegistry,
+		logger:            logger,
+		listeners:         listeners,
+		debugMgr:          debugMgr,
+		variables:         variables,
+		executionDone:     make(chan struct{}),
+		nodeExecutionHook: nodeExecutionHook,
+		anyHook:           anyHook,
 	}, nil
 }
 
@@ -113,6 +126,8 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			s.listeners,
 			s.debugMgr,
 			s.variables,
+			s.nodeExecutionHook, // Pass the node execution hook
+			s.anyHook,           // Pass the any hook
 		)
 
 		// Store the actor

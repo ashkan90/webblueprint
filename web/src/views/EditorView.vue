@@ -31,6 +31,13 @@
         <button @click="toggleDebugPanel" :disabled="currentEditingFunction !== null" class="btn" :class="{ 'active': showDebugPanel }">
           <span class="icon">🔍</span> Debug
         </button>
+
+        <button @click="toggleErrorPanel" :disabled="currentEditingFunction !== null" class="btn" :class="{ 'active': showErrorPanel }">
+          <span class="icon">⚠️</span> Errors
+          <span v-if="errorStore.hasErrors" class="badge" :class="{ 'critical': errorStore.hasCriticalErrors }">
+            {{ errorStore.errors.length }}
+          </span>
+        </button>
       </div>
     </div>
 
@@ -73,6 +80,19 @@
         :execution-id="currentExecutionId"
         :selected-node-id="selectedNodeId"
     />
+    
+    <!-- Error Panel - Always visible but can be toggled -->
+    <div v-if="showErrorPanel" class="error-panel-container">
+      <div class="error-panel-header">
+        <h3>Errors & Diagnostics</h3>
+        <button @click="toggleErrorPanel" class="close-btn">×</button>
+      </div>
+      <ErrorPanel 
+        :execution-id="currentExecutionId"
+        @highlight-node="handleNodeHighlighted"
+        @recover-error="handleErrorRecovery"
+      />
+    </div>
     
     <!-- Bottom Drawer with Content and Versions tabs -->
     <BottomDrawer v-if="!currentEditingFunction">
@@ -130,12 +150,16 @@ import { v4 as uuid } from 'uuid'
 import { useBlueprintStore } from '../stores/blueprint'
 import { useNodeRegistryStore } from '../stores/nodeRegistry'
 import { useExecutionStore } from '../stores/execution'
+import { useErrorViewStore } from '../stores/errorViewStore'
+import { useErrorStore } from '../stores/errorStore'
 import type { Node, Connection } from '../types/blueprint'
 import type { NodeTypeDefinition } from '../types/nodes'
+import type { BlueprintError } from '../types/errors'
 import { Asset, AssetType } from '../types/mockPersistent'
 import BlueprintCanvas from '../components/editor/BlueprintCanvas.vue'
 import NodeProperties from '../components/editor/NodeProperties.vue'
 import DebugPanel from '../components/debug/DebugPanel.vue'
+import ErrorPanel from '../components/debug/ErrorPanel.vue'
 import VersionsPanel from '../components/VersionsPanel.vue'
 import BlueprintLeftPanel from "../components/editor/BlueprintLeftPanel.vue"
 import ContentBrowserPanel from "../components/ContentBrowserPanel.vue"
@@ -148,11 +172,14 @@ const blueprintStore = useBlueprintStore()
 const workspaceStore = useWorkspaceStore()
 const nodeRegistryStore = useNodeRegistryStore()
 const executionStore = useExecutionStore()
+const errorStore = useErrorStore()
+const errorViewStore = useErrorViewStore()
 
 // State
 const blueprintName = ref('')
 const selectedNodeId = ref<string | null>(null)
 const showDebugPanel = ref(false)
+const showErrorPanel = ref(false)
 const canvas = ref<InstanceType<typeof BlueprintCanvas> | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
 const showResultModal = ref(false)
@@ -481,6 +508,31 @@ function toggleDebugPanel() {
   }
 }
 
+function toggleErrorPanel() {
+  // Only allow toggling error panel when not editing a function
+  if (!currentEditingFunction.value) {
+    showErrorPanel.value = !showErrorPanel.value
+  }
+}
+
+function handleNodeHighlighted(nodeId: string) {
+  // Handle node highlighting - select the node and scroll to it
+  selectedNodeId.value = nodeId
+  if (canvas.value) {
+    canvas.value.centerOnNode(nodeId)
+  }
+}
+
+function handleErrorRecovery(error: BlueprintError) {
+  // Attempt to recover from an error
+  errorStore.recoverFromError(error).then(result => {
+    if (result && result.success) {
+      // If recovery was successful, update UI or take action
+      console.log('Recovery successful:', result)
+    }
+  })
+}
+
 function closeResultModal() {
   showResultModal.value = false
 }
@@ -501,6 +553,13 @@ function handleAssetOpened(asset: Asset) {
     router.push(`/editor/${asset.id}`);
   }
 }
+
+// Watch for critical errors to auto-show error panel
+watch(() => errorStore.hasCriticalErrors, (hasCriticalErrors) => {
+  if (hasCriticalErrors && errorViewStore.autoShowErrors) {
+    showErrorPanel.value = true
+  }
+})
 
 // Load blueprint on mount
 onMounted(async () => {
@@ -771,5 +830,67 @@ onMounted(async () => {
 
 .info-item .value {
   flex: 1;
+}
+
+/* Error panel styles */
+.error-panel-container {
+  position: absolute;
+  right: 0;
+  bottom: 30px; /* Adjust to match BottomDrawer height */
+  width: 400px;
+  background-color: #252525;
+  border-left: 1px solid #3d3d3d;
+  border-top: 1px solid #3d3d3d;
+  height: 300px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -2px -2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.error-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #333;
+  border-bottom: 1px solid #444;
+}
+
+.error-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #e0e0e0;
+}
+
+.error-panel-header .close-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.error-panel-header .close-btn:hover {
+  color: white;
+}
+
+.badge {
+  background-color: #555;
+  color: white;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  margin-left: 5px;
+}
+
+.badge.critical {
+  background-color: #e74c3c;
 }
 </style>

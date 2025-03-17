@@ -42,7 +42,7 @@ const tabs = [
 
 // State
 const activeTab = ref('content');
-const isCollapsed = ref(false);
+const isCollapsed = ref(true);
 const drawerHeight = ref(300); // Default height
 const minHeight = 150; // Minimum drawer height
 const maxHeight = 600; // Maximum drawer height

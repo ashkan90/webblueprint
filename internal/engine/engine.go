@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +68,19 @@ const (
 
 // ExecutionEngine manages blueprint execution
 type ExecutionEngine struct {
+	OnAnyHook func(
+		ctx context.Context,
+		executionID, nodeID, level, message string,
+		details map[string]interface{},
+	) error
+
+	// Add the hook for node execution recording
+	OnNodeExecutionHook func(
+		ctx context.Context,
+		executionID, nodeID, nodeType string,
+		inputs, outputs map[string]interface{},
+	) error
+
 	nodeRegistry    map[string]node.NodeFactory
 	blueprints      map[string]*blueprint.Blueprint
 	executionStatus map[string]*ExecutionStatus
@@ -483,6 +498,27 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 	// Create execution hooks
 	hooks := &node.ExecutionHooks{
 		OnNodeStart: func(nodeID, nodeType string) {
+			if e.OnAnyHook != nil {
+				anyErr := e.OnAnyHook(context.Background(), executionID, nodeID, "info", string(EventNodeStarted), map[string]interface{}{
+					"nodeType":  nodeType,
+					"timestamp": time.Now(),
+				})
+				slog.Debug("[DEBUG] An error caught on any hook", slog.Any("error", anyErr))
+			}
+
+			// Record node execution with inputs
+			if e.OnNodeExecutionHook != nil {
+				inputMap := make(map[string]interface{})
+				for pinID, value := range inputValues {
+					inputMap[pinID] = value.RawValue
+				}
+
+				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, inputMap, nil)
+				if err != nil {
+					slog.Debug("[DEBUG] Error recording node execution", slog.Any("error", err))
+				}
+			}
+
 			e.EmitEvent(ExecutionEvent{
 				Type:      EventNodeStarted,
 				Timestamp: time.Now(),
@@ -493,6 +529,25 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 			})
 		},
 		OnNodeComplete: func(nodeID, nodeType string) {
+			if e.OnAnyHook != nil {
+				anyErr := e.OnAnyHook(context.Background(), executionID, nodeID, "info", string(EventNodeCompleted), map[string]interface{}{
+					"nodeType":  nodeType,
+					"timestamp": time.Now(),
+				})
+				slog.Debug("[DEBUG] An error caught on any hook", slog.Any("error", anyErr))
+			}
+
+			// Record node execution with outputs
+			if e.OnNodeExecutionHook != nil {
+				// Collect output values
+				outputMap, _ := e.debugManager.GetNodeDebugData(executionID, nodeID)
+
+				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, nil, outputMap)
+				if err != nil {
+					slog.Debug("[DEBUG] Error recording node execution completion", slog.Any("error", err))
+				}
+			}
+
 			e.EmitEvent(ExecutionEvent{
 				Type:      EventNodeCompleted,
 				Timestamp: time.Now(),
@@ -503,6 +558,13 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 			})
 		},
 		OnNodeError: func(nodeID string, err error) {
+			if e.OnAnyHook != nil {
+				anyErr := e.OnAnyHook(context.Background(), executionID, nodeID, "error", string(EventNodeError), map[string]interface{}{
+					"error": err.Error(),
+				})
+				slog.Debug("[DEBUG] An error caught on any hook", slog.Any("error", anyErr))
+			}
+
 			e.EmitEvent(ExecutionEvent{
 				Type:      EventNodeError,
 				Timestamp: time.Now(),
@@ -515,6 +577,14 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 		OnPinValue: func(nodeID, pinName string, value interface{}) {
 			// Store the output value in debug manager
 			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinName, value)
+
+			if e.OnAnyHook != nil {
+				anyErr := e.OnAnyHook(context.Background(), executionID, nodeID, "debug", string(EventValueProduced), map[string]interface{}{
+					"pinId": pinName,
+					"value": value,
+				})
+				slog.Debug("[DEBUG] An error caught on any hook", slog.Any("error", anyErr))
+			}
 
 			// Emit event
 			e.EmitEvent(ExecutionEvent{
@@ -580,6 +650,8 @@ func (e *ExecutionEngine) executeWithActorSystem(bp *blueprint.Blueprint, execut
 		e.listeners,
 		e.debugManager,
 		variables,
+		e.OnNodeExecutionHook, // Pass the node execution hook
+		e.OnAnyHook,           // Pass the any hook
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create actor system: %w", err)
@@ -857,6 +929,19 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 		}
 	}
 
+	// Record node execution with inputs
+	if e.OnNodeExecutionHook != nil {
+		inputMap := make(map[string]interface{})
+		for pinID, value := range inputValues {
+			inputMap[pinID] = value.RawValue
+		}
+
+		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, inputMap, nil)
+		if err != nil {
+			slog.Debug("[DEBUG] Error recording node execution", slog.Any("error", err))
+		}
+	}
+
 	// Create a function to activate output flows
 	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
 		// Store all outputs before activating flows
@@ -901,6 +986,22 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 
 	// Execute the node
 	err := nodeInstance.Execute(ctx)
+
+	// Collect output values
+	outputMap := make(map[string]interface{})
+	for _, pin := range nodeInstance.GetOutputPins() {
+		if value, exists := ctx.GetOutputValue(pin.ID); exists {
+			outputMap[pin.ID] = value.RawValue
+		}
+	}
+
+	// Record node execution with outputs
+	if e.OnNodeExecutionHook != nil {
+		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, nil, outputMap)
+		if err != nil {
+			slog.Debug("[DEBUG] Error recording node execution completion", slog.Any("error", err))
+		}
+	}
 
 	// Handle errors
 	if err != nil {

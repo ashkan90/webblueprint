@@ -804,6 +804,9 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 					if name, ok := propMap["name"].(string); ok {
 						prop.Name = name
 					}
+					if displayName, ok := propMap["displayName"].(string); ok {
+						prop.DisplayName = displayName
+					}
 					if description, ok := propMap["description"].(string); ok {
 						prop.Description = description
 					}

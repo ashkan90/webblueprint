@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"time"
-	"webblueprint/internal/errors"
+	errors "webblueprint/internal/bperrors"
 )
 
 func main() {

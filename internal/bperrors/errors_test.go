@@ -167,15 +167,15 @@ func TestErrorAnalysis(t *testing.T) {
 	}
 
 	// Check breakdown by type
-	typeBreakdown, ok := analysis["typeBreakdown"].(map[errors.ErrorType]int)
+	typeBreakdown, ok := analysis["typeBreakdown"].(map[string]int)
 	if !ok {
 		t.Error("Type breakdown missing or wrong type")
 	} else {
-		if typeBreakdown[errors.ErrorTypeExecution] != 2 {
-			t.Errorf("Expected 2 execution errors, got %d", typeBreakdown[errors.ErrorTypeExecution])
+		if typeBreakdown[string(errors.ErrorTypeExecution)] != 2 {
+			t.Errorf("Expected 2 execution errors, got %d", typeBreakdown[string(errors.ErrorTypeExecution)])
 		}
-		if typeBreakdown[errors.ErrorTypeValidation] != 1 {
-			t.Errorf("Expected 1 validation error, got %d", typeBreakdown[errors.ErrorTypeValidation])
+		if typeBreakdown[string(errors.ErrorTypeValidation)] != 1 {
+			t.Errorf("Expected 1 validation error, got %d", typeBreakdown[string(errors.ErrorTypeValidation)])
 		}
 	}
 
@@ -226,7 +226,7 @@ func TestValidation(t *testing.T) {
 	} else {
 		found := false
 		for _, err := range result.Errors {
-			if err.Code == errors.ErrInvalidBlueprintStructure {
+			if err.(*errors.BlueprintError).Code == errors.ErrInvalidBlueprintStructure {
 				found = true
 				break
 			}
@@ -248,7 +248,7 @@ func TestDefaultValueProvider(t *testing.T) {
 		t.Errorf("GetDefaultValue failed for string: %v", err)
 	}
 
-	if str := stringValue.AsString(); str != "" {
+	if str, _ := stringValue.AsString(); str != "" {
 		t.Errorf("Expected empty string as default, got '%s'", str)
 	}
 
@@ -257,7 +257,7 @@ func TestDefaultValueProvider(t *testing.T) {
 	if err != nil {
 		t.Errorf("GetDefaultValue failed for number: %v", err)
 	}
-	if num := numberValue.AsNumber(); num != 0 {
+	if num, _ := numberValue.AsNumber(); num != 0 {
 		t.Errorf("Expected 0 as default number, got %f", num)
 	}
 
@@ -266,7 +266,7 @@ func TestDefaultValueProvider(t *testing.T) {
 	if err != nil {
 		t.Errorf("GetDefaultValue failed for boolean: %v", err)
 	}
-	if booly := boolValue.AsBoolean(); booly != false {
+	if booly, _ := boolValue.AsBoolean(); booly != false {
 		t.Errorf("Expected false as default boolean, got %v", booly)
 	}
 }

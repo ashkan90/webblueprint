@@ -49,8 +49,9 @@ func (em *ErrorManager) registerDefaultRecoveryStrategies() {
 
 // RecordError records an error for a given execution
 func (em *ErrorManager) RecordError(executionID string, err *BlueprintError) {
-	em.mutex.Lock()
-	defer em.mutex.Unlock()
+	if em.mutex.TryLock() {
+		defer em.mutex.Unlock()
+	}
 
 	// If missing recovery options, add them from our registry
 	if len(err.RecoveryOptions) == 0 {

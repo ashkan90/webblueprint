@@ -46,6 +46,11 @@ const router = createRouter({
             path: '/debug/:executionId',
             name: 'debug',
             component: () => import('../views/DebugView.vue')
+        },
+        {
+            path: '/error-testing',
+            name: 'errorTesting',
+            component: () => import('../views/ErrorTestingView.vue')
         }
     ]
 })

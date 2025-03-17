@@ -23,22 +23,22 @@
       </div>
     </div>
 
-    <div v-if="errorAnalysis && Object.keys(errorAnalysis).length > 0" class="error-analysis">
+    <div v-if="analysis && Object.keys(analysis).length > 0" class="error-analysis">
       <h4>Error Analysis</h4>
       <div class="analysis-summary">
         <div class="analysis-item">
           <div class="label">Total Errors:</div>
-          <div class="value">{{ errorAnalysis.totalErrors }}</div>
+          <div class="value">{{ analysis.totalErrors }}</div>
         </div>
         <div class="analysis-item">
           <div class="label">Recoverable:</div>
-          <div class="value">{{ errorAnalysis.recoverableErrors }}</div>
+          <div class="value">{{ analysis.recoverableErrors }}</div>
         </div>
       </div>
       
-      <div v-if="errorAnalysis.topProblemNodes && errorAnalysis.topProblemNodes.length > 0" class="problem-nodes">
+      <div v-if="analysis.topProblemNodes && analysis.topProblemNodes.length > 0" class="problem-nodes">
         <h5>Problem Nodes</h5>
-        <div v-for="(node, index) in errorAnalysis.topProblemNodes" :key="index" class="problem-node">
+        <div v-for="(node, index) in analysis.topProblemNodes" :key="index" class="problem-node">
           <div class="node-id">{{ getNodeName(node.nodeId) }}</div>
           <div class="error-count">{{ node.count }} {{ node.count === 1 ? 'error' : 'errors' }}</div>
           <button @click="highlightNode(node.nodeId)" class="highlight-btn">Focus</button>
@@ -46,12 +46,12 @@
       </div>
     </div>
 
-    <div class="error-content" ref="errorContent">
-      <div v-if="filteredErrors.length === 0" class="empty-errors">
+    <div class="error-content" ref="errorContentRef">
+      <div v-if="!hasErrors" class="empty-errors">
         No errors to display
       </div>
 
-      <div v-if="filteredErrors.length > 0" class="filter-bar">
+      <div v-if="hasErrors" class="filter-bar">
         <input 
           v-model="errorFilter" 
           type="text" 
@@ -61,7 +61,7 @@
       </div>
 
       <div
-        v-for="(error, index) in filteredErrors"
+        v-for="(error, index) in displayErrors"
         :key="index"
         :class="['error-entry', error.severity.toLowerCase()]"
       >
@@ -78,7 +78,7 @@
         <div v-if="error.recoverable" class="recovery-info">
           <span class="recovery-label">Recoverable:</span>
           <span class="recovery-options">
-            {{ error.recoveryOptions.join(', ') }}
+            {{ error.recoveryOptions?.join(', ') }}
           </span>
         </div>
         
@@ -93,7 +93,7 @@
           <div class="error-actions">
             <button
               v-if="error.details"
-              @click="toggleErrorDetails(index)"
+              @click="toggleErrorDetails(error)"
               class="toggle-details-btn"
             >
               {{ error.expanded ? 'Hide Details' : 'Show Details' }}
@@ -101,7 +101,7 @@
             
             <button
               v-if="error.recoverable"
-              @click="recoverFromError(error)"
+              @click="recoverError(error)"
               class="recover-btn"
             >
               Recover
@@ -113,130 +113,126 @@
   </div>
 </template>
 
-<script lang="ts">
-import { defineComponent, ref, computed, PropType } from 'vue';
-import { useErrorStore } from '../../stores/errorStore';
-import { BlueprintError, ErrorAnalysis, ErrorSeverity } from '../../types/errors';
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue'
+import { useErrorStore } from '../../stores/errorStore'
+import { BlueprintError, ErrorSeverity } from '../../types/errors'
 
-export default defineComponent({
-  name: 'ErrorPanel',
-  
-  props: {
-    executionId: {
-      type: String as PropType<string>,
-      default: ''
-    }
-  },
-  
-  emits: ['highlightNode', 'recoverError'],
-  
-  setup(props, { emit }) {
-    // Store
-    const errorStore = useErrorStore();
-    
-    // State
-    const showLow = ref(true);
-    const showMedium = ref(true);
-    const showHigh = ref(true);
-    const showCritical = ref(true);
-    const errorContent = ref<HTMLElement | null>(null);
-    const errorFilter = ref('');
-    
-    // Computed
-    const filteredErrors = computed(() => {
-      let errors = errorStore.errors;
-      
-      // Filter by execution ID if provided
-      if (props.executionId) {
-        errors = errors.filter(err => err.executionId === props.executionId);
-      }
-      
-      // Filter by severity
-      errors = errors.filter(err => {
-        switch (err.severity) {
-          case ErrorSeverity.Low: return showLow.value;
-          case ErrorSeverity.Medium: return showMedium.value;
-          case ErrorSeverity.High: return showHigh.value;
-          case ErrorSeverity.Critical: return showCritical.value;
-          default: return true;
-        }
-      });
-      
-      // Filter by text
-      if (errorFilter.value) {
-        const searchText = errorFilter.value.toLowerCase();
-        errors = errors.filter(err => 
-          err.message.toLowerCase().includes(searchText) ||
-          err.type.toLowerCase().includes(searchText) ||
-          err.code.toLowerCase().includes(searchText) ||
-          (err.nodeId && err.nodeId.toLowerCase().includes(searchText))
-        );
-      }
-      
-      return errors;
-    });
-    
-    const errorAnalysis = computed(() => errorStore.errorAnalysis);
-    
-    // Methods
-    function clearErrors() {
-      errorStore.clearErrors();
-    }
-    
-    function formatTime(date: string): string {
-      const d = new Date(date);
-      return d.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    }
-    
-    function getNodeName(nodeId: string): string {
-      // This would need to get the node name from your node registry
-      // For now, just return the ID
-      return nodeId;
-    }
-    
-    function toggleErrorDetails(index: number) {
-      if (filteredErrors.value[index]) {
-        // Toggle expanded state
-        const error = filteredErrors.value[index];
-        error.expanded = !error.expanded;
-      }
-    }
-    
-    function highlightNode(nodeId: string) {
-      emit('highlightNode', nodeId);
-    }
-    
-    function recoverFromError(error: BlueprintError) {
-      emit('recoverError', error);
-    }
-    
-    return {
-      // State
-      showLow,
-      showMedium,
-      showHigh,
-      showCritical,
-      errorContent,
-      errorFilter,
-      
-      // Computed
-      filteredErrors,
-      errorAnalysis,
-      
-      // Methods
-      clearErrors,
-      formatTime,
-      getNodeName,
-      toggleErrorDetails,
-      highlightNode,
-      recoverFromError
-    };
+// Props
+const props = defineProps<{
+  executionId?: string
+}>()
+
+// Emits
+const emit = defineEmits(['highlightNode', 'recoverError'])
+
+// Store
+const errorStore = useErrorStore()
+
+// Refs (reactive state)
+const showLow = ref(true)
+const showMedium = ref(true)
+const showHigh = ref(true)
+const showCritical = ref(true)
+const errorContentRef = ref<HTMLElement | null>(null)
+const errorFilter = ref('')
+
+// Computed properties
+const displayErrors = computed(() => {
+  // Start with all errors from the store
+  let filteredErrors = [...errorStore.errors]
+
+  console.log('Raw errors from store:', errorStore.errors)
+
+  // Filter by execution ID if provided
+  if (props.executionId) {
+    filteredErrors = filteredErrors.filter(err => err.executionId === props.executionId)
   }
-});
+
+  // Filter by severity
+  filteredErrors = filteredErrors.filter(err => {
+    switch (err.severity) {
+      case ErrorSeverity.Low: return showLow.value
+      case ErrorSeverity.Medium: return showMedium.value
+      case ErrorSeverity.High: return showHigh.value
+      case ErrorSeverity.Critical: return showCritical.value
+      default: return true
+    }
+  })
+
+  // Filter by text search
+  if (errorFilter.value) {
+    const searchText = errorFilter.value.toLowerCase()
+    filteredErrors = filteredErrors.filter(err =>
+      err.message.toLowerCase().includes(searchText) ||
+      err.type.toLowerCase().includes(searchText) ||
+      err.code.toLowerCase().includes(searchText) ||
+      (err.nodeId && err.nodeId.toLowerCase().includes(searchText))
+    )
+  }
+
+  console.log('Filtered errors count:', filteredErrors.length)
+  return filteredErrors
+})
+
+const hasErrors = computed(() => displayErrors.value.length > 0)
+const analysis = computed(() => errorStore.errorAnalysis)
+
+// Lifecycle hooks
+onMounted(() => {
+  console.log('ErrorPanel mounted, current errors:', errorStore.errors)
+  
+  // Add watcher to check for error changes
+  watch(() => errorStore.errors.length, (newCount, oldCount) => {
+    console.log(`Errors count changed from ${oldCount} to ${newCount}`)
+  })
+})
+
+// Methods
+function clearErrors() {
+  errorStore.clearErrors()
+}
+
+function formatTime(timestamp: string): string {
+  if (!timestamp) return ''
+  
+  try {
+    const date = new Date(timestamp)
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch (e) {
+    console.error('Error formatting timestamp:', e)
+    return timestamp
+  }
+}
+
+function getNodeName(nodeId: string): string {
+  // This would need to get the node name from your node registry
+  return nodeId
+}
+
+function toggleErrorDetails(error: BlueprintError) {
+  // Create a modified copy and update it
+  const updatedError = { 
+    ...error,
+    expanded: !error.expanded 
+  }
+  
+  // Update the error in the store
+  errorStore.updateError(updatedError)
+  console.log('Toggled error details:', updatedError.expanded)
+}
+
+function highlightNode(nodeId: string) {
+  emit('highlightNode', nodeId)
+}
+
+function recoverError(error: BlueprintError) {
+  emit('recoverError', error)
+}
 </script>
 
 <style scoped>

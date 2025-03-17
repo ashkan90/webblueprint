@@ -818,6 +818,7 @@ function handleAddSpecificNode(nodeType: NodeTypeDefinition) {
     nodeType.properties.forEach((prop) => {
       node.properties.push({
         name: prop.name,
+        displayName: prop.displayName,
         value: prop.value,
       })
     })

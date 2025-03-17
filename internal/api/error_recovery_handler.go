@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	errors "webblueprint/internal/bperrors"
+
+	"github.com/gorilla/mux"
 )
 
 // RecoveryRequest represents a request to recover from an error
@@ -119,20 +121,10 @@ func (h *ErrorRecoveryHandler) sendRecoveryNotification(
 	successful bool,
 	details map[string]interface{},
 ) {
-	notification := RecoveryNotification{
-		Type:        "recovery_attempt",
-		Successful:  successful,
-		Strategy:    strategy,
-		NodeID:      nodeID,
-		ErrorCode:   errorCode,
-		Details:     details,
-		ExecutionID: executionID,
-	}
-
-	h.wsManager.BroadcastMessage(MsgTypeExecStatus, notification)
+	h.wsManager.SendRecoveryNotification(executionID, nodeID, errorCode, strategy, successful, details)
 }
 
 // RegisterRoutes registers the API routes for error recovery
-func (h *ErrorRecoveryHandler) RegisterRoutes(router *http.ServeMux) {
-	router.HandleFunc("/api/errors/recover", h.HandleErrorRecovery)
+func (h *ErrorRecoveryHandler) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc("/api/errors/recover", h.HandleErrorRecovery).Methods("POST")
 }

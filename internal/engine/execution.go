@@ -316,7 +316,6 @@ func (l *DefaultLogger) Debug(msg string, fields map[string]interface{}) {
 		fields = make(map[string]interface{})
 	}
 	fields["nodeID"] = l.nodeID
-	fmt.Printf("[DEBUG] %s: %s %v\n", l.nodeID, msg, fields)
 }
 
 // Info logs an info message

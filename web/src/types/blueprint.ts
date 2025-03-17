@@ -9,6 +9,7 @@ export interface Position {
 // Properties for a node
 export interface NodeProperty {
     name: string
+    displayName: string
     value: any
 }
 

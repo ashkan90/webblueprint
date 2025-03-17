@@ -1,12 +1,5 @@
-import { defineStore } from 'pinia';
-import {
-  BlueprintError,
-  ErrorAnalysis,
-  RecoveryAttempt,
-  ErrorType,
-  ErrorSeverity,
-  RecoveryStrategy
-} from '../types/errors';
+import {defineStore} from 'pinia';
+import {BlueprintError, ErrorAnalysis, ErrorSeverity, RecoveryAttempt, RecoveryStrategy} from '../types/errors';
 
 export const useErrorStore = defineStore('errorHandler', {
   state: () => ({
@@ -63,7 +56,34 @@ export const useErrorStore = defineStore('errorHandler', {
     addError(error: BlueprintError) {
       // Add expanded property for UI toggling
       error.expanded = false;
-      this.errors.push(error);
+      
+      // Ensure we don't add duplicates
+      const existingErrorIndex = this.errors.findIndex(e => 
+        e.code === error.code && e.nodeId === error.nodeId && e.executionId === error.executionId
+      );
+      
+      if (existingErrorIndex >= 0) {
+        // Update existing error
+        this.errors[existingErrorIndex] = error;
+      } else {
+        // Add new error
+        this.errors.push(error);
+      }
+      
+      // Add debug log for monitoring
+      console.log('Error added to store:', error, 'Total errors:', this.errors.length);
+    },
+    
+    updateError(error: BlueprintError) {
+      // Find the error and update it
+      const index = this.errors.findIndex(e => 
+        e.code === error.code && e.nodeId === error.nodeId && e.executionId === error.executionId
+      );
+      
+      if (index >= 0) {
+        // Replace the error at the found index
+        this.errors[index] = error;
+      }
     },
     
     updateErrorAnalysis(analysis: ErrorAnalysis) {
@@ -124,9 +144,8 @@ export const useErrorStore = defineStore('errorHandler', {
         if (!response.ok) {
           throw new Error('Failed to recover from error');
         }
-        
-        const result = await response.json();
-        return result;
+
+        return await response.json();
       } catch (err) {
         console.error('Error recovery failed:', err);
         return { success: false, error: err };

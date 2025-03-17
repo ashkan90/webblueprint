@@ -43,7 +43,7 @@
             :key="property.name"
             class="property-row"
         >
-          <div class="property-label">{{ property.name }}</div>
+          <div class="property-label">{{ property.displayName || property.name }}</div>
 
           <!-- String property -->
           <input
@@ -291,7 +291,7 @@ const emit = defineEmits<{
 
 // Reactive state
 const position = ref({ x: props.node.position.x, y: props.node.position.y })
-const properties = ref<Array<{ name: string, value: any, type: string, options?: string[] }>>([])
+const properties = ref<Array<{ name: string, displayName: string, value: any, type: string, options?: string[] }>>([])
 const pinDefaults = ref<Record<string, any>>({})
 const constantValue = ref<any>('')
 
@@ -391,6 +391,7 @@ function initializeProperties() {
       if (!prop.name.startsWith('input_')) {
         properties.value.push({
           name: prop.name,
+          displayName: prop.displayName,
           value: prop.value,
           type,
           options

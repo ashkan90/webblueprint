@@ -99,6 +99,10 @@ func (s *ExecutionService) StartExecution(
 		// Get a background context since the request context will be canceled
 		bgCtx := context.Background()
 
+		// Register hooks
+		s.executionEngine.OnAnyHook = s.AddLogEntry
+		s.executionEngine.OnNodeExecutionHook = s.RecordNodeExecution
+
 		// Execute the blueprint
 		result, err := s.executionEngine.Execute(bp, executionID, variables)
 
@@ -114,11 +118,6 @@ func (s *ExecutionService) StartExecution(
 			}
 			s.executionRepo.Complete(bgCtx, executionID, true, resultMap, "")
 		}
-
-		// Note: The WebSocket message about execution completion is handled by
-		// the execution engine's event system. When an execution completes, it emits
-		// an EventExecutionEnd event, which is picked up by any registered listeners
-		// (such as the ExecutionEventListener) and broadcasted to connected clients.
 	}(bp)
 
 	return executionID, nil
