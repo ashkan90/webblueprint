@@ -1,13 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"github.com/gorilla/mux"
+	"log"
 	"net/http"
 	"sync"
 	"webblueprint/internal/bperrors"
 	"webblueprint/internal/engine"
 	"webblueprint/internal/node"
 	"webblueprint/internal/registry"
+	"webblueprint/internal/types"
 	"webblueprint/pkg/repository"
 	"webblueprint/pkg/service"
 )
@@ -199,4 +202,76 @@ func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *htt
 // GetErrorAwareEngine returns the error-aware execution engine
 func (s *APIServerWithDB) GetErrorAwareEngine() *engine.ErrorAwareEngine {
 	return s.errorAwareEngine
+}
+
+// convertPinsToInfo converts pins to a format suitable for the client
+func convertPinsToInfo(pins []types.Pin) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(pins))
+
+	for i, pin := range pins {
+		result[i] = map[string]interface{}{
+			"id":          pin.ID,
+			"name":        pin.Name,
+			"description": pin.Description,
+			"type": map[string]string{
+				"id":          pin.Type.ID,
+				"name":        pin.Type.Name,
+				"description": pin.Type.Description,
+			},
+			"optional": pin.Optional,
+		}
+
+		if pin.Default != nil {
+			result[i]["default"] = pin.Default
+		}
+	}
+
+	return result
+}
+
+func convertPropertiesToInfo(pins []types.Property) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(pins))
+	defaultType := map[string]string{
+		"id":          types.PinTypes.Any.ID,
+		"displayName": types.PinTypes.Any.Name,
+		"name":        types.PinTypes.Any.Name,
+		"description": types.PinTypes.Any.Description,
+	}
+
+	for i, pin := range pins {
+		if pin.Type != nil {
+			defaultType = map[string]string{
+				"id":          pin.Type.ID,
+				"name":        pin.Type.Name,
+				"description": pin.Type.Description,
+			}
+		}
+
+		result[i] = map[string]interface{}{
+			"name":        pin.Name,
+			"displayName": pin.DisplayName,
+			"description": pin.Description,
+			"value":       pin.Value,
+			"type":        defaultType,
+		}
+	}
+
+	return result
+}
+
+// Response helpers
+func respondWithJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+
+	err := json.NewEncoder(w).Encode(payload)
+	if err != nil {
+		log.Printf("Error marshaling response: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func respondWithError(w http.ResponseWriter, code int, message string) {
+	respondWithJSON(w, code, map[string]string{"error": message})
 }

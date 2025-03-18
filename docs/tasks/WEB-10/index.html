@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Unit Tests Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Unit Tests Implementation Plan</h1>
+    <p>Task: <strong>WEB-10 - Implement Unit Tests for All Node Types</strong></p>
+    <p>Priority: <span class="priority high">High</span> | Estimate: 3 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the steps and approach for developing comprehensive unit tests for all node types
+    in the WebBlueprint platform. The goal is to achieve at least 80% code coverage and ensure that all node behaviors
+    are thoroughly tested under various conditions including normal operation, edge cases, and error handling.
+</p>
+
+<h2>Current Test Coverage Metrics</h2>
+
+<div class="metric">
+    <div class="metric-name">Math Nodes</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Logic Nodes</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Utility Nodes</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 20%;">20%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Data Nodes</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Web Nodes</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 8%;">8%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Overall Coverage</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 12%;">12%</div>
+    </div>
+    <div class="metric-target">Target: 80%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Setup Testing Framework <span class="priority high">High</span></h3>
+    <p>Create the foundation for node testing by implementing mock objects and test utilities.</p>
+    <ul class="task-list">
+        <li>Create mock directory structure in <code>internal/test/mocks</code></li>
+        <li>Implement <code>MockExecutionContext</code> for simulating node execution</li>
+        <li>Implement <code>MockLogger</code> for capturing log output during tests</li>
+        <li>Create test helper utilities in <code>internal/test/node_test_utils.go</code></li>
+        <li>Set up coverage reporting configuration in CI pipeline</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Math Node Tests <span class="priority high">High</span></h3>
+    <p>Implement tests for all mathematical operation nodes.</p>
+    <ul class="task-list">
+        <li>AddNode: Test addition with various numeric inputs</li>
+        <li>SubtractNode: Test subtraction with positive, negative, and zero values</li>
+        <li>MultiplyNode: Test multiplication with edge cases</li>
+        <li>DivideNode: Test division with special focus on division by zero handling</li>
+        <li>SafeDivideNode: Test division with fallback values</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Logic Node Tests <span class="priority high">High</span></h3>
+    <p>Implement tests for control flow and conditional nodes.</p>
+    <ul class="task-list">
+        <li>IfConditionNode: Test conditional branching with various inputs</li>
+        <li>BranchNode: Test multi-branch node with different conditions</li>
+        <li>SequenceNode: Test sequential execution flow</li>
+        <li>LoopNode: Test various loop conditions and iteration behavior</li>
+        <li>Test loop limiting to prevent infinite execution</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Utility Node Tests <span class="priority medium">Medium</span></h3>
+    <p>Implement tests for utility nodes including timers and formatting.</p>
+    <ul class="task-list">
+        <li>TimerNode: Test delay, elapsed time, and timestamp operations</li>
+        <li>PrintNode: Test output formatting with different input types</li>
+        <li>UserFunctionNode: Test custom function definition and execution</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Data Node Tests <span class="priority medium">Medium</span></h3>
+    <p>Implement tests for data manipulation and transformation nodes.</p>
+    <ul class="task-list">
+        <li>Test data conversion between different types</li>
+        <li>Test array and object manipulation functions</li>
+        <li>Test JSON parsing and formatting</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Web/DOM Node Tests <span class="priority medium">Medium</span></h3>
+    <p>Implement tests for web-related node types.</p>
+    <ul class="task-list">
+        <li>Create mock DOM interfaces for testing</li>
+        <li>Test DOM manipulation operations</li>
+        <li>Test event handling capabilities</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Documentation <span class="priority medium">Medium</span></h3>
+    <p>Document the testing approach and patterns for future reference.</p>
+    <ul class="task-list">
+        <li>Document test utilities and how to use them</li>
+        <li>Create testing guideline document for future node developers</li>
+        <li>Add comprehensive comments to test code</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Coverage Improvement <span class="priority medium">Medium</span></h3>
+    <p>Review and improve test coverage across all node types.</p>
+    <ul class="task-list">
+        <li>Run coverage analysis to identify gaps</li>
+        <li>Add targeted tests for specific branches not covered</li>
+        <li>Focus on error handling and edge cases</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Set up testing framework and implement mock objects</p>
+            <p>Start implementing math node tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete math node tests</p>
+            <p>Begin logic node tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Continue logic node tests</p>
+            <p>Start utility node tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete utility node tests</p>
+            <p>Begin data node tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Complete data node tests</p>
+            <p>Start web/DOM node tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 6</div>
+        <div class="timeline-content">
+            <p>Complete web/DOM node tests</p>
+            <p>Begin documentation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 7</div>
+        <div class="timeline-content">
+            <p>Complete documentation</p>
+            <p>Review coverage and add additional tests as needed</p>
+            <p>Final code review and submission</p>
+        </div>
+    </div>
+</div>
+
+<h2>Test Pattern Example</h2>
+
+<p>The following is an example of a test pattern to be followed for each node type:</p>
+
+<pre><code>func TestNodeName(t *testing.T) {
+    testCases := []test.NodeTestCase{
+        {
+            Name: "normal operation",
+            Inputs: map[string]interface{}{
+                "input1": value1,
+                "input2": value2,
+            },
+            ExpectedOutputs: map[string]interface{}{
+                "output1": expectedValue1,
+            },
+            ExpectedFlow: "then",
+        },
+        {
+            Name: "error case",
+            Inputs: map[string]interface{}{
+                "input1": invalidValue,
+            },
+            ExpectedError: true,
+        },
+        // Additional test cases...
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.Name, func(t *testing.T) {
+            node := NewNodeName()
+            test.ExecuteNodeTestCase(t, node, tc)
+        })
+    }
+}</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when:</p>
+
+<ul>
+    <li>All node types have comprehensive unit tests covering normal operation, edge cases, and error handling</li>
+    <li>Test coverage reaches at least 80% for all node packages</li>
+    <li>Test helper utilities are created and documented</li>
+    <li>All tests pass consistently in the CI pipeline</li>
+    <li>Documentation is complete for the testing approach and patterns</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Complex node interactions are difficult to test in isolation</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create comprehensive mocks that simulate the execution environment accurately</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Time-dependent nodes may cause flaky tests</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Use clock mocking and generous tolerances for timing assertions</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Achieving 80% coverage may be challenging for complex nodes</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Start with critical paths and gradually expand coverage, refactor complex functions if needed</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Tests may become brittle to implementation changes</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Focus tests on behavior rather than implementation details, use abstraction layers</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to creating comprehensive unit tests for all node types
+    in the WebBlueprint platform. Following this plan will significantly improve code quality, prevent regressions,
+    and ensure that the node system remains reliable as the platform evolves.
+</p>
+
+<p>
+    The estimated total effort is 7-8 days of development time, with the most critical components (testing framework
+    and tests for math and logic nodes) prioritized for early completion.
+</p>
+</body>
+</html>

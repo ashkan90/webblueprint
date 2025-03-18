@@ -3,7 +3,6 @@ package data
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
@@ -21,7 +20,7 @@ func NewJSONNode() node.Node {
 			Metadata: node.NodeMetadata{
 				TypeID:      "json-processor",
 				Name:        "JSON Processor",
-				Description: "Parse, stringify, or access JSON data",
+				Description: "Parse or stringify JSON data",
 				Category:    "Data",
 				Version:     "1.0.0",
 			},
@@ -35,22 +34,14 @@ func NewJSONNode() node.Node {
 				{
 					ID:          "operation",
 					Name:        "Operation",
-					Description: "JSON operation: parse, stringify, or access",
+					Description: "JSON operation: parse or stringify",
 					Type:        types.PinTypes.String,
-					Default:     "parse",
 				},
 				{
-					ID:          "input",
-					Name:        "Input",
+					ID:          "data",
+					Name:        "Data",
 					Description: "JSON string or object to process",
 					Type:        types.PinTypes.Any,
-				},
-				{
-					ID:          "path",
-					Name:        "Path",
-					Description: "JSON path for 'access' operation (e.g., 'user.name')",
-					Type:        types.PinTypes.String,
-					Optional:    true,
 				},
 				{
 					ID:          "indentOutput",
@@ -101,8 +92,7 @@ func (n *JSONNode) Execute(ctx node.ExecutionContext) error {
 
 	// Get input values
 	operationValue, operationExists := ctx.GetInputValue("operation")
-	inputValue, inputExists := ctx.GetInputValue("input")
-	pathValue, pathExists := ctx.GetInputValue("path")
+	dataValue, dataExists := ctx.GetInputValue("data")
 	indentOutputValue, indentOutputExists := ctx.GetInputValue("indentOutput")
 
 	// Check required inputs
@@ -113,8 +103,8 @@ func (n *JSONNode) Execute(ctx node.ExecutionContext) error {
 		return ctx.ActivateOutputFlow("error")
 	}
 
-	if !inputExists {
-		err := fmt.Errorf("missing required input: input")
+	if !dataExists {
+		err := fmt.Errorf("missing required input: data")
 		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
 		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
 		return ctx.ActivateOutputFlow("error")
@@ -140,18 +130,16 @@ func (n *JSONNode) Execute(ctx node.ExecutionContext) error {
 	// Record input values for debugging
 	debugData["inputs"] = map[string]interface{}{
 		"operation":    operation,
-		"inputType":    fmt.Sprintf("%T", inputValue.RawValue),
-		"hasPath":      pathExists,
 		"indentOutput": indentOutput,
 	}
 
 	var result interface{}
 
 	// Process based on operation
-	switch strings.ToLower(operation) {
+	switch operation {
 	case "parse":
 		// Parse JSON string to object
-		if inputStr, err := inputValue.AsString(); err == nil {
+		if inputStr, err := dataValue.AsString(); err == nil {
 			var parsedData interface{}
 			if err := json.Unmarshal([]byte(inputStr), &parsedData); err != nil {
 				logger.Error("JSON parse error", map[string]interface{}{"error": err.Error()})
@@ -191,9 +179,9 @@ func (n *JSONNode) Execute(ctx node.ExecutionContext) error {
 		var err error
 
 		if indentOutput {
-			jsonBytes, err = json.MarshalIndent(inputValue.RawValue, "", "  ")
+			jsonBytes, err = json.MarshalIndent(dataValue.RawValue, "", "  ")
 		} else {
-			jsonBytes, err = json.Marshal(inputValue.RawValue)
+			jsonBytes, err = json.Marshal(dataValue.RawValue)
 		}
 
 		if err != nil {
@@ -213,154 +201,6 @@ func (n *JSONNode) Execute(ctx node.ExecutionContext) error {
 
 		result = string(jsonBytes)
 		debugData["operation"] = "stringify"
-		debugData["successful"] = true
-
-	case "access":
-		// Access a property in a JSON object using path
-		if !pathExists {
-			logger.Error("Missing path for access operation", nil)
-			debugData["error"] = "Missing path for access operation"
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Missing path for access operation"))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "JSON Access Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Get the path
-		path, err := pathValue.AsString()
-		if err != nil {
-			logger.Error("Invalid path", map[string]interface{}{"error": err.Error()})
-			debugData["error"] = "Invalid path: " + err.Error()
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid path: "+err.Error()))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "JSON Access Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// If input is a string, try to parse it first
-		var dataObj map[string]interface{}
-		if inputStr, err := inputValue.AsString(); err == nil {
-			// Check if the input is a JSON string
-			if strings.HasPrefix(strings.TrimSpace(inputStr), "{") {
-				if err := json.Unmarshal([]byte(inputStr), &dataObj); err != nil {
-					logger.Error("Input string is not valid JSON", map[string]interface{}{"error": err.Error()})
-					debugData["error"] = "Input string is not valid JSON: " + err.Error()
-					ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Input string is not valid JSON"))
-
-					ctx.RecordDebugInfo(types.DebugInfo{
-						NodeID:      ctx.GetNodeID(),
-						Description: "JSON Access Error",
-						Value:       debugData,
-						Timestamp:   time.Now(),
-					})
-
-					return ctx.ActivateOutputFlow("error")
-				}
-			} else {
-				logger.Error("Input is not a JSON object", nil)
-				debugData["error"] = "Input is not a JSON object"
-				ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Input is not a JSON object"))
-
-				ctx.RecordDebugInfo(types.DebugInfo{
-					NodeID:      ctx.GetNodeID(),
-					Description: "JSON Access Error",
-					Value:       debugData,
-					Timestamp:   time.Now(),
-				})
-
-				return ctx.ActivateOutputFlow("error")
-			}
-		} else if inputObj, err := inputValue.AsObject(); err == nil {
-			// Input is already an object
-			dataObj = inputObj
-		} else {
-			logger.Error("Input is not a JSON object or string", nil)
-			debugData["error"] = "Input is not a JSON object or string"
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Input is not a JSON object or string"))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "JSON Access Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Access the path
-		pathParts := strings.Split(path, ".")
-		var current interface{} = dataObj
-
-		for _, part := range pathParts {
-			if current == nil {
-				logger.Error("Path element is null", map[string]interface{}{"part": part})
-				debugData["error"] = fmt.Sprintf("Path element '%s' is null", part)
-				ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, fmt.Sprintf("Path element '%s' is null", part)))
-
-				ctx.RecordDebugInfo(types.DebugInfo{
-					NodeID:      ctx.GetNodeID(),
-					Description: "JSON Access Error",
-					Value:       debugData,
-					Timestamp:   time.Now(),
-				})
-
-				return ctx.ActivateOutputFlow("error")
-			}
-
-			// If current is an object
-			if currentObj, ok := current.(map[string]interface{}); ok {
-				current = currentObj[part]
-			} else if currentArr, ok := current.([]interface{}); ok {
-				// If current is an array, try to parse the part as an index
-				var index int
-				if _, err := fmt.Sscanf(part, "%d", &index); err == nil && index >= 0 && index < len(currentArr) {
-					current = currentArr[index]
-				} else {
-					logger.Error("Invalid array index", map[string]interface{}{"part": part})
-					debugData["error"] = fmt.Sprintf("Invalid array index '%s'", part)
-					ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, fmt.Sprintf("Invalid array index '%s'", part)))
-
-					ctx.RecordDebugInfo(types.DebugInfo{
-						NodeID:      ctx.GetNodeID(),
-						Description: "JSON Access Error",
-						Value:       debugData,
-						Timestamp:   time.Now(),
-					})
-
-					return ctx.ActivateOutputFlow("error")
-				}
-			} else {
-				logger.Error("Invalid path element", map[string]interface{}{"part": part})
-				debugData["error"] = fmt.Sprintf("Invalid path element '%s'", part)
-				ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, fmt.Sprintf("Invalid path element '%s'", part)))
-
-				ctx.RecordDebugInfo(types.DebugInfo{
-					NodeID:      ctx.GetNodeID(),
-					Description: "JSON Access Error",
-					Value:       debugData,
-					Timestamp:   time.Now(),
-				})
-
-				return ctx.ActivateOutputFlow("error")
-			}
-		}
-
-		result = current
-		debugData["operation"] = "access"
-		debugData["path"] = path
 		debugData["successful"] = true
 
 	default:

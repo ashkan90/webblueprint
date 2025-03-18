@@ -2,3 +2,8 @@
 .log
 
 ./web/node_modules
+
+./dist/assets
+
+./internal/*.out
+./*.out

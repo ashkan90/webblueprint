@@ -2,8 +2,6 @@ package data
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
@@ -35,58 +33,35 @@ func NewArrayNode() node.Node {
 				{
 					ID:          "operation",
 					Name:        "Operation",
-					Description: "Array operation: map, filter, forEach, sort, reverse, join, slice, concat",
+					Description: "Array operation (create, get, set, push, pop, length)",
 					Type:        types.PinTypes.String,
-					Default:     "map",
 				},
 				{
 					ID:          "array",
 					Name:        "Array",
 					Description: "Array to operate on",
 					Type:        types.PinTypes.Array,
-				},
-				{
-					ID:          "propertyPath",
-					Name:        "Property Path",
-					Description: "Path to property for map/filter (e.g., 'user.name')",
-					Type:        types.PinTypes.String,
 					Optional:    true,
 				},
 				{
-					ID:          "filterValue",
-					Name:        "Filter Value",
-					Description: "Value to filter by (for filter operation)",
+					ID:          "index",
+					Name:        "Index",
+					Description: "Index for get/set operations",
+					Type:        types.PinTypes.Number,
+					Optional:    true,
+				},
+				{
+					ID:          "value",
+					Name:        "Value",
+					Description: "Value for set/push operations",
 					Type:        types.PinTypes.Any,
 					Optional:    true,
 				},
 				{
-					ID:          "separator",
-					Name:        "Separator",
-					Description: "Separator for join operation",
-					Type:        types.PinTypes.String,
-					Optional:    true,
-					Default:     ",",
-				},
-				{
-					ID:          "startIndex",
-					Name:        "Start Index",
-					Description: "Start index for slice operation",
+					ID:          "size",
+					Name:        "Size",
+					Description: "Size for create operation",
 					Type:        types.PinTypes.Number,
-					Optional:    true,
-					Default:     0,
-				},
-				{
-					ID:          "endIndex",
-					Name:        "End Index",
-					Description: "End index for slice operation",
-					Type:        types.PinTypes.Number,
-					Optional:    true,
-				},
-				{
-					ID:          "arrayToConcat",
-					Name:        "Array to Concat",
-					Description: "Second array for concat operation",
-					Type:        types.PinTypes.Array,
 					Optional:    true,
 				},
 			},
@@ -110,10 +85,10 @@ func NewArrayNode() node.Node {
 					Type:        types.PinTypes.Any,
 				},
 				{
-					ID:          "length",
-					Name:        "Length",
-					Description: "Length of the resulting array",
-					Type:        types.PinTypes.Number,
+					ID:          "popped_item",
+					Name:        "Popped Item",
+					Description: "Item popped from the array",
+					Type:        types.PinTypes.Any,
 				},
 				{
 					ID:          "errorMessage",
@@ -134,26 +109,10 @@ func (n *ArrayNode) Execute(ctx node.ExecutionContext) error {
 	// Collect debug data
 	debugData := make(map[string]interface{})
 
-	// Get input values
+	// Get operation value
 	operationValue, operationExists := ctx.GetInputValue("operation")
-	arrayValue, arrayExists := ctx.GetInputValue("array")
-	propertyPathValue, propertyPathExists := ctx.GetInputValue("propertyPath")
-	filterValue, filterValueExists := ctx.GetInputValue("filterValue")
-	separatorValue, separatorExists := ctx.GetInputValue("separator")
-	startIndexValue, startIndexExists := ctx.GetInputValue("startIndex")
-	endIndexValue, endIndexExists := ctx.GetInputValue("endIndex")
-	arrayConcatValue, arrayConcatExists := ctx.GetInputValue("arrayToConcat")
-
-	// Check required inputs
 	if !operationExists {
 		err := fmt.Errorf("missing required input: operation")
-		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
-		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
-		return ctx.ActivateOutputFlow("error")
-	}
-
-	if !arrayExists {
-		err := fmt.Errorf("missing required input: array")
 		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
 		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
 		return ctx.ActivateOutputFlow("error")
@@ -167,356 +126,20 @@ func (n *ArrayNode) Execute(ctx node.ExecutionContext) error {
 		return ctx.ActivateOutputFlow("error")
 	}
 
-	// Parse array
-	array, err := arrayValue.AsArray()
-	if err != nil {
-		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
-		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
-		return ctx.ActivateOutputFlow("error")
-	}
-
-	// Record input values for debugging
-	debugData["inputs"] = map[string]interface{}{
-		"operation":       operation,
-		"arrayLength":     len(array),
-		"hasPropertyPath": propertyPathExists,
-		"hasFilterValue":  filterValueExists,
-	}
-
-	var result interface{}
-	var resultArray []interface{}
-	var resultLength int
-
 	// Process based on operation
-	switch strings.ToLower(operation) {
-	case "map":
-		// Map array elements to a property
-		if !propertyPathExists {
-			logger.Error("Missing property path for map operation", nil)
-			debugData["error"] = "Missing property path for map operation"
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Missing property path for map operation"))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "Array Map Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Get property path
-		propertyPath, err := propertyPathValue.AsString()
-		if err != nil {
-			logger.Error("Invalid property path", map[string]interface{}{"error": err.Error()})
-			debugData["error"] = "Invalid property path: " + err.Error()
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid property path: "+err.Error()))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "Array Map Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Map elements to the specified property
-		resultArray = make([]interface{}, 0, len(array))
-		pathParts := strings.Split(propertyPath, ".")
-
-		for _, item := range array {
-			if item == nil {
-				resultArray = append(resultArray, nil)
-				continue
-			}
-
-			// Navigate to the property
-			currentValue := item
-			found := true
-
-			for _, part := range pathParts {
-				if currentMap, ok := currentValue.(map[string]interface{}); ok {
-					if value, exists := currentMap[part]; exists {
-						currentValue = value
-					} else {
-						found = false
-						break
-					}
-				} else {
-					found = false
-					break
-				}
-			}
-
-			if found {
-				resultArray = append(resultArray, currentValue)
-			} else {
-				resultArray = append(resultArray, nil)
-			}
-		}
-
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "map"
-		debugData["propertyPath"] = propertyPath
-		debugData["successful"] = true
-
-	case "filter":
-		// Filter array elements by a property and value
-		if !propertyPathExists {
-			logger.Error("Missing property path for filter operation", nil)
-			debugData["error"] = "Missing property path for filter operation"
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Missing property path for filter operation"))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "Array Filter Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		if !filterValueExists {
-			logger.Error("Missing filter value for filter operation", nil)
-			debugData["error"] = "Missing filter value for filter operation"
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Missing filter value for filter operation"))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "Array Filter Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Get property path and filter value
-		propertyPath, err := propertyPathValue.AsString()
-		if err != nil {
-			logger.Error("Invalid property path", map[string]interface{}{"error": err.Error()})
-			debugData["error"] = "Invalid property path: " + err.Error()
-			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid property path: "+err.Error()))
-
-			ctx.RecordDebugInfo(types.DebugInfo{
-				NodeID:      ctx.GetNodeID(),
-				Description: "Array Filter Error",
-				Value:       debugData,
-				Timestamp:   time.Now(),
-			})
-
-			return ctx.ActivateOutputFlow("error")
-		}
-
-		// Filter elements by the specified property and value
-		resultArray = make([]interface{}, 0)
-		pathParts := strings.Split(propertyPath, ".")
-		filterVal := filterValue.RawValue
-
-		for _, item := range array {
-			if item == nil {
-				continue
-			}
-
-			// Navigate to the property
-			currentValue := item
-			found := true
-
-			for _, part := range pathParts {
-				if currentMap, ok := currentValue.(map[string]interface{}); ok {
-					if value, exists := currentMap[part]; exists {
-						currentValue = value
-					} else {
-						found = false
-						break
-					}
-				} else {
-					found = false
-					break
-				}
-			}
-
-			if found && currentValue == filterVal {
-				resultArray = append(resultArray, item)
-			}
-		}
-
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "filter"
-		debugData["propertyPath"] = propertyPath
-		debugData["filterValue"] = filterVal
-		debugData["successful"] = true
-
-	case "foreach":
-		// Pass through array but provide access to each element
-		// This is mostly for looping through the array in the UI
-		result = array
-		resultLength = len(array)
-		debugData["operation"] = "forEach"
-		debugData["successful"] = true
-
-	case "sort":
-		// Sort the array (only works for arrays of strings or numbers)
-		resultArray = make([]interface{}, len(array))
-		copy(resultArray, array)
-
-		// Try to determine array type and sort accordingly
-		if len(array) > 0 {
-			firstItem := array[0]
-			if _, isString := firstItem.(string); isString {
-				// Sort string array
-				stringArray := make([]string, len(array))
-				allStrings := true
-
-				for i, item := range array {
-					if str, ok := item.(string); ok {
-						stringArray[i] = str
-					} else {
-						allStrings = false
-						break
-					}
-				}
-
-				if allStrings {
-					sort.Strings(stringArray)
-					for i, str := range stringArray {
-						resultArray[i] = str
-					}
-				} else {
-					logger.Warn("Array contains mixed types, sorting may not be accurate", nil)
-				}
-			} else if _, isNumber := firstItem.(float64); isNumber {
-				// Sort number array
-				numberArray := make([]float64, len(array))
-				allNumbers := true
-
-				for i, item := range array {
-					if num, ok := item.(float64); ok {
-						numberArray[i] = num
-					} else {
-						allNumbers = false
-						break
-					}
-				}
-
-				if allNumbers {
-					sort.Float64s(numberArray)
-					for i, num := range numberArray {
-						resultArray[i] = num
-					}
-				} else {
-					logger.Warn("Array contains mixed types, sorting may not be accurate", nil)
-				}
-			} else {
-				logger.Warn("Array contains complex types that cannot be automatically sorted", nil)
-			}
-		}
-
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "sort"
-		debugData["successful"] = true
-
-	case "reverse":
-		// Reverse the array
-		resultArray = make([]interface{}, len(array))
-		for i, item := range array {
-			resultArray[len(array)-1-i] = item
-		}
-
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "reverse"
-		debugData["successful"] = true
-
-	case "join":
-		// Join array elements into a string
-		separator := ","
-		if separatorExists {
-			if sepStr, err := separatorValue.AsString(); err == nil {
-				separator = sepStr
-			}
-		}
-
-		// Convert all elements to strings and join
-		stringArray := make([]string, len(array))
-		for i, item := range array {
-			stringArray[i] = fmt.Sprintf("%v", item)
-		}
-
-		result = strings.Join(stringArray, separator)
-		resultLength = len(array)
-		debugData["operation"] = "join"
-		debugData["separator"] = separator
-		debugData["successful"] = true
-
-	case "slice":
-		// Slice the array (similar to array.slice in JavaScript)
-		startIndex := 0
-		if startIndexExists {
-			if startIdx, err := startIndexValue.AsNumber(); err == nil {
-				startIndex = int(startIdx)
-			}
-		}
-
-		endIndex := len(array)
-		if endIndexExists {
-			if endIdx, err := endIndexValue.AsNumber(); err == nil {
-				endIndex = int(endIdx)
-			}
-		}
-
-		// Bound check
-		if startIndex < 0 {
-			startIndex = 0
-		}
-		if endIndex > len(array) {
-			endIndex = len(array)
-		}
-		if startIndex > endIndex {
-			startIndex = endIndex
-		}
-
-		// Create the slice
-		resultArray = array[startIndex:endIndex]
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "slice"
-		debugData["startIndex"] = startIndex
-		debugData["endIndex"] = endIndex
-		debugData["successful"] = true
-
-	case "concat":
-		// Concatenate two arrays
-		resultArray = make([]interface{}, len(array))
-		copy(resultArray, array)
-
-		if arrayConcatExists {
-			if arrayToConcat, err := arrayConcatValue.AsArray(); err == nil {
-				resultArray = append(resultArray, arrayToConcat...)
-			} else {
-				logger.Warn("Second array is not valid, using only first array", nil)
-			}
-		}
-
-		result = resultArray
-		resultLength = len(resultArray)
-		debugData["operation"] = "concat"
-		debugData["successful"] = true
-
+	switch operation {
+	case "create":
+		return n.handleCreateOperation(ctx, debugData)
+	case "get":
+		return n.handleGetOperation(ctx, debugData)
+	case "set":
+		return n.handleSetOperation(ctx, debugData)
+	case "push":
+		return n.handlePushOperation(ctx, debugData)
+	case "pop":
+		return n.handlePopOperation(ctx, debugData)
 	case "length":
-		// Get the length of the array
-		result = float64(len(array))
-		resultLength = len(array)
-		debugData["operation"] = "length"
-		debugData["successful"] = true
-
+		return n.handleLengthOperation(ctx, debugData)
 	default:
 		logger.Error("Invalid operation", map[string]interface{}{"operation": operation})
 		debugData["error"] = fmt.Sprintf("Invalid operation: %s", operation)
@@ -531,25 +154,340 @@ func (n *ArrayNode) Execute(ctx node.ExecutionContext) error {
 
 		return ctx.ActivateOutputFlow("error")
 	}
+}
+
+func (n *ArrayNode) handleCreateOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get size value
+	sizeValue, sizeExists := ctx.GetInputValue("size")
+	if !sizeExists {
+		err := fmt.Errorf("missing required input: size")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse size
+	size, err := sizeValue.AsNumber()
+	if err != nil {
+		logger.Error("Invalid size", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid size: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Create array of the specified size
+	array := make([]interface{}, int(size))
 
 	// Set output values
-	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Any, result))
-	ctx.SetOutputValue("length", types.NewValue(types.PinTypes.Number, float64(resultLength)))
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Array, array))
 
-	debugData["result"] = result
-	debugData["resultLength"] = resultLength
+	debugData["operation"] = "create"
+	debugData["size"] = size
+	debugData["result"] = array
 
 	// Record debug info
 	ctx.RecordDebugInfo(types.DebugInfo{
 		NodeID:      ctx.GetNodeID(),
-		Description: "Array Operation",
+		Description: "Array Create Operation",
 		Value:       debugData,
 		Timestamp:   time.Now(),
 	})
 
-	logger.Info("Array operation completed", map[string]interface{}{
-		"operation": operation,
-		"success":   true,
+	// Continue execution
+	return ctx.ActivateOutputFlow("then")
+}
+
+func (n *ArrayNode) handleGetOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get array and index values
+	arrayValue, arrayExists := ctx.GetInputValue("array")
+	if !arrayExists {
+		err := fmt.Errorf("missing required input: array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	indexValue, indexExists := ctx.GetInputValue("index")
+	if !indexExists {
+		err := fmt.Errorf("missing required input: index")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse array and index
+	array, err := arrayValue.AsArray()
+	if err != nil {
+		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	index, err := indexValue.AsNumber()
+	if err != nil {
+		logger.Error("Invalid index", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid index: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Check if index is valid
+	intIndex := int(index)
+	if intIndex < 0 || intIndex >= len(array) {
+		err := fmt.Errorf("index out of bounds: %d", intIndex)
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Get the element at the specified index
+	element := array[intIndex]
+
+	// Set output values
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Any, element))
+
+	debugData["operation"] = "get"
+	debugData["array"] = array
+	debugData["index"] = index
+	debugData["result"] = element
+
+	// Record debug info
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Array Get Operation",
+		Value:       debugData,
+		Timestamp:   time.Now(),
+	})
+
+	// Continue execution
+	return ctx.ActivateOutputFlow("then")
+}
+
+func (n *ArrayNode) handleSetOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get array, index, and value
+	arrayValue, arrayExists := ctx.GetInputValue("array")
+	if !arrayExists {
+		err := fmt.Errorf("missing required input: array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	indexValue, indexExists := ctx.GetInputValue("index")
+	if !indexExists {
+		err := fmt.Errorf("missing required input: index")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	valueValue, valueExists := ctx.GetInputValue("value")
+	if !valueExists {
+		err := fmt.Errorf("missing required input: value")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse array and index
+	array, err := arrayValue.AsArray()
+	if err != nil {
+		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	index, err := indexValue.AsNumber()
+	if err != nil {
+		logger.Error("Invalid index", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid index: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Check if index is valid
+	intIndex := int(index)
+	if intIndex < 0 || intIndex >= len(array) {
+		err := fmt.Errorf("index out of bounds: %d", intIndex)
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Create a new array with the value set at the specified index
+	newArray := make([]interface{}, len(array))
+	copy(newArray, array)
+	newArray[intIndex] = valueValue.RawValue
+
+	// Set output values
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Array, newArray))
+
+	debugData["operation"] = "set"
+	debugData["array"] = array
+	debugData["index"] = index
+	debugData["value"] = valueValue.RawValue
+	debugData["result"] = newArray
+
+	// Record debug info
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Array Set Operation",
+		Value:       debugData,
+		Timestamp:   time.Now(),
+	})
+
+	// Continue execution
+	return ctx.ActivateOutputFlow("then")
+}
+
+func (n *ArrayNode) handlePushOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get array and value
+	arrayValue, arrayExists := ctx.GetInputValue("array")
+	if !arrayExists {
+		err := fmt.Errorf("missing required input: array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	valueValue, valueExists := ctx.GetInputValue("value")
+	if !valueExists {
+		err := fmt.Errorf("missing required input: value")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse array
+	array, err := arrayValue.AsArray()
+	if err != nil {
+		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Create a new array with the value pushed to the end
+	newArray := make([]interface{}, len(array)+1)
+	copy(newArray, array)
+	newArray[len(array)] = valueValue.RawValue
+
+	// Set output values
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Array, newArray))
+
+	debugData["operation"] = "push"
+	debugData["array"] = array
+	debugData["value"] = valueValue.RawValue
+	debugData["result"] = newArray
+
+	// Record debug info
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Array Push Operation",
+		Value:       debugData,
+		Timestamp:   time.Now(),
+	})
+
+	// Continue execution
+	return ctx.ActivateOutputFlow("then")
+}
+
+func (n *ArrayNode) handlePopOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get array
+	arrayValue, arrayExists := ctx.GetInputValue("array")
+	if !arrayExists {
+		err := fmt.Errorf("missing required input: array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse array
+	array, err := arrayValue.AsArray()
+	if err != nil {
+		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Check if array is not empty
+	if len(array) == 0 {
+		err := fmt.Errorf("cannot pop from empty array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Get the popped item
+	poppedItem := array[len(array)-1]
+
+	// Create a new array without the last element
+	newArray := make([]interface{}, len(array)-1)
+	copy(newArray, array[:len(array)-1])
+
+	// Set output values
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Array, newArray))
+	ctx.SetOutputValue("popped_item", types.NewValue(types.PinTypes.Any, poppedItem))
+
+	debugData["operation"] = "pop"
+	debugData["array"] = array
+	debugData["poppedItem"] = poppedItem
+	debugData["result"] = newArray
+
+	// Record debug info
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Array Pop Operation",
+		Value:       debugData,
+		Timestamp:   time.Now(),
+	})
+
+	// Continue execution
+	return ctx.ActivateOutputFlow("then")
+}
+
+func (n *ArrayNode) handleLengthOperation(ctx node.ExecutionContext, debugData map[string]interface{}) error {
+	logger := ctx.Logger()
+
+	// Get array
+	arrayValue, arrayExists := ctx.GetInputValue("array")
+	if !arrayExists {
+		err := fmt.Errorf("missing required input: array")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse array
+	array, err := arrayValue.AsArray()
+	if err != nil {
+		logger.Error("Invalid array", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid array: "+err.Error()))
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Get the length of the array
+	length := float64(len(array))
+
+	// Set output values
+	ctx.SetOutputValue("result", types.NewValue(types.PinTypes.Number, length))
+
+	debugData["operation"] = "length"
+	debugData["array"] = array
+	debugData["result"] = length
+
+	// Record debug info
+	ctx.RecordDebugInfo(types.DebugInfo{
+		NodeID:      ctx.GetNodeID(),
+		Description: "Array Length Operation",
+		Value:       debugData,
+		Timestamp:   time.Now(),
 	})
 
 	// Continue execution
