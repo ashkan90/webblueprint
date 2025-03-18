@@ -34,9 +34,8 @@ func NewTimerNode() node.Node {
 				{
 					ID:          "operation",
 					Name:        "Operation",
-					Description: "Timer operation: delay, elapsed, timestamp",
+					Description: "Timer operation: delay, elapsed, current_time, format",
 					Type:        types.PinTypes.String,
-					Default:     "delay",
 				},
 				{
 					ID:          "duration",
@@ -45,6 +44,21 @@ func NewTimerNode() node.Node {
 					Type:        types.PinTypes.Number,
 					Optional:    true,
 					Default:     1000,
+				},
+				{
+					ID:          "timestamp",
+					Name:        "Timestamp",
+					Description: "Timestamp to format (for format operation)",
+					Type:        types.PinTypes.Number,
+					Optional:    true,
+				},
+				{
+					ID:          "format",
+					Name:        "Format",
+					Description: "Time format string (for format operation)",
+					Type:        types.PinTypes.String,
+					Optional:    true,
+					Default:     "2006-01-02 15:04:05",
 				},
 				{
 					ID:          "startTime",
@@ -62,6 +76,12 @@ func NewTimerNode() node.Node {
 					Type:        types.PinTypes.Execution,
 				},
 				{
+					ID:          "error",
+					Name:        "Error",
+					Description: "Executed if an error occurs",
+					Type:        types.PinTypes.Execution,
+				},
+				{
 					ID:          "timestamp",
 					Name:        "Timestamp",
 					Description: "Current timestamp (Unix milliseconds)",
@@ -70,7 +90,7 @@ func NewTimerNode() node.Node {
 				{
 					ID:          "formatted",
 					Name:        "Formatted Time",
-					Description: "Formatted current time (ISO 8601)",
+					Description: "Formatted time",
 					Type:        types.PinTypes.String,
 				},
 				{
@@ -78,6 +98,12 @@ func NewTimerNode() node.Node {
 					Name:        "Elapsed",
 					Description: "Elapsed time in milliseconds",
 					Type:        types.PinTypes.Number,
+				},
+				{
+					ID:          "errorMessage",
+					Name:        "Error Message",
+					Description: "Error message if operation fails",
+					Type:        types.PinTypes.String,
 				},
 			},
 		},
@@ -96,13 +122,41 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 	operationValue, operationExists := ctx.GetInputValue("operation")
 	durationValue, durationExists := ctx.GetInputValue("duration")
 	startTimeValue, startTimeExists := ctx.GetInputValue("startTime")
+	timestampValue, timestampExists := ctx.GetInputValue("timestamp")
+	formatValue, formatExists := ctx.GetInputValue("format")
 
-	// Default to "delay" operation if not specified
-	operation := "delay"
-	if operationExists {
-		if opStr, err := operationValue.AsString(); err == nil {
-			operation = opStr
-		}
+	// Check if operation is specified
+	if !operationExists {
+		err := fmt.Errorf("missing required input: operation")
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+
+		debugData["error"] = err.Error()
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.GetNodeID(),
+			Description: "Timer Error",
+			Value:       debugData,
+			Timestamp:   time.Now(),
+		})
+
+		return ctx.ActivateOutputFlow("error")
+	}
+
+	// Parse operation
+	operation, err := operationValue.AsString()
+	if err != nil {
+		logger.Error("Invalid operation", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, "Invalid operation: "+err.Error()))
+
+		debugData["error"] = "Invalid operation: " + err.Error()
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.GetNodeID(),
+			Description: "Timer Error",
+			Value:       debugData,
+			Timestamp:   time.Now(),
+		})
+
+		return ctx.ActivateOutputFlow("error")
 	}
 
 	// Record input values for debugging
@@ -110,6 +164,8 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 		"operation":    operation,
 		"hasDuration":  durationExists,
 		"hasStartTime": startTimeExists,
+		"hasTimestamp": timestampExists,
+		"hasFormat":    formatExists,
 	}
 
 	// Current time for all operations
@@ -119,7 +175,6 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 
 	// Set common outputs
 	ctx.SetOutputValue("timestamp", types.NewValue(types.PinTypes.Number, nowUnix))
-	ctx.SetOutputValue("formatted", types.NewValue(types.PinTypes.String, formatted))
 
 	// Process based on operation
 	switch operation {
@@ -190,6 +245,7 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 		if !startTimeExists {
 			// If no start time provided, use current time and set elapsed to 0
 			ctx.SetOutputValue("elapsed", types.NewValue(types.PinTypes.Number, 0.0))
+			ctx.SetOutputValue("formatted", types.NewValue(types.PinTypes.String, formatted))
 
 			logger.Warn("No start time provided for elapsed operation", nil)
 
@@ -262,6 +318,7 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 			}
 
 			ctx.SetOutputValue("elapsed", types.NewValue(types.PinTypes.Number, elapsed))
+			ctx.SetOutputValue("formatted", types.NewValue(types.PinTypes.String, formatted))
 
 			logger.Info("Elapsed time calculated", map[string]interface{}{
 				"startTime": startTime,
@@ -282,33 +339,132 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 			})
 		}
 
-	case "timestamp":
-		// Just return the current timestamp (already set above)
-		logger.Info("Timestamp generated", map[string]interface{}{
+	case "current_time":
+		// Just return the current timestamp
+		ctx.SetOutputValue("formatted", types.NewValue(types.PinTypes.String, formatted))
+		ctx.SetOutputValue("elapsed", types.NewValue(types.PinTypes.Number, 0.0))
+
+		logger.Info("Current time generated", map[string]interface{}{
 			"timestamp": nowUnix,
 			"formatted": formatted,
 		})
 
-		debugData["operation"] = "timestamp"
+		debugData["operation"] = "current_time"
 		debugData["timestamp"] = nowUnix
 		debugData["formatted"] = formatted
 
 		ctx.RecordDebugInfo(types.DebugInfo{
 			NodeID:      ctx.GetNodeID(),
-			Description: "Timer Timestamp",
+			Description: "Timer Current Time",
 			Value:       debugData,
 			Timestamp:   now,
 		})
 
+	case "format":
+		// Format a timestamp with a specified format string
+		if !timestampExists {
+			// Use current time if no timestamp is provided
+			timestampValue = types.NewValue(types.PinTypes.Number, nowUnix)
+		}
+
+		// Get the format string
+		formatStr := "2006-01-02 15:04:05" // Default format
+		if formatExists {
+			if fmtStr, err := formatValue.AsString(); err == nil {
+				formatStr = fmtStr
+			}
+		}
+
+		// Parse the timestamp
+		var timeToFormat time.Time
+		if tsNum, err := timestampValue.AsNumber(); err == nil {
+			// Convert from milliseconds to a time.Time
+			seconds := int64(tsNum / 1000)
+			nanoseconds := int64((tsNum - float64(seconds)*1000) * 1e6)
+			timeToFormat = time.Unix(seconds, nanoseconds)
+		} else {
+			// If timestamp is not a number, try to parse as string
+			if tsStr, err := timestampValue.AsString(); err == nil {
+				if t, err := time.Parse(time.RFC3339, tsStr); err == nil {
+					timeToFormat = t
+				} else {
+					// Failed to parse timestamp
+					errMsg := fmt.Sprintf("Invalid timestamp: %s", tsStr)
+					ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, errMsg))
+					logger.Error(errMsg, nil)
+
+					debugData["error"] = errMsg
+					ctx.RecordDebugInfo(types.DebugInfo{
+						NodeID:      ctx.GetNodeID(),
+						Description: "Timer Format Error",
+						Value:       debugData,
+						Timestamp:   now,
+					})
+
+					return ctx.ActivateOutputFlow("error")
+				}
+			} else {
+				// Use current time as fallback
+				timeToFormat = now
+			}
+		}
+
+		// Try to format the time with the provided format string
+		var formattedTime string
+		defer func() {
+			// Catch any panics from the time.Format function with invalid format strings
+			if r := recover(); r != nil {
+				errMsg := fmt.Sprintf("Invalid format string: %s", formatStr)
+				ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, errMsg))
+				logger.Error(errMsg, map[string]interface{}{"recover": r})
+
+				debugData["error"] = errMsg
+				debugData["recover"] = r
+				ctx.RecordDebugInfo(types.DebugInfo{
+					NodeID:      ctx.GetNodeID(),
+					Description: "Timer Format Error",
+					Value:       debugData,
+					Timestamp:   now,
+				})
+
+				// We need to panic and recover again since we can't activate
+				// output flow in a defer function
+				panic(r)
+			}
+		}()
+
+		// Format the time
+		formattedTime = timeToFormat.Format(formatStr)
+
+		// Set outputs
+		ctx.SetOutputValue("formatted", types.NewValue(types.PinTypes.String, formattedTime))
 		ctx.SetOutputValue("elapsed", types.NewValue(types.PinTypes.Number, 0.0))
+
+		logger.Info("Time formatted", map[string]interface{}{
+			"timestamp": timeToFormat.Unix(),
+			"format":    formatStr,
+			"formatted": formattedTime,
+		})
+
+		debugData["operation"] = "format"
+		debugData["timestamp"] = timeToFormat.Unix()
+		debugData["format"] = formatStr
+		debugData["formatted"] = formattedTime
+
+		ctx.RecordDebugInfo(types.DebugInfo{
+			NodeID:      ctx.GetNodeID(),
+			Description: "Timer Format",
+			Value:       debugData,
+			Timestamp:   now,
+		})
 
 	default:
 		// Unknown operation
-		err := fmt.Errorf("unknown timer operation: %s", operation)
-		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		errMsg := fmt.Sprintf("Unknown timer operation: %s", operation)
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, errMsg))
+		logger.Error(errMsg, nil)
 
-		debugData["error"] = err.Error()
-
+		debugData["error"] = errMsg
 		ctx.RecordDebugInfo(types.DebugInfo{
 			NodeID:      ctx.GetNodeID(),
 			Description: "Timer Error",
@@ -316,8 +472,7 @@ func (n *TimerNode) Execute(ctx node.ExecutionContext) error {
 			Timestamp:   now,
 		})
 
-		// Set default output values
-		ctx.SetOutputValue("elapsed", types.NewValue(types.PinTypes.Number, 0.0))
+		return ctx.ActivateOutputFlow("error")
 	}
 
 	// Continue execution

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
@@ -152,6 +153,22 @@ func (n *BranchNode) Execute(ctx node.ExecutionContext) error {
 		"hasCase4": case4Exists,
 	}
 
+	// Log types for debugging
+	debugData["valueType"] = reflect.TypeOf(valueInput.RawValue)
+
+	if case1Exists {
+		debugData["case1Type"] = reflect.TypeOf(case1Value.RawValue)
+	}
+	if case2Exists {
+		debugData["case2Type"] = reflect.TypeOf(case2Value.RawValue)
+	}
+	if case3Exists {
+		debugData["case3Type"] = reflect.TypeOf(case3Value.RawValue)
+	}
+	if case4Exists {
+		debugData["case4Type"] = reflect.TypeOf(case4Value.RawValue)
+	}
+
 	// Try to compare values
 	// Case 1
 	if case1Exists && compareValues(valueInput.RawValue, case1Value.RawValue) {
@@ -266,32 +283,128 @@ func compareValues(valueA, valueB interface{}) bool {
 		return false
 	}
 
-	// Check if types match
-	switch a := valueA.(type) {
-	case string:
-		if b, ok := valueB.(string); ok {
-			return a == b
+	// Get type information
+	typeA := reflect.TypeOf(valueA)
+	typeB := reflect.TypeOf(valueB)
+
+	// If types don't match, we need to be more careful about comparisons
+	if typeA != typeB {
+		// Special case for numeric types - they can be compared if both are numeric
+		switch valueA.(type) {
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			// A is numeric, check if B is also numeric
+			switch valueB.(type) {
+			case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+				// Both are numeric types, convert to float64 for comparison
+				var numA, numB float64
+
+				switch a := valueA.(type) {
+				case int:
+					numA = float64(a)
+				case int8:
+					numA = float64(a)
+				case int16:
+					numA = float64(a)
+				case int32:
+					numA = float64(a)
+				case int64:
+					numA = float64(a)
+				case uint:
+					numA = float64(a)
+				case uint8:
+					numA = float64(a)
+				case uint16:
+					numA = float64(a)
+				case uint32:
+					numA = float64(a)
+				case uint64:
+					numA = float64(a)
+				case float32:
+					numA = float64(a)
+				case float64:
+					numA = a
+				}
+
+				switch b := valueB.(type) {
+				case int:
+					numB = float64(b)
+				case int8:
+					numB = float64(b)
+				case int16:
+					numB = float64(b)
+				case int32:
+					numB = float64(b)
+				case int64:
+					numB = float64(b)
+				case uint:
+					numB = float64(b)
+				case uint8:
+					numB = float64(b)
+				case uint16:
+					numB = float64(b)
+				case uint32:
+					numB = float64(b)
+				case uint64:
+					numB = float64(b)
+				case float32:
+					numB = float64(b)
+				case float64:
+					numB = b
+				}
+
+				return numA == numB
+			}
 		}
-	case float64:
-		if b, ok := valueB.(float64); ok {
-			return a == b
-		}
-		// Special case for integers
-		if b, ok := valueB.(int); ok {
-			return a == float64(b)
-		}
-	case bool:
-		if b, ok := valueB.(bool); ok {
-			return a == b
-		}
-	case map[string]interface{}:
-		// For objects, we'll just check equality of string representations
-		return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", valueB)
-	case []interface{}:
-		// For arrays, we'll just check equality of string representations
-		return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", valueB)
+
+		// For non-numeric types with different types, we should generally return false
+		// This is especially important for mixed type comparison test case
+		return false
 	}
 
-	// Fallback to string comparison
+	// At this point, we know both values are of the same type
+	switch a := valueA.(type) {
+	case string:
+		b := valueB.(string)
+		return a == b
+	case float64:
+		b := valueB.(float64)
+		return a == b
+	case bool:
+		b := valueB.(bool)
+		return a == b
+	case int:
+		b := valueB.(int)
+		return a == b
+	case map[string]interface{}:
+		// Deep comparison for objects is complex
+		// For now, we'll do a simple string representation comparison
+		b := valueB.(map[string]interface{})
+		if len(a) != len(b) {
+			return false
+		}
+		// Simple check: if keys and values match
+		for k, aVal := range a {
+			if bVal, exists := b[k]; !exists || !compareValues(aVal, bVal) {
+				return false
+			}
+		}
+		return true
+	case []interface{}:
+		// Deep comparison for arrays
+		b := valueB.([]interface{})
+		if len(a) != len(b) {
+			return false
+		}
+		// Check if each element matches
+		for i, aVal := range a {
+			if !compareValues(aVal, b[i]) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// For any other types, use string representation as a fallback
+	// But we should be more cautious and avoid matching different types
 	return fmt.Sprintf("%v", valueA) == fmt.Sprintf("%v", valueB)
 }
