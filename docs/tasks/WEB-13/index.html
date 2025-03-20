@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Performance Benchmarks Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Performance Benchmarks Implementation Plan</h1>
+    <p>Task: <strong>WEB-13 - Develop Performance Benchmarks for Critical Components</strong></p>
+    <p>Priority: <span class="priority high">High</span> | Estimate: 4 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for creating benchmark tests to establish baseline performance metrics 
+    and prevent performance regressions for performance-critical components in the WebBlueprint platform. Performance is a 
+    key selling point of our system, and we need to ensure we don't introduce performance regressions as we develop.
+</p>
+
+<h2>Current Performance Metrics Status</h2>
+
+<div class="metric">
+    <div class="metric-name">Execution Engine Benchmarks</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Database Operation Benchmarks</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Node Execution Benchmarks</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 20%;">20%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">WebSocket Throughput Tests</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">CI Integration</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 0%;">0%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Performance Regression Detection</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 0%;">0%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Benchmark Framework Setup <span class="priority high">High</span></h3>
+    <p>Create the foundation for performance benchmarking.</p>
+    <ul class="task-list">
+        <li>Set up benchmark framework in <code>internal/benchmark</code></li>
+        <li>Implement benchmark result storage and reporting</li>
+        <li>Create benchmark comparison utilities</li>
+        <li>Set up test fixtures and data generation</li>
+        <li>Establish baseline environment configuration</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Execution Engine Benchmarks <span class="priority high">High</span></h3>
+    <p>Create benchmarks for the execution engine in both execution modes.</p>
+    <ul class="task-list">
+        <li>Benchmark simple blueprint execution (1-5 nodes)</li>
+        <li>Benchmark complex blueprint execution (10+ nodes)</li>
+        <li>Test execution with different data payloads</li>
+        <li>Compare standard vs. actor execution mode performance</li>
+        <li>Measure memory consumption during execution</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Database Operation Benchmarks <span class="priority high">High</span></h3>
+    <p>Measure performance of database operations.</p>
+    <ul class="task-list">
+        <li>Benchmark blueprint loading performance</li>
+        <li>Measure blueprint saving with different sizes</li>
+        <li>Test version history operations</li>
+        <li>Benchmark queries with different filters</li>
+        <li>Measure transaction performance</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Node Execution Benchmarks <span class="priority high">High</span></h3>
+    <p>Benchmark performance of individual node types.</p>
+    <ul class="task-list">
+        <li>Benchmark math operation nodes</li>
+        <li>Test data transformation nodes</li>
+        <li>Measure logic node performance</li>
+        <li>Benchmark IO-intensive nodes</li>
+        <li>Test complex nodes with nested operations</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>WebSocket Throughput Tests <span class="priority medium">Medium</span></h3>
+    <p>Measure WebSocket performance and throughput.</p>
+    <ul class="task-list">
+        <li>Test message throughput rates</li>
+        <li>Benchmark connection handling under load</li>
+        <li>Measure real-time event delivery latency</li>
+        <li>Test maximum concurrent connections</li>
+        <li>Benchmark reconnection performance</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Concurrent Blueprint Execution <span class="priority medium">Medium</span></h3>
+    <p>Test performance under multiple concurrent blueprint executions.</p>
+    <ul class="task-list">
+        <li>Benchmark execution with 10, 50, 100 concurrent blueprints</li>
+        <li>Measure resource usage under concurrent load</li>
+        <li>Test execution prioritization</li>
+        <li>Benchmark execution queue performance</li>
+        <li>Measure resource contention patterns</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>CI Integration <span class="priority medium">Medium</span></h3>
+    <p>Integrate benchmarks into the CI pipeline.</p>
+    <ul class="task-list">
+        <li>Set up benchmark execution in CI environment</li>
+        <li>Configure benchmark result storage</li>
+        <li>Implement performance regression detection</li>
+        <li>Create performance trend visualization</li>
+        <li>Set up alerting for performance regressions</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Documentation <span class="priority medium">Medium</span></h3>
+    <p>Document the benchmark suite and baseline performance.</p>
+    <ul class="task-list">
+        <li>Document baseline performance expectations</li>
+        <li>Create benchmark execution guide</li>
+        <li>Document performance regression debugging process</li>
+        <li>Create performance optimization guidelines</li>
+        <li>Document benchmark maintenance procedures</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Set up benchmark framework</p>
+            <p>Begin execution engine benchmarks</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete execution engine benchmarks</p>
+            <p>Implement database operation benchmarks</p>
+            <p>Begin node execution benchmarks</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Complete node execution benchmarks</p>
+            <p>Implement WebSocket throughput tests</p>
+            <p>Begin concurrent blueprint execution tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete concurrent blueprint execution tests</p>
+            <p>Implement CI integration</p>
+            <p>Create documentation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Review baseline performance</p>
+            <p>Fine-tune regression detection</p>
+            <p>Complete documentation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Benchmark Examples</h2>
+
+<h3>Execution Engine Benchmark Example</h3>
+
+<pre><code>func BenchmarkBlueprintExecution(b *testing.B) {
+    benchmarks := []struct{
+        name         string
+        blueprintID  string
+        complexity   string
+        executionMode string
+        inputs       map[string]interface{}
+    }{
+        {
+            name:          "simple_linear_standard",
+            blueprintID:   "benchmark_simple_linear",
+            complexity:    "simple",
+            executionMode: execution.ModeStandard,
+            inputs:        map[string]interface{}{"input1": 10, "input2": "test"},
+        },
+        {
+            name:          "simple_linear_actor",
+            blueprintID:   "benchmark_simple_linear",
+            complexity:    "simple",
+            executionMode: execution.ModeActor,
+            inputs:        map[string]interface{}{"input1": 10, "input2": "test"},
+        },
+        {
+            name:          "complex_branching_standard",
+            blueprintID:   "benchmark_complex_branching",
+            complexity:    "complex",
+            executionMode: execution.ModeStandard,
+            inputs:        map[string]interface{}{"input1": 10, "input2": true},
+        },
+        {
+            name:          "complex_branching_actor",
+            blueprintID:   "benchmark_complex_branching",
+            complexity:    "complex",
+            executionMode: execution.ModeActor,
+            inputs:        map[string]interface{}{"input1": 10, "input2": true},
+        },
+    }
+    
+    for _, bm := range benchmarks {
+        b.Run(bm.name, func(b *testing.B) {
+            // Load test blueprint
+            bp, err := benchmark.LoadTestBlueprint(bm.blueprintID)
+            if err != nil {
+                b.Fatalf("Failed to load blueprint: %v", err)
+            }
+            
+            // Create execution engine with specified mode
+            engine := benchmark.NewExecutionEngine(bm.executionMode)
+            
+            // Reset timer before execution loop
+            b.ResetTimer()
+            
+            // Execution benchmark loop
+            for i := 0; i < b.N; i++ {
+                result, err := engine.ExecuteBlueprint(bp, bm.inputs)
+                if err != nil {
+                    b.Fatalf("Execution failed: %v", err)
+                }
+                
+                // Prevent compiler optimization by using the result
+                benchmark.UseResult(result)
+            }
+            
+            // Report memory statistics
+            b.ReportMetric(float64(benchmark.GetMemoryUsage()), "bytes/op")
+        })
+    }
+}</code></pre>
+
+<h3>Database Operation Benchmark Example</h3>
+
+<pre><code>func BenchmarkDatabaseOperations(b *testing.B) {
+    benchmarks := []struct{
+        name       string
+        operation  string
+        blueprintSize string
+    }{
+        {
+            name:         "load_small_blueprint",
+            operation:    "load",
+            blueprintSize: "small",
+        },
+        {
+            name:         "load_large_blueprint",
+            operation:    "load",
+            blueprintSize: "large",
+        },
+        {
+            name:         "save_small_blueprint",
+            operation:    "save",
+            blueprintSize: "small",
+        },
+        {
+            name:         "save_large_blueprint",
+            operation:    "save",
+            blueprintSize: "large",
+        },
+    }
+    
+    for _, bm := range benchmarks {
+        b.Run(bm.name, func(b *testing.B) {
+            // Set up database connection
+            db := benchmark.SetupTestDatabase()
+            defer db.Close()
+            
+            // Prepare test data
+            var bp *models.Blueprint
+            if bm.blueprintSize == "small" {
+                bp = benchmark.GenerateSmallBlueprint()
+            } else {
+                bp = benchmark.GenerateLargeBlueprint()
+            }
+            
+            // Save blueprint for load tests
+            if bm.operation == "load" {
+                id, err := db.SaveBlueprint(bp)
+                if err != nil {
+                    b.Fatalf("Failed to save blueprint: %v", err)
+                }
+                bp.ID = id
+            }
+            
+            // Reset timer before benchmark loop
+            b.ResetTimer()
+            
+            // Benchmark loop
+            for i := 0; i < b.N; i++ {
+                if bm.operation == "load" {
+                    loadedBP, err := db.GetBlueprint(bp.ID)
+                    if err != nil {
+                        b.Fatalf("Failed to load blueprint: %v", err)
+                    }
+                    benchmark.UseResult(loadedBP)
+                } else {
+                    // Copy blueprint to avoid ID conflicts
+                    newBP := benchmark.CopyBlueprint(bp)
+                    newBP.ID = ""
+                    
+                    id, err := db.SaveBlueprint(newBP)
+                    if err != nil {
+                        b.Fatalf("Failed to save blueprint: %v", err)
+                    }
+                    benchmark.UseResult(id)
+                }
+            }
+        })
+    }
+}</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Benchmark suite for execution engine performance is complete</li>
+    <li>Benchmarks for database operations are implemented</li>
+    <li>Node execution performance tests are in place</li>
+    <li>WebSocket throughput tests are complete</li>
+    <li>Results storage for historical comparison is implemented</li>
+    <li>Performance regression alerts in CI are configured</li>
+    <li>Documentation of baseline performance expectations is available</li>
+    <li>CI integration for automated benchmark execution is complete</li>
+    <li>All benchmarks have run successfully and established baseline metrics</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Benchmark results inconsistent across environments</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Standardize benchmark environment and use relative performance comparisons</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">CI benchmarks too resource intensive</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create tiered benchmark suite with subset for CI and full suite for nightly runs</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">False performance regression alerts</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement statistical analysis with threshold range instead of exact comparison</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Insufficient test coverage of real-world scenarios</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Analyze production usage patterns and create benchmark scenarios to match</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Benchmarks not maintained as code evolves</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Include benchmark updates as part of feature development requirements</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to creating comprehensive performance benchmarks for critical 
+    components in the WebBlueprint platform. By establishing baseline performance metrics and integrating benchmarks into 
+    our CI pipeline, we can prevent performance regressions and ensure our system maintains its high-performance standards.
+</p>
+
+<p>
+    The estimated total effort is 5 days of development time, with priority placed on the benchmark framework and execution 
+    engine benchmarks to establish a solid foundation for performance monitoring.
+</p>
+</body>
+</html>

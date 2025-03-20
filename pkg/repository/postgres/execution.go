@@ -241,7 +241,7 @@ func (r *PostgresExecutionRepository) Complete(
 // RecordNodeExecution records node execution details
 func (r *PostgresExecutionRepository) RecordNodeExecution(
 	ctx context.Context,
-	executionID, nodeID, nodeType string,
+	executionID, nodeID, nodeType, execState string,
 	inputs, outputs map[string]interface{},
 ) error {
 	// Check if node execution record already exists
@@ -269,9 +269,10 @@ func (r *PostgresExecutionRepository) RecordNodeExecution(
 			UPDATE execution_nodes
 			SET 
 				node_type = $1,
-				inputs = $2,
-				outputs = $3,
-				updated_at = $4
+				inputs = CASE WHEN $2::jsonb IS NULL THEN inputs ELSE $2 END,
+				outputs = CASE WHEN $3::jsonb IS NULL THEN outputs ELSE $3 END,
+				completed_at = $4,
+				status = $7
 			WHERE execution_id = $5 AND node_id = $6
 		`
 
@@ -284,6 +285,7 @@ func (r *PostgresExecutionRepository) RecordNodeExecution(
 			now,
 			executionID,
 			nodeID,
+			"completed",
 		)
 	} else {
 		// Insert new record
@@ -300,7 +302,7 @@ func (r *PostgresExecutionRepository) RecordNodeExecution(
 			nodeID,
 			nodeType,
 			now,
-			"executing", // Initial status
+			execState,
 			inputsData,
 			outputsData,
 		)

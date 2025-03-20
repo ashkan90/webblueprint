@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - API and WebSocket Endpoint Tests Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - API and WebSocket Endpoint Tests Implementation Plan</h1>
+    <p>Task: <strong>WEB-12 - Implement API and WebSocket Endpoint Tests</strong></p>
+    <p>Priority: <span class="priority high">High</span> | Estimate: 4 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for creating a comprehensive test suite for all HTTP API and WebSocket endpoints 
+    in the WebBlueprint platform. Our API surface is the primary interface to the system, and we need to ensure all endpoints 
+    function correctly, handle errors appropriately, and maintain backward compatibility.
+</p>
+
+<h2>Current Test Coverage Metrics</h2>
+
+<div class="metric">
+    <div class="metric-name">HTTP API Endpoints (Success Cases)</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 30%;">30%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">API Error Conditions</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">WebSocket Message Handling</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 20%;">20%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Authentication/Authorization</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 25%;">25%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Real-time Event Notifications</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Overall Code Coverage</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 25%;">25%</div>
+    </div>
+    <div class="metric-target">Target: 85%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>API Testing Framework Setup <span class="priority high">High</span></h3>
+    <p>Create the foundation for API and WebSocket testing.</p>
+    <ul class="task-list">
+        <li>Set up API testing framework in <code>internal/test/api</code></li>
+        <li>Implement test HTTP server with realistic configuration</li>
+        <li>Create WebSocket test client library</li>
+        <li>Implement test fixtures and helper utilities</li>
+        <li>Set up test database with appropriate schemas</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Blueprint API Tests <span class="priority high">High</span></h3>
+    <p>Create tests for blueprint CRUD operations and related endpoints.</p>
+    <ul class="task-list">
+        <li>Test GET, POST, PUT, DELETE operations for blueprints</li>
+        <li>Implement blueprint version endpoint tests</li>
+        <li>Test blueprint validation endpoints</li>
+        <li>Add blueprint export/import tests</li>
+        <li>Test error handling for invalid blueprint operations</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Execution API Tests <span class="priority high">High</span></h3>
+    <p>Implement tests for blueprint execution endpoints.</p>
+    <ul class="task-list">
+        <li>Test execution start/stop/pause endpoints</li>
+        <li>Verify execution status reporting endpoints</li>
+        <li>Test execution monitoring endpoints</li>
+        <li>Implement execution result retrieval tests</li>
+        <li>Test execution with various input combinations</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>WebSocket Connection Tests <span class="priority high">High</span></h3>
+    <p>Test WebSocket connection handling and basic operations.</p>
+    <ul class="task-list">
+        <li>Test connection establishment and authentication</li>
+        <li>Verify ping/pong keep-alive functionality</li>
+        <li>Test connection termination scenarios</li>
+        <li>Implement reconnection handling tests</li>
+        <li>Verify connection limits and throttling</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>WebSocket Message Tests <span class="priority high">High</span></h3>
+    <p>Test WebSocket message handling for different message types.</p>
+    <ul class="task-list">
+        <li>Test blueprint update notifications</li>
+        <li>Verify execution status event messages</li>
+        <li>Test node execution event notifications</li>
+        <li>Implement error notification tests</li>
+        <li>Test system event broadcasting</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Authentication and Authorization Tests <span class="priority medium">Medium</span></h3>
+    <p>Test authentication and authorization mechanisms for API and WebSocket.</p>
+    <ul class="task-list">
+        <li>Test API authentication endpoints (login, logout, refresh)</li>
+        <li>Verify role-based access controls</li>
+        <li>Test token validation and expiration</li>
+        <li>Implement resource permission tests</li>
+        <li>Test authentication error scenarios</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Error Handling Tests <span class="priority medium">Medium</span></h3>
+    <p>Test error handling for various error conditions.</p>
+    <ul class="task-list">
+        <li>Test invalid request format handling</li>
+        <li>Verify error response format and details</li>
+        <li>Test rate limiting and throttling responses</li>
+        <li>Implement server error simulation tests</li>
+        <li>Test error code consistency across endpoints</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Documentation <span class="priority medium">Medium</span></h3>
+    <p>Document the API and WebSocket test suite.</p>
+    <ul class="task-list">
+        <li>Create test documentation for API test procedures</li>
+        <li>Document WebSocket test scenarios</li>
+        <li>Add test coverage reports</li>
+        <li>Create guide for adding new API tests</li>
+        <li>Document common test failures and debugging approaches</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Set up API testing framework</p>
+            <p>Begin Blueprint API tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete Blueprint API tests</p>
+            <p>Implement Execution API tests</p>
+            <p>Begin WebSocket connection tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Complete WebSocket connection tests</p>
+            <p>Implement WebSocket message tests</p>
+            <p>Begin Authentication/Authorization tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete Authentication/Authorization tests</p>
+            <p>Implement Error Handling tests</p>
+            <p>Create documentation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Final review and improvements</p>
+            <p>Address test flakiness</p>
+            <p>Complete documentation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Test Pattern Examples</h2>
+
+<p>The following are examples of test patterns to be used for API and WebSocket testing:</p>
+
+<h3>API Endpoint Test Example</h3>
+
+<pre><code>func TestBlueprintCRUD(t *testing.T) {
+    // Set up test server
+    server := test.NewTestServer()
+    defer server.Close()
+    
+    // Create test blueprint
+    blueprint := test.CreateTestBlueprint("test_blueprint")
+    
+    // Test Create Blueprint
+    t.Run("CreateBlueprint", func(t *testing.T) {
+        resp, err := server.Post("/api/blueprints", test.ToJSON(blueprint))
+        assert.NoError(t, err)
+        assert.Equal(t, http.StatusCreated, resp.StatusCode)
+        
+        var result struct {
+            Success bool
+            ID      string
+        }
+        test.ParseJSONResponse(resp, &result)
+        assert.True(t, result.Success)
+        assert.NotEmpty(t, result.ID)
+        
+        // Store ID for subsequent tests
+        blueprint.ID = result.ID
+    })
+    
+    // Test Get Blueprint
+    t.Run("GetBlueprint", func(t *testing.T) {
+        resp, err := server.Get("/api/blueprints/" + blueprint.ID)
+        assert.NoError(t, err)
+        assert.Equal(t, http.StatusOK, resp.StatusCode)
+        
+        var result struct {
+            Success   bool
+            Blueprint *models.Blueprint
+        }
+        test.ParseJSONResponse(resp, &result)
+        assert.True(t, result.Success)
+        assert.Equal(t, blueprint.Name, result.Blueprint.Name)
+    })
+    
+    // Test Update Blueprint
+    t.Run("UpdateBlueprint", func(t *testing.T) {
+        blueprint.Name = "updated_name"
+        resp, err := server.Put("/api/blueprints/"+blueprint.ID, test.ToJSON(blueprint))
+        assert.NoError(t, err)
+        assert.Equal(t, http.StatusOK, resp.StatusCode)
+        
+        var result struct {
+            Success bool
+        }
+        test.ParseJSONResponse(resp, &result)
+        assert.True(t, result.Success)
+        
+        // Verify update
+        resp, _ = server.Get("/api/blueprints/" + blueprint.ID)
+        var getResult struct {
+            Blueprint *models.Blueprint
+        }
+        test.ParseJSONResponse(resp, &getResult)
+        assert.Equal(t, "updated_name", getResult.Blueprint.Name)
+    })
+    
+    // Test Delete Blueprint
+    t.Run("DeleteBlueprint", func(t *testing.T) {
+        resp, err := server.Delete("/api/blueprints/" + blueprint.ID)
+        assert.NoError(t, err)
+        assert.Equal(t, http.StatusOK, resp.StatusCode)
+        
+        // Verify deletion
+        resp, _ = server.Get("/api/blueprints/" + blueprint.ID)
+        assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+    })
+}</code></pre>
+
+<h3>WebSocket Test Example</h3>
+
+<pre><code>func TestWebSocketExecutionEvents(t *testing.T) {
+    // Set up test server with WebSocket support
+    server := test.NewTestServer()
+    defer server.Close()
+    
+    // Create test blueprint
+    blueprint := test.CreateTestBlueprint("test_blueprint")
+    blueprintID := test.CreateBlueprintViaAPI(server, blueprint)
+    
+    // Connect to WebSocket
+    wsClient := test.NewWebSocketClient(server.URL)
+    defer wsClient.Close()
+    
+    // Subscribe to execution events
+    subscribeMsg := test.NewSubscriptionMessage("execution", blueprintID)
+    err := wsClient.WriteJSON(subscribeMsg)
+    assert.NoError(t, err)
+    
+    // Verify subscription acknowledgment
+    var ackMsg map[string]interface{}
+    err = wsClient.ReadJSON(&ackMsg)
+    assert.NoError(t, err)
+    assert.Equal(t, "subscription_ack", ackMsg["type"])
+    
+    // Start blueprint execution via API
+    executionID := test.StartBlueprintExecutionViaAPI(server, blueprintID, nil)
+    
+    // Collect and verify execution events
+    events := []string{}
+    timer := time.NewTimer(5 * time.Second)
+    expectedEvents := []string{"execution_started", "node_executed", "execution_completed"}
+    
+    for {
+        select {
+        case <-timer.C:
+            t.Fatalf("Timeout waiting for execution events. Got: %v, Expected: %v", events, expectedEvents)
+            return
+        default:
+            var eventMsg map[string]interface{}
+            err := wsClient.ReadJSON(&eventMsg)
+            if err != nil {
+                continue
+            }
+            
+            if eventType, ok := eventMsg["type"].(string); ok {
+                events = append(events, eventType)
+                
+                // If we've received all expected events, verify and exit
+                if len(events) >= len(expectedEvents) {
+                    for _, expected := range expectedEvents {
+                        assert.Contains(t, events, expected)
+                    }
+                    return
+                }
+            }
+        }
+    }
+}</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Tests for all HTTP API endpoints (success cases) are implemented</li>
+    <li>Tests for all API error conditions are in place</li>
+    <li>WebSocket message handling tests are complete</li>
+    <li>Authentication/authorization tests verify security</li>
+    <li>Tests for real-time event notifications confirm proper delivery</li>
+    <li>85%+ code coverage for API and WebSocket handlers is achieved</li>
+    <li>Test documentation for API test procedures is complete</li>
+    <li>All tests pass consistently in the CI environment</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">WebSocket tests are flaky due to timing issues</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement robust wait mechanisms and clear timeouts for WebSocket tests</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Test database state affects test outcomes</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Use isolated test database and reset before each test run</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">API changes break tests frequently</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Use API version in tests and maintain tests for supported versions</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Authentication tests create security vulnerabilities</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Use test-only authentication providers and isolated test environment</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Performance under load not accurately tested</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Low</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create separate load testing suite for performance scenarios</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to creating a comprehensive test suite for all HTTP API and 
+    WebSocket endpoints in the WebBlueprint platform. By following this plan, we'll ensure that our API surface functions 
+    correctly, handles errors appropriately, and maintains backward compatibility.
+</p>
+
+<p>
+    The estimated total effort is 5 days of development time, with priority placed on the test framework setup and critical 
+    API endpoints to establish a solid foundation for the test suite.
+</p>
+</body>
+</html>

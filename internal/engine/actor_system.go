@@ -27,7 +27,7 @@ type ActorSystem struct {
 	waitGroup     sync.WaitGroup
 
 	// Add hooks
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error
@@ -52,7 +52,7 @@ func NewActorSystem(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	initialVariables map[string]types.Value,
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error,
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error,

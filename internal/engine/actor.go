@@ -32,7 +32,7 @@ type NodeActor struct {
 	properties  []types.Property // Store node properties from the blueprint
 
 	// Add hooks
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error
@@ -64,7 +64,7 @@ func NewNodeActor(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	variables map[string]types.Value,
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error,
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error,
@@ -269,7 +269,7 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		a.mutex.RUnlock()
 
 		// Call the hook
-		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, inputMap, nil)
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, "executing", inputMap, nil)
 		if err != nil {
 			a.logger.Debug("Error in node execution hook", map[string]interface{}{
 				"nodeId": a.NodeID,
@@ -298,7 +298,7 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		}
 
 		// Call the hook
-		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, nil, outputMap)
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, "completed", nil, outputMap)
 		if err != nil {
 			a.logger.Debug("Error in node execution hook", map[string]interface{}{
 				"nodeId": a.NodeID,

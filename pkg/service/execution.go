@@ -169,10 +169,10 @@ func (s *ExecutionService) GetExecutionLogs(ctx context.Context, executionID str
 // RecordNodeExecution records the execution of a node
 func (s *ExecutionService) RecordNodeExecution(
 	ctx context.Context,
-	executionID, nodeID, nodeType string,
+	executionID, nodeID, nodeType, execState string,
 	inputs, outputs map[string]interface{},
 ) error {
-	err := s.executionRepo.RecordNodeExecution(ctx, executionID, nodeID, nodeType, inputs, outputs)
+	err := s.executionRepo.RecordNodeExecution(ctx, executionID, nodeID, nodeType, execState, inputs, outputs)
 	if err != nil {
 		return fmt.Errorf("failed to record node execution: %w", err)
 	}

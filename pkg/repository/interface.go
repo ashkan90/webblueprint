@@ -147,7 +147,7 @@ type ExecutionRepository interface {
 	Complete(ctx context.Context, id string, success bool, result map[string]interface{}, errorMsg string) error
 
 	// Record node execution
-	RecordNodeExecution(ctx context.Context, executionID, nodeID, nodeType string, inputs, outputs map[string]interface{}) error
+	RecordNodeExecution(ctx context.Context, executionID, nodeID, nodeType, execState string, inputs, outputs map[string]interface{}) error
 
 	// Update node execution status
 	UpdateNodeStatus(ctx context.Context, executionID, nodeID, status string) error

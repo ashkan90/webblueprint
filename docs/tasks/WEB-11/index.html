@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Integration Test Suite for Execution Engine</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Integration Test Suite for Execution Engine</h1>
+    <p>Task: <strong>WEB-11 - Create Integration Test Suite for Execution Engine</strong></p>
+    <p>Priority: <span class="priority high">High</span> | Estimate: 5 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for developing comprehensive integration tests for the execution engine 
+    that verify complete blueprint executions function correctly in both standard and actor execution modes. The execution 
+    engine is the heart of our system, and we need to ensure it correctly processes blueprints of varying complexity.
+</p>
+
+<h2>Current Test Coverage Metrics</h2>
+
+<div class="metric">
+    <div class="metric-name">Simple Blueprint Tests</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 25%;">25%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Complex Blueprint Tests</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Standard Execution Mode</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 30%;">30%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Actor-based Execution Mode</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Error Propagation Tests</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Overall Code Coverage</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 20%;">20%</div>
+    </div>
+    <div class="metric-target">Target: 90%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Test Infrastructure Setup <span class="priority high">High</span></h3>
+    <p>Create the foundation for execution engine integration testing.</p>
+    <ul class="task-list">
+        <li>Design integration test framework structure in <code>internal/test/integration</code></li>
+        <li>Implement blueprint test fixtures for different complexity levels</li>
+        <li>Create test helper utilities for execution verification</li>
+        <li>Set up test environment for both standard and actor execution modes</li>
+        <li>Design snapshot-based verification system</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Simple Blueprint Tests <span class="priority high">High</span></h3>
+    <p>Implement integration tests for simple blueprints (1-5 nodes).</p>
+    <ul class="task-list">
+        <li>Create test cases for linear execution flows</li>
+        <li>Implement data transformation test blueprints</li>
+        <li>Add tests for single branch/condition scenarios</li>
+        <li>Test variable read/write operations</li>
+        <li>Verify execution results against expected outputs</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Complex Blueprint Tests <span class="priority high">High</span></h3>
+    <p>Implement integration tests for complex blueprints (10+ nodes with branches/loops).</p>
+    <ul class="task-list">
+        <li>Create multi-branch conditional flow test blueprints</li>
+        <li>Implement nested loop test scenarios</li>
+        <li>Test complex data transformation chains</li>
+        <li>Add long-running execution blueprints</li>
+        <li>Test blueprints with parallel execution paths</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Actor Execution Mode Tests <span class="priority high">High</span></h3>
+    <p>Test the actor-based execution mode specifically.</p>
+    <ul class="task-list">
+        <li>Verify concurrent node execution behaves correctly</li>
+        <li>Test message passing between node actors</li>
+        <li>Implement stress tests with many concurrent nodes</li>
+        <li>Verify execution ordering guarantees</li>
+        <li>Test actor supervision and recovery</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Error Propagation Tests <span class="priority medium">Medium</span></h3>
+    <p>Verify error handling and propagation in the execution engine.</p>
+    <ul class="task-list">
+        <li>Implement blueprints with intentional errors</li>
+        <li>Test error reporting and details</li>
+        <li>Verify execution path changes on errors</li>
+        <li>Test error recovery mechanisms</li>
+        <li>Implement cascading error scenarios</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Variable Scoping Tests <span class="priority medium">Medium</span></h3>
+    <p>Test variable scoping rules within blueprint execution.</p>
+    <ul class="task-list">
+        <li>Verify local vs. global variable behavior</li>
+        <li>Test variable lifetime across execution boundaries</li>
+        <li>Implement nested scope test scenarios</li>
+        <li>Verify variable visibility rules</li>
+        <li>Test execution context variable isolation</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Flow Control Tests <span class="priority medium">Medium</span></h3>
+    <p>Test flow control mechanisms like conditionals and loops.</p>
+    <ul class="task-list">
+        <li>Test conditional branch execution with various conditions</li>
+        <li>Implement loop termination condition tests</li>
+        <li>Verify early loop exit behavior</li>
+        <li>Test maximum loop iterations safety limit</li>
+        <li>Implement complex flow control combinations</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Documentation <span class="priority medium">Medium</span></h3>
+    <p>Document the integration test suite for future maintenance and extension.</p>
+    <ul class="task-list">
+        <li>Create test blueprint documentation</li>
+        <li>Document test execution patterns</li>
+        <li>Add inline comments explaining test assertions</li>
+        <li>Create guide for adding new test cases</li>
+        <li>Document common test failures and their causes</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Set up test infrastructure</p>
+            <p>Begin simple blueprint tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete simple blueprint tests</p>
+            <p>Begin complex blueprint tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Continue complex blueprint tests</p>
+            <p>Begin actor execution mode tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete actor execution mode tests</p>
+            <p>Implement error propagation tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Implement variable scoping tests</p>
+            <p>Begin flow control tests</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 6</div>
+        <div class="timeline-content">
+            <p>Complete flow control tests</p>
+            <p>Create documentation</p>
+            <p>Final review and code cleanup</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 7</div>
+        <div class="timeline-content">
+            <p>Bug fixes and improvements</p>
+            <p>Final testing and validation</p>
+            <p>Code review preparation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Test Pattern Example</h2>
+
+<p>The following is an example of an integration test pattern to be used throughout the test suite:</p>
+
+<pre><code>func TestBlueprintExecution(t *testing.T) {
+    testCases := []integration.BlueprintTestCase{
+        {
+            Name:        "simple linear execution",
+            BlueprintID: "test_simple_linear",
+            Inputs: map[string]interface{}{
+                "inputParam1": 10,
+                "inputParam2": "test",
+            },
+            ExpectedOutputs: map[string]interface{}{
+                "result": 15,
+                "processed": "test_processed",
+            },
+            ExecutionMode: execution.ModeStandard,
+        },
+        {
+            Name:        "complex branch execution",
+            BlueprintID: "test_complex_branch",
+            Inputs: map[string]interface{}{
+                "condition": true,
+                "value": 20,
+            },
+            ExpectedOutputs: map[string]interface{}{
+                "truePathResult": 25,
+                "executed": true,
+            },
+            ExecutionMode: execution.ModeActor,
+        },
+        // Additional test cases...
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.Name, func(t *testing.T) {
+            runner := integration.NewBlueprintTestRunner()
+            result, err := runner.ExecuteBlueprint(tc.BlueprintID, tc.Inputs, tc.ExecutionMode)
+            
+            if tc.ExpectError {
+                assert.Error(t, err)
+                assert.Contains(t, err.Error(), tc.ExpectedErrorMessage)
+                return
+            }
+            
+            assert.NoError(t, err)
+            for key, expected := range tc.ExpectedOutputs {
+                assert.Equal(t, expected, result.Outputs[key])
+            }
+            
+            // Additional assertions for execution stats
+            if tc.VerifyNodeExecutions {
+                for nodeID, count := range tc.ExpectedNodeExecutions {
+                    assert.Equal(t, count, result.NodeExecutionCounts[nodeID])
+                }
+            }
+        })
+    }
+}</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Integration tests for simple blueprints (1-5 nodes) are implemented</li>
+    <li>Integration tests for complex blueprints (10+ nodes with branches/loops) are implemented</li>
+    <li>Tests for both standard and actor-based execution modes are complete</li>
+    <li>Error propagation tests with intentional failures are implemented</li>
+    <li>Variable scoping tests verify correct behavior</li>
+    <li>Flow control tests (conditionals, loops) are complete</li>
+    <li>90%+ code coverage for execution engine components is achieved</li>
+    <li>Test blueprints covering all common usage patterns are in place</li>
+    <li>All tests pass consistently in CI environment</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Tests are flaky due to timing issues in actor mode</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement deterministic testing mode with controlled scheduling and timeouts</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Test blueprints become outdated as engine evolves</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create blueprint version compatibility checks and automated migration</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Complex test blueprints are difficult to maintain</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create blueprint builder utilities and clear documentation for test blueprints</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Integration tests run too slowly in CI</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement test parallelization and optimize test setup/teardown</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Difficult to verify correct execution ordering</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create execution trace recording and sequence verification utilities</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to creating a comprehensive integration test suite for the
+    WebBlueprint execution engine. By following this plan, we'll ensure that both standard and actor-based execution modes
+    are thoroughly tested with blueprints of varying complexity.
+</p>
+
+<p>
+    The estimated total effort is 6-7 days of development time, with priority placed on the test infrastructure and simple
+    blueprint tests to establish a solid foundation for the more complex test scenarios.
+</p>
+</body>
+</html>

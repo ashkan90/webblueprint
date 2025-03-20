@@ -77,7 +77,7 @@ type ExecutionEngine struct {
 	// Add the hook for node execution recording
 	OnNodeExecutionHook func(
 		ctx context.Context,
-		executionID, nodeID, nodeType string,
+		executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{},
 	) error
 
@@ -513,7 +513,7 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 					inputMap[pinID] = value.RawValue
 				}
 
-				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, inputMap, nil)
+				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, "executing", inputMap, nil)
 				if err != nil {
 					slog.Debug("[DEBUG] Error recording node execution", slog.Any("error", err))
 				}
@@ -542,7 +542,7 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 				// Collect output values
 				outputMap, _ := e.debugManager.GetNodeDebugData(executionID, nodeID)
 
-				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, nil, outputMap)
+				err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeType, "completed", nil, outputMap)
 				if err != nil {
 					slog.Debug("[DEBUG] Error recording node execution completion", slog.Any("error", err))
 				}
@@ -936,7 +936,7 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 			inputMap[pinID] = value.RawValue
 		}
 
-		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, inputMap, nil)
+		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, "executing", inputMap, nil)
 		if err != nil {
 			slog.Debug("[DEBUG] Error recording node execution", slog.Any("error", err))
 		}
@@ -997,7 +997,7 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 
 	// Record node execution with outputs
 	if e.OnNodeExecutionHook != nil {
-		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, nil, outputMap)
+		err := e.OnNodeExecutionHook(context.Background(), executionID, nodeID, nodeConfig.Type, "completed", nil, outputMap)
 		if err != nil {
 			slog.Debug("[DEBUG] Error recording node execution completion", slog.Any("error", err))
 		}
