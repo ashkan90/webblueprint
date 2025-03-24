@@ -140,9 +140,6 @@ func (n *PrintNode) Execute(ctx node.ExecutionContext) error {
 			displayValue = prefix + " " + displayValue
 		}
 
-		// Print the value
-		fmt.Println(displayValue)
-
 		// Record for debugging
 		debugData["output"] = displayValue
 		logger.Info("Printed message", map[string]interface{}{

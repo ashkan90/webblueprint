@@ -325,7 +325,7 @@ func (l *DefaultLogger) Info(msg string, fields map[string]interface{}) {
 		fields = make(map[string]interface{})
 	}
 	fields["nodeID"] = l.nodeID
-	fmt.Printf("[INFO] %s: %s %v\n", l.nodeID, msg, fields)
+	//fmt.Printf("[INFO] %s: %s %v\n", l.nodeID, msg, fields)
 }
 
 // Warn logs a warning message
@@ -335,7 +335,7 @@ func (l *DefaultLogger) Warn(msg string, fields map[string]interface{}) {
 		fields = make(map[string]interface{})
 	}
 	fields["nodeID"] = l.nodeID
-	fmt.Printf("[WARN] %s: %s %v\n", l.nodeID, msg, fields)
+	//fmt.Printf("[WARN] %s: %s %v\n", l.nodeID, msg, fields)
 }
 
 // Error logs an error message
@@ -345,5 +345,5 @@ func (l *DefaultLogger) Error(msg string, fields map[string]interface{}) {
 		fields = make(map[string]interface{})
 	}
 	fields["nodeID"] = l.nodeID
-	fmt.Printf("[ERROR] %s: %s %v\n", l.nodeID, msg, fields)
+	//fmt.Printf("[ERROR] %s: %s %v\n", l.nodeID, msg, fields)
 }

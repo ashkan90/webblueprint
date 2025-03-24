@@ -1,9 +1,9 @@
 package engine
 
 import (
-	"fmt"
 	"sync"
 	"time"
+	"webblueprint/internal/node"
 )
 
 // DebugManager stores and manages debug information during execution
@@ -18,6 +18,8 @@ type DebugManager struct {
 	executionData map[string]map[string]interface{}
 
 	mutex sync.RWMutex
+
+	logger node.Logger
 }
 
 // NewDebugManager creates a new debug manager
@@ -139,36 +141,36 @@ func (dm *DebugManager) GetNodeOutputValue(executionID, nodeID, pinID string) (i
 	dm.mutex.RLock()
 	defer dm.mutex.RUnlock()
 
-	fmt.Printf("[DEBUG] Attempting to get output value for %s.%s in execution %s\n",
-		nodeID, pinID, executionID)
+	//fmt.Printf("[DEBUG] Attempting to get output value for %s.%s in execution %s\n",
+	//	nodeID, pinID, executionID)
 
 	// Dump the entire outputValues map structure for debugging
-	fmt.Printf("[DEBUG] Current outputValues structure for execution %s:\n", executionID)
-	if execData, exists := dm.outputValues[executionID]; exists {
-		for n, pins := range execData {
-			fmt.Printf("  Node %s:\n", n)
-			for p, v := range pins {
-				fmt.Printf("    Pin %s: %v (type: %T)\n", p, v, v)
-			}
-		}
-	} else {
-		fmt.Printf("  No data found for execution %s\n", executionID)
-	}
+	//fmt.Printf("[DEBUG] Current outputValues structure for execution %s:\n", executionID)
+	//if execData, exists := dm.outputValues[executionID]; exists {
+	//	for n, pins := range execData {
+	//		fmt.Printf("  Node %s:\n", n)
+	//		for p, v := range pins {
+	//			fmt.Printf("    Pin %s: %v (type: %T)\n", p, v, v)
+	//		}
+	//	}
+	//} else {
+	//	fmt.Printf("  No data found for execution %s\n", executionID)
+	//}
 
 	if execData, exists := dm.outputValues[executionID]; exists {
 		if nodeData, exists := execData[nodeID]; exists {
 			if value, exists := nodeData[pinID]; exists {
-				fmt.Printf("[DEBUG] Retrieved output value for %s.%s: %v (type: %T)\n",
-					nodeID, pinID, value, value)
+				//fmt.Printf("[DEBUG] Retrieved output value for %s.%s: %v (type: %T)\n",
+				//	nodeID, pinID, value, value)
 				return value, true
 			} else {
-				fmt.Printf("[DEBUG] No value found for pin %s in node %s\n", pinID, nodeID)
+				//fmt.Printf("[DEBUG] No value found for pin %s in node %s\n", pinID, nodeID)
 			}
 		} else {
-			fmt.Printf("[DEBUG] No data found for node %s in execution %s\n", nodeID, executionID)
+			//fmt.Printf("[DEBUG] No data found for node %s in execution %s\n", nodeID, executionID)
 		}
 	} else {
-		fmt.Printf("[DEBUG] No data found for execution %s\n", executionID)
+		//fmt.Printf("[DEBUG] No data found for execution %s\n", executionID)
 	}
 
 	return nil, false

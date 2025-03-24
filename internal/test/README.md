@@ -1,30 +1,34 @@
-# WebBlueprint Node Testing Framework
+# WebBlueprint Testing Framework
 
-This document outlines the testing approach and utilities for testing WebBlueprint nodes.
+This document outlines the testing approach and utilities for testing WebBlueprint nodes and integration scenarios.
 
 ## Overview
 
-The WebBlueprint testing framework provides a structured way to test node behavior through mock objects and test utilities. Tests focus on:
-
-1. Node initialization
-2. Input validation
-3. Business logic correctness
-4. Output values
-5. Flow activation
-6. Error handling
+The WebBlueprint testing framework provides a structured way to test both individual nodes and complete blueprint executions through mock objects and test utilities.
 
 ## Directory Structure
 
 ```
 internal/test/
-├── mocks/                     # Mock implementations
-│   ├── execution_context.go   # Mock ExecutionContext
-│   └── logger.go              # Mock Logger
-├── node_test_utils.go         # Test utilities for node testing
-└── README.md                  # Documentation (this file)
+├── integration/                  # Integration tests
+│   ├── actor_execution_test.go   # Actor execution tests
+│   ├── blueprint_*.go            # Blueprint tests
+│   ├── comprehensive_test.go     # Comprehensive execution tests
+│   ├── flow_control_test.go      # Flow control tests
+│   ├── mock_nodes.go             # Mock node implementations
+│   ├── test_framework.go         # Integration test framework
+│   ├── variable_scoping_test.go  # Variable scoping tests
+│   └── ...
+├── mocks/                        # Mock implementations
+│   ├── execution_context.go      # Mock ExecutionContext
+│   └── logger.go                 # Mock Logger
+├── node_test_utils.go            # Test utilities for node testing
+└── README.md                     # Documentation (this file)
 ```
 
-## Test Components
+## Node Testing
+
+Individual nodes are tested using the following components:
 
 ### Mock Objects
 
@@ -56,60 +60,46 @@ The `ExecuteNodeTestCase` function facilitates node testing by:
 5. Checking flow activation
 6. Handling error cases
 
-## Writing Node Tests
+## Integration Testing
 
-To test a node, create a test file with a structure similar to this:
+The `integration` directory contains comprehensive integration tests for the WebBlueprint execution engine. These tests verify that complete blueprints execute correctly in both standard and actor modes.
 
-```go
-package mypackage_test
+### Running Integration Tests
 
-import (
-	"testing"
-	"webblueprint/internal/nodes/mypackage"
-	"webblueprint/internal/test"
-)
-
-func TestMyNode(t *testing.T) {
-	testCases := []test.NodeTestCase{
-		{
-			Name: "normal operation",
-			Inputs: map[string]interface{}{
-				"input1": value1,
-				"input2": value2,
-			},
-			ExpectedOutputs: map[string]interface{}{
-				"output1": expectedValue1,
-			},
-			ExpectedFlow: "then",
-		},
-		{
-			Name: "error case",
-			Inputs: map[string]interface{}{
-				"input1": invalidValue,
-			},
-			ExpectedError: true,
-			ErrorContains: "expected error substring",
-		},
-		// Additional test cases...
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.Name, func(t *testing.T) {
-			node := mypackage.NewMyNode()
-			test.ExecuteNodeTestCase(t, node, tc)
-		})
-	}
-}
+To run all integration tests:
+```bash
+cd integration && go test -v
 ```
 
-### NodeTestCase Structure
+To run specific test categories:
+```bash
+cd integration && go test -v -run TestPattern
+```
 
-- `Name`: Descriptive name for the test case
-- `Inputs`: Map of input pin names to values
-- `ExpectedOutputs`: Map of output pin names to expected values
-- `ExpectedFlow`: The expected flow pin to be activated
-- `ExpectedError`: Whether an error is expected
-- `ErrorContains`: Expected substring in the error message
+For example:
+```bash
+# Run simple blueprint tests
+go test -v -run TestSimple
+
+# Run variable scoping tests
+go test -v -run TestLocalVsGlobalVariables
+
+# Run comprehensive tests (currently skipped)
+go test -v -run TestComprehensiveExecution
+```
+
+### Integration Test Framework Components
+
+1. **BlueprintTestRunner**: Manages blueprint registration and execution for testing.
+2. **Mock Nodes**: Provides mock implementations of various node types.
+3. **Assertion Helpers**: Verifies execution results against expected values.
+4. **Node Execution Tracking**: Tracks which nodes executed and how many times.
+
+### Known Issues with Integration Tests
+
+- Some complex tests are temporarily skipped (TestVariableLifetime, TestComprehensiveExecution) until they can be properly integrated with updated engine components.
+- Actor mode may behave differently from standard mode in some scenarios, particularly with variable scoping.
+- Be cautious with timeouts in tests when running in resource-constrained environments.
 
 ## Best Practices
 
@@ -120,58 +110,23 @@ func TestMyNode(t *testing.T) {
 5. **Documentation**: Document unusual test cases or complex scenarios.
 6. **Consistency**: Follow the same testing pattern across all node types.
 
-## Running Tests
+## Running All Tests
 
 Run node tests using the standard Go testing command:
 
 ```bash
-go test ./internal/nodes/...
+go test ./internal/nodes/... ./internal/test/integration/...
 ```
 
 To view coverage information:
 
 ```bash
-go test ./internal/nodes/... -cover
+go test ./internal/... -cover
 ```
 
 To generate a detailed coverage report:
 
 ```bash
-go test ./internal/nodes/... -coverprofile=coverage.out
+go test ./internal/... -coverprofile=coverage.out
 go tool cover -html=coverage.out
 ```
-
-## Common Testing Issues
-
-### Mocking External Dependencies
-
-When testing nodes that interact with external systems (like HTTP requests or file operations):
-
-1. Create specialized mock objects that simulate the external system
-2. Use dependency injection to replace real implementations with mocks
-3. For HTTP, consider using `httptest` package to create a mock server
-4. Focus on testing the node's error handling behavior
-
-### Testing Asynchronous Behavior
-
-For nodes with asynchronous behavior (like timers or events):
-
-1. Use dependency injection to control time-related functions
-2. Add specific test modes that synchronize execution
-3. Implement timeout mechanisms in tests to avoid hanging
-
-### Testing Internal State
-
-To verify internal state that isn't exposed through outputs:
-
-1. Use debug info capture to record internal state
-2. Add test-specific accessor methods
-3. Verify state through logs when appropriate
-
-### Handling Non-Deterministic Behavior
-
-For nodes with non-deterministic outcomes:
-
-1. Mock random number generators or similar functions
-2. Focus tests on behavior patterns rather than exact values
-3. Use ranges or conditionals for assertions when appropriate
