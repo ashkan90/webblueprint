@@ -1,42 +1,44 @@
-package engine
+package engineext
 
 import (
-	errors "webblueprint/internal/bperrors"
+	"webblueprint/internal/bperrors"
+	"webblueprint/internal/core"
+	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
 
-// ErrorAwareExecutionContext extends DefaultExecutionContext with error handling capabilities
-type ErrorAwareExecutionContext struct {
-	*DefaultExecutionContext
-	errorManager    *errors.ErrorManager
-	recoveryManager *errors.RecoveryManager
+// ErrorAwareContext extends DefaultExecutionContext with error handling capabilities
+type ErrorAwareContext struct {
+	node.ExecutionContext
+	errorManager    *bperrors.ErrorManager
+	recoveryManager *bperrors.RecoveryManager
 }
 
-// NewErrorAwareExecutionContext creates a new error-aware execution context
-func NewErrorAwareExecutionContext(
-	ctx *DefaultExecutionContext,
-	errorManager *errors.ErrorManager,
-	recoveryManager *errors.RecoveryManager,
-) *ErrorAwareExecutionContext {
-	return &ErrorAwareExecutionContext{
-		DefaultExecutionContext: ctx,
-		errorManager:            errorManager,
-		recoveryManager:         recoveryManager,
+// NewErrorAwareContext creates a new error-aware execution context
+func NewErrorAwareContext(
+	baseCtx node.ExecutionContext,
+	errorManager *bperrors.ErrorManager,
+	recoveryManager *bperrors.RecoveryManager,
+) *ErrorAwareContext {
+	return &ErrorAwareContext{
+		ExecutionContext: baseCtx,
+		errorManager:     errorManager,
+		recoveryManager:  recoveryManager,
 	}
 }
 
 // GetInputValue retrieves an input value with error handling
-func (ctx *ErrorAwareExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
-	value, exists := ctx.DefaultExecutionContext.GetInputValue(pinID)
+func (ctx *ErrorAwareContext) GetInputValue(pinID string) (types.Value, bool) {
+	value, exists := ctx.ExecutionContext.GetInputValue(pinID)
 
 	// If the value doesn't exist, try to recover with a default value
 	if !exists {
 		// Create a BlueprintError
-		err := errors.New(
-			errors.ErrorTypeExecution,
-			errors.ErrMissingRequiredInput,
+		err := bperrors.New(
+			bperrors.ErrorTypeExecution,
+			bperrors.ErrMissingRequiredInput,
 			"Required input value missing",
-			errors.SeverityMedium,
+			bperrors.SeverityMedium,
 		).WithNodeInfo(ctx.GetNodeID(), pinID).WithBlueprintInfo(ctx.GetBlueprintID(), ctx.GetExecutionID())
 
 		// Record the error
@@ -44,9 +46,8 @@ func (ctx *ErrorAwareExecutionContext) GetInputValue(pinID string) (types.Value,
 
 		// Attempt recovery using default value strategy
 		if success, _ := ctx.recoveryManager.RecoverFromError(ctx.GetExecutionID(), err); success {
-			// Find the pin type for this pin
-			// In a real implementation, we would get this from node registry or blueprint definition
-			pinType := types.PinTypes.Any // Fallback type
+			// Find the pin type for this pin (fallback to Any if not found)
+			pinType := types.PinTypes.Any
 
 			// Get a default value for this type
 			if defaultValue, err := ctx.recoveryManager.GetDefaultValue(pinType); err == nil {
@@ -77,35 +78,35 @@ func (ctx *ErrorAwareExecutionContext) GetInputValue(pinID string) (types.Value,
 }
 
 // ReportError reports an error during node execution
-func (ctx *ErrorAwareExecutionContext) ReportError(
-	errType errors.ErrorType,
-	code errors.BlueprintErrorCode,
+func (ctx *ErrorAwareContext) ReportError(
+	errType bperrors.ErrorType,
+	code bperrors.BlueprintErrorCode,
 	message string,
 	originalErr error,
-) *errors.BlueprintError {
+) *bperrors.BlueprintError {
 	// Create a BlueprintError
-	severity := errors.SeverityMedium // Default severity
+	severity := bperrors.SeverityMedium
 
 	// Set severity based on error type
 	switch errType {
-	case errors.ErrorTypeExecution:
-		severity = errors.SeverityHigh
-	case errors.ErrorTypeConnection:
-		severity = errors.SeverityMedium
-	case errors.ErrorTypeValidation:
-		severity = errors.SeverityMedium
-	case errors.ErrorTypePermission:
-		severity = errors.SeverityHigh
-	case errors.ErrorTypeDatabase:
-		severity = errors.SeverityHigh
+	case bperrors.ErrorTypeExecution:
+		severity = bperrors.SeverityHigh
+	case bperrors.ErrorTypeConnection:
+		severity = bperrors.SeverityMedium
+	case bperrors.ErrorTypeValidation:
+		severity = bperrors.SeverityMedium
+	case bperrors.ErrorTypePermission:
+		severity = bperrors.SeverityHigh
+	case bperrors.ErrorTypeDatabase:
+		severity = bperrors.SeverityHigh
 	default:
-		severity = errors.SeverityMedium
+		severity = bperrors.SeverityMedium
 	}
 
 	// Create the error
-	var err *errors.BlueprintError
+	var err *bperrors.BlueprintError
 	if originalErr != nil {
-		err = errors.Wrap(
+		err = bperrors.Wrap(
 			originalErr,
 			errType,
 			code,
@@ -113,7 +114,7 @@ func (ctx *ErrorAwareExecutionContext) ReportError(
 			severity,
 		)
 	} else {
-		err = errors.New(
+		err = bperrors.New(
 			errType,
 			code,
 			message,
@@ -139,12 +140,12 @@ func (ctx *ErrorAwareExecutionContext) ReportError(
 }
 
 // AttemptRecovery tries to recover from an error
-func (ctx *ErrorAwareExecutionContext) AttemptRecovery(err *errors.BlueprintError) (bool, map[string]interface{}) {
+func (ctx *ErrorAwareContext) AttemptRecovery(err *bperrors.BlueprintError) (bool, map[string]interface{}) {
 	return ctx.recoveryManager.RecoverFromError(ctx.GetExecutionID(), err)
 }
 
 // GetErrorSummary gets a summary of errors for this node
-func (ctx *ErrorAwareExecutionContext) GetErrorSummary() map[string]interface{} {
+func (ctx *ErrorAwareContext) GetErrorSummary() map[string]interface{} {
 	nodeErrors := ctx.errorManager.GetNodeErrors(ctx.GetExecutionID(), ctx.GetNodeID())
 
 	if len(nodeErrors) == 0 {
@@ -173,3 +174,15 @@ func (ctx *ErrorAwareExecutionContext) GetErrorSummary() map[string]interface{} 
 		"latestError":    nodeErrors[len(nodeErrors)-1],
 	}
 }
+
+// GetDefaultValue gets a default value for a pin type
+func (ctx *ErrorAwareContext) GetDefaultValue(pinType *types.PinType) (types.Value, bool) {
+	value, err := ctx.recoveryManager.GetDefaultValue(pinType)
+	if err != nil {
+		return types.Value{}, false
+	}
+	return value, true
+}
+
+// Ensure ErrorAwareContext implements core.ErrorAwareContext
+var _ core.ErrorAwareContext = (*ErrorAwareContext)(nil)

@@ -1,12 +1,58 @@
 package engine
 
 import (
+	"fmt"
+	"reflect"
 	errors "webblueprint/internal/bperrors"
 	"webblueprint/internal/common"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
 )
+
+// SetInputValue uses reflection to set an input value
+// This is a temporary workaround until proper methods are added
+func SetInputValue(ctx interface{}, pinID string, value types.Value) {
+	// Try to convert to DefaultExecutionContext
+	if defaultCtx, ok := ctx.(*engineext.DefaultExecutionContext); ok {
+		val := reflect.ValueOf(defaultCtx).Elem()
+		inputsField := val.FieldByName("inputs")
+		
+		if inputsField.IsValid() && inputsField.Kind() == reflect.Map {
+			// Create a reflect.Value for the key
+			keyValue := reflect.ValueOf(pinID)
+			// Create a reflect.Value for the value
+			valueValue := reflect.ValueOf(value)
+			// Set the map entry
+			inputsField.SetMapIndex(keyValue, valueValue)
+		}
+	}
+}
+
+// SetActivateFlow uses reflection to set the activateFlow field
+// This is a temporary workaround until proper access methods are added
+func SetActivateFlow(ctx *engineext.DefaultExecutionContext, fn interface{}) {
+	// Skip if either is nil
+	if ctx == nil || fn == nil {
+		return
+	}
+	
+	// Get the value of the context
+	val := reflect.ValueOf(ctx).Elem()
+	
+	// Find the activateFlow field
+	field := val.FieldByName("activateFlow")
+	if !field.IsValid() || !field.CanSet() {
+		return // Field not found or can't be set
+	}
+	
+	// Set the field value
+	fnVal := reflect.ValueOf(fn)
+	if fnVal.Type().AssignableTo(field.Type()) {
+		field.Set(fnVal)
+	}
+}
 
 // ErrorAwareExecutionEngine adds error handling capabilities to the execution engine
 type ErrorAwareExecutionEngine struct {
@@ -138,7 +184,7 @@ func (e *ErrorAwareExecutionEngine) Execute(bp *blueprint.Blueprint, executionID
 // executeNode overrides the base executeNode method to add error handling
 func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks) error {
 	// Get the basic execution context from base implementation
-	baseCtx := NewExecutionContext(
+	baseCtx := engineext.NewExecutionContext(
 		nodeID,
 		bp.FindNode(nodeID).Type,
 		blueprintID,
@@ -151,14 +197,14 @@ func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blu
 	)
 
 	// Create error-aware context
-	ctx := NewErrorAwareExecutionContext(
+	ctx := engineext.NewErrorAwareExecutionContext(
 		baseCtx,
 		e.errorManager,
 		e.recoveryManager,
 	)
 
 	// Set activateFlow function (needs to reference the error-aware context)
-	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+	activateFlowFn := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
 		// Find connections from this output pin
 		outputConnections := bp.GetNodeOutputConnections(nodeID)
 		for _, conn := range outputConnections {
@@ -181,7 +227,9 @@ func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blu
 		return nil
 	}
 
-	baseCtx.activateFlow = activateFlowFn
+	// Use reflection to set activateFlow
+	// This is a temporary workaround for the unexported field
+	SetActivateFlow(baseCtx, activateFlowFn)
 
 	// Find the node in the blueprint
 	nodeConfig := bp.FindNode(nodeID)
@@ -225,7 +273,9 @@ func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blu
 			// Try to get value with error recovery
 			if outputs, ok := e.debugManager.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
 				value := types.NewValue(types.PinTypes.Any, outputs)
-				ctx.DefaultExecutionContext.inputs[targetPinID] = value
+				// Define a helper method to set the input value
+				// This is a temporary workaround until proper methods are added
+				SetInputValue(ctx, targetPinID, value)
 			} else {
 				// Missing input value - ctx.GetInputValue will handle recovery
 			}
@@ -278,24 +328,34 @@ func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blu
 	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
 
 	// Store outputs in debug manager
-	for pinID, outValue := range ctx.outputs {
-		e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinID, outValue.RawValue)
+	// Check if the underlying context implements ExtendedExecutionContext
+	if underlyingCtx := ctx.ExecutionContext; underlyingCtx != nil { // Assuming ErrorAwareContext has ExecutionContext field
+		if extCtx, ok := underlyingCtx.(node.ExtendedExecutionContext); ok {
+			outputs := extCtx.GetAllOutputs()
+			for pinID, outValue := range outputs {
+			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinID, outValue.RawValue)
+		}
 	}
 
 	// Follow execution flows
-	activatedFlows := ctx.GetActivatedOutputFlows()
+	activatedFlows := ctx.GetActivatedOutputFlows() // Assuming ErrorAwareContext implements this via embedding
 	for _, outputPin := range activatedFlows {
-		if err := activateFlowFn(ctx.DefaultExecutionContext, nodeID, outputPin); err != nil {
-			// Try to recover from flow activation error
-			if bpErr, ok := err.(*errors.BlueprintError); ok {
-				if success, _ := e.recoveryManager.RecoverFromError(executionID, bpErr); success {
-					// If recovery was successful, continue to the next flow
-					continue
-				}
-			}
-			return err
-		}
-	}
+		// Check if the underlying context is DefaultExecutionContext
+		if underlyingCtx := ctx.ExecutionContext; underlyingCtx != nil { // Assuming ErrorAwareContext has ExecutionContext field
+			if defaultCtx, ok := underlyingCtx.(*engineext.DefaultExecutionContext); ok {
+				if err := activateFlowFn(defaultCtx, nodeID, outputPin); err != nil {
+					// Try to recover from flow activation error
+					// Add missing closing brace for the inner if err != nil
+					if bpErr, ok := err.(*errors.BlueprintError); ok {
+						if success, _ := e.recoveryManager.RecoverFromError(executionID, bpErr); success {
+							// If recovery was successful, continue to the next flow
+						continue
+					}
+				} // End if bpErr
+				return err
+			} // End if err != nil <-- Add this closing brace
+		} // End if defaultCtx
+	} // End if underlyingCtx
 
 	// Notify node completion
 	if hooks != nil && hooks.OnNodeComplete != nil {

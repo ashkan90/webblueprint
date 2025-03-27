@@ -7,7 +7,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"webblueprint/internal/bperrors"
 	"webblueprint/internal/common"
+	"webblueprint/internal/core"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
@@ -73,6 +76,9 @@ type ExecutionEngine struct {
 		executionID, nodeID, level, message string,
 		details map[string]interface{},
 	) error
+
+	// Extensions for context management
+	extensions interface{}
 
 	// Add the hook for node execution recording
 	OnNodeExecutionHook func(
@@ -165,6 +171,147 @@ func (e *ExecutionEngine) GetLogger() node.Logger {
 	return e.logger
 }
 
+// SetExtensions sets the engine extensions for context management
+func (e *ExecutionEngine) SetExtensions(extensions interface{}) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.extensions = extensions
+}
+
+// GetExtensions returns the engine extensions
+func (e *ExecutionEngine) GetExtensions() interface{} {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.extensions
+}
+
+// BasicExecutionContext is a minimal implementation of the node.ExecutionContext interface
+// This is used as a fallback when no extension context is available
+type BasicExecutionContext struct {
+	nodeID       string
+	nodeType     string
+	blueprintID  string
+	executionID  string
+	inputs       map[string]types.Value
+	outputs      map[string]types.Value
+	variables    map[string]types.Value
+	logger       node.Logger
+	hooks        *node.ExecutionHooks
+	activateFlow func(ctx *BasicExecutionContext, nodeID, pinID string) error
+}
+
+// NewBasicExecutionContext creates a new basic execution context
+func NewBasicExecutionContext(
+	nodeID string,
+	nodeType string,
+	blueprintID string,
+	executionID string,
+	inputs map[string]types.Value,
+	variables map[string]types.Value,
+	logger node.Logger,
+	hooks *node.ExecutionHooks,
+	activateFlow func(ctx *BasicExecutionContext, nodeID, pinID string) error,
+) *BasicExecutionContext {
+	return &BasicExecutionContext{
+		nodeID:       nodeID,
+		nodeType:     nodeType,
+		blueprintID:  blueprintID,
+		executionID:  executionID,
+		inputs:       inputs,
+		outputs:      make(map[string]types.Value),
+		variables:    variables,
+		logger:       logger,
+		hooks:        hooks,
+		activateFlow: activateFlow,
+	}
+}
+
+// GetNodeID returns the ID of the node
+func (c *BasicExecutionContext) GetNodeID() string {
+	return c.nodeID
+}
+
+// GetNodeType returns the type of the node
+func (c *BasicExecutionContext) GetNodeType() string {
+	return c.nodeType
+}
+
+// GetBlueprintID returns the ID of the blueprint
+func (c *BasicExecutionContext) GetBlueprintID() string {
+	return c.blueprintID
+}
+
+// GetExecutionID returns the ID of the execution
+func (c *BasicExecutionContext) GetExecutionID() string {
+	return c.executionID
+}
+
+// GetInputValue gets an input value by pin ID
+func (c *BasicExecutionContext) GetInputValue(pinID string) (types.Value, bool) {
+	value, exists := c.inputs[pinID]
+	if exists && c.hooks != nil && c.hooks.OnPinValue != nil {
+		c.hooks.OnPinValue(c.nodeID, pinID, value.RawValue)
+	}
+	return value, exists
+}
+
+// IsInputPinActive checks if an input pin is active (assuming the default pin is always active)
+func (c *BasicExecutionContext) IsInputPinActive(pinID string) bool {
+	// In basic context, we assume the default pin is always active
+	return pinID == "execute"
+}
+
+// SetOutputValue sets an output value by pin ID
+func (c *BasicExecutionContext) SetOutputValue(pinID string, value types.Value) {
+	c.outputs[pinID] = value
+	if c.hooks != nil && c.hooks.OnPinValue != nil {
+		c.hooks.OnPinValue(c.nodeID, pinID, value.RawValue)
+	}
+}
+
+// GetVariable gets a variable by name
+func (c *BasicExecutionContext) GetVariable(name string) (types.Value, bool) {
+	value, exists := c.variables[name]
+	return value, exists
+}
+
+// SetVariable sets a variable by name
+func (c *BasicExecutionContext) SetVariable(name string, value types.Value) {
+	c.variables[name] = value
+}
+
+// ActivateOutputFlow activates an output execution flow
+func (c *BasicExecutionContext) ActivateOutputFlow(pinID string) error {
+	return c.activateFlow(c, c.nodeID, pinID)
+}
+
+// ExecuteConnectedNodes executes nodes connected to an output pin
+func (c *BasicExecutionContext) ExecuteConnectedNodes(pinID string) error {
+	return c.activateFlow(c, c.nodeID, pinID)
+}
+
+// Logger returns the logger
+func (c *BasicExecutionContext) Logger() node.Logger {
+	return c.logger
+}
+
+// RecordDebugInfo records debug information
+func (c *BasicExecutionContext) RecordDebugInfo(info types.DebugInfo) {
+	// In the basic implementation, we just log the debug info
+	c.logger.Debug("Debug info", map[string]interface{}{
+		"nodeID":      info.NodeID,
+		"pinID":       info.PinID,
+		"description": info.Description,
+		"value":       info.Value,
+	})
+}
+
+// GetDebugData returns debug data
+func (c *BasicExecutionContext) GetDebugData() map[string]interface{} {
+	// Basic context doesn't store debug data
+	return map[string]interface{}{}
+}
+
 // GetNodeStatus returns the current execution status of a node
 func (e *ExecutionEngine) GetNodeStatus(executionID, nodeID string) (NodeStatus, bool) {
 	e.mutex.RLock()
@@ -191,6 +338,43 @@ func (e *ExecutionEngine) GetExecutionStatus(executionID string) (ExecutionStatu
 
 	return *status, true
 }
+
+// TriggerNodeExecution starts the execution of a specific node, typically an event handler.
+// This method implements the core.EngineController interface.
+func (e *ExecutionEngine) TriggerNodeExecution(blueprintID string, nodeID string, triggerContext core.EventHandlerContext) error {
+	e.mutex.RLock()
+	bp, bpExists := e.blueprints[blueprintID]
+	// extensions := e.extensions // No longer needed here
+	e.mutex.RUnlock()
+
+	if !bpExists {
+		return fmt.Errorf("TriggerNodeExecution: blueprint %s not loaded", blueprintID)
+	}
+
+	// We need variables, but hooks might not apply directly when triggering
+	// Get variables associated with the blueprint instance if possible
+	e.mutex.RLock()
+	variables := make(map[string]types.Value)
+	if blueprintVars, ok := e.variables[blueprintID]; ok {
+		for k, v := range blueprintVars {
+			variables[k] = v // Copy variables
+		}
+	}
+	e.mutex.RUnlock()
+
+	e.logger.Info("Triggering event handler node execution", map[string]interface{}{"nodeId": nodeID, "eventId": triggerContext.EventID})
+
+	// Call executeNode, passing the triggerContext. executeNode will handle context creation.
+	// Pass nil for hooks for now.
+	// Assuming executeNode signature will be updated to accept *core.EventHandlerContext
+	err := e.executeNode(nodeID, bp, blueprintID, triggerContext.ExecutionID, variables, nil, &triggerContext) // Pass triggerContext
+	if err != nil {
+		e.logger.Error("Error executing triggered event handler node", map[string]interface{}{"nodeId": nodeID, "error": err.Error()})
+		return err
+	}
+
+	return nil
+} // End TriggerNodeExecution
 
 // GetNodeDebugData returns debug data for a specific node
 func (e *ExecutionEngine) GetNodeDebugData(executionID, nodeID string) (map[string]interface{}, bool) {
@@ -365,6 +549,22 @@ func (e *ExecutionEngine) Execute(bp *blueprint.Blueprint, executionID string, i
 	}
 
 	return result, err
+}
+
+// InitializeExtensions creates and initializes the execution extensions
+func (e *ExecutionEngine) InitializeExtensions(
+	errorManager *bperrors.ErrorManager,
+	recoveryManager *bperrors.RecoveryManager,
+	eventManager core.EventManagerInterface,
+) *engineext.ExecutionEngineExtensions {
+	// Create context manager
+	contextManager := engineext.NewContextManager(
+		errorManager,
+		recoveryManager,
+		eventManager,
+	)
+
+	return engineext.InitializeExtensions(e, contextManager, errorManager, recoveryManager, eventManager)
 }
 
 // Pre-process variable nodes before execution
@@ -600,12 +800,12 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 	}
 
 	// Custom function that does nothing since these nodes don't activate flow
-	dummyActivateFlow := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+	dummyActivateFlow := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
 		return nil
 	}
 
 	// Create execution context
-	ctx := NewExecutionContext(
+	ctx := engineext.NewExecutionContext(
 		nodeID,
 		nodeConfig.Type,
 		bp.ID,
@@ -626,8 +826,11 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 	e.debugManager.StoreNodeDebugData(executionID, nodeID, debugData)
 
 	// Store outputs in debug manager
-	for pinID, outValue := range ctx.outputs {
-		e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinID, outValue.RawValue)
+	if extCtx, ok := ctx.(node.ExtendedExecutionContext); ok {
+		outputs := extCtx.GetAllOutputs()
+		for pinID, outValue := range outputs {
+			e.debugManager.StoreNodeOutputValue(executionID, nodeID, pinID, outValue.RawValue)
+		}
 	}
 
 	if err != nil {
@@ -829,7 +1032,8 @@ func (e *ExecutionEngine) executeWithStandardEngine(bp *blueprint.Blueprint, exe
 		go func(nodeID string) {
 			defer wg.Done()
 
-			if err := e.executeNode(nodeID, bp, bp.ID, executionID, variables, hooks); err != nil {
+			// Pass nil for triggerCtx in standard execution flow
+			if err := e.executeNode(nodeID, bp, bp.ID, executionID, variables, hooks, nil); err != nil {
 				errors <- err
 			}
 		}(entryNodeID)
@@ -855,7 +1059,25 @@ func (e *ExecutionEngine) executeWithStandardEngine(bp *blueprint.Blueprint, exe
 }
 
 // executeNode executes a single node in the standard engine
-func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks) error {
+// createGenericActivateFlow creates a function that can work with any context type
+func (e *ExecutionEngine) createGenericActivateFlow(
+	activateFlowFn func(ctx *engineext.DefaultExecutionContext, nodeID string, pinID string) error,
+) func(ctx node.ExecutionContext, nodeID string, pinID string) error {
+	return func(ctx node.ExecutionContext, nodeID string, pinID string) error {
+		// Try to convert to DefaultExecutionContext
+		if defaultCtx, ok := ctx.(*engineext.DefaultExecutionContext); ok {
+			return activateFlowFn(defaultCtx, nodeID, pinID)
+		}
+		// If not possible, just log and continue
+		e.logger.Warn("Cannot activate flow due to incompatible context type", map[string]interface{}{
+			"nodeID": nodeID,
+			"pinID":  pinID,
+		})
+		return nil
+	}
+}
+
+func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks, triggerCtx *core.EventHandlerContext) error { // Added triggerCtx
 	// Find the node in the blueprint
 	nodeConfig := bp.FindNode(nodeID)
 	if nodeConfig == nil {
@@ -943,7 +1165,7 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	}
 
 	// Create a function to activate output flows
-	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+	activateFlowFn := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
 		// Store all outputs before activating flows
 		for _, pin := range nodeInstance.GetOutputPins() {
 			if value, exists := ctx.GetOutputValue(pin.ID); exists {
@@ -958,7 +1180,8 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 				targetNodeID := conn.TargetNodeID
 
 				// Execute the target node
-				if err := e.executeNode(targetNodeID, bp, blueprintID, executionID, variables, hooks); err != nil {
+				// Pass nil for triggerCtx when activating flow normally
+				if err := e.executeNode(targetNodeID, bp, blueprintID, executionID, variables, hooks, nil); err != nil {
 					return err
 				}
 			}
@@ -967,17 +1190,58 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	}
 
 	// Create execution context
-	ctx := NewExecutionContext(
-		nodeID,
-		nodeConfig.Type,
-		blueprintID,
-		executionID,
-		inputValues,
-		variables,
-		e.logger,
-		hooks,
-		activateFlowFn,
-	)
+	// Check if we have extensions available
+	var ctx node.ExecutionContext
+
+	// Try to use the extensions if available
+	if ext := e.GetExtensions(); ext != nil {
+		// Use type assertion with interface
+		if contextCreator, ok := ext.(interface {
+			CreateExecutionContext(
+				nodeID string,
+				nodeType string,
+				blueprintID string,
+				executionID string,
+				inputs map[string]types.Value,
+				variables map[string]types.Value,
+				hooks *node.ExecutionHooks,
+				activateFlow interface{},
+			) node.ExecutionContext
+		}); ok {
+			// Use the context creator to create the context
+			ctx = contextCreator.CreateExecutionContext(
+				nodeID,
+				nodeConfig.Type,
+				blueprintID,
+				executionID,
+				inputValues,
+				variables,
+				hooks,
+				activateFlowFn,
+			)
+		}
+	}
+
+	// Fallback to basic context if extensions not available
+	if ctx == nil {
+		// Create a basic execution context with adapted activateFlowFn
+		basicActivateFlowFn := func(basicCtx *BasicExecutionContext, nodeID, pinID string) error {
+			// This adapts the function to the expected signature
+			return fmt.Errorf("activation flow function not implemented in basic mode")
+		}
+
+		ctx = NewBasicExecutionContext(
+			nodeID,
+			nodeConfig.Type,
+			blueprintID,
+			executionID,
+			inputValues,
+			variables,
+			e.logger,
+			hooks,
+			basicActivateFlowFn,
+		)
+	}
 
 	// Notify node start
 	if hooks != nil && hooks.OnNodeStart != nil {
@@ -989,9 +1253,11 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 
 	// Collect output values
 	outputMap := make(map[string]interface{})
-	for _, pin := range nodeInstance.GetOutputPins() {
-		if value, exists := ctx.GetOutputValue(pin.ID); exists {
-			outputMap[pin.ID] = value.RawValue
+	if extCtx, ok := ctx.(node.ExtendedExecutionContext); ok {
+		for _, pin := range nodeInstance.GetOutputPins() {
+			if value, exists := extCtx.GetOutputValue(pin.ID); exists {
+				outputMap[pin.ID] = value.RawValue
+			}
 		}
 	}
 
@@ -1015,10 +1281,16 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	e.debugManager.StoreNodeDebugData(executionID, nodeID, ctx.GetDebugData())
 
 	// Follow execution flows
-	activatedFlows := ctx.GetActivatedOutputFlows()
+	var activatedFlows []string
+	if extCtx, ok := ctx.(node.ExtendedExecutionContext); ok {
+		activatedFlows = extCtx.GetActivatedOutputFlows()
+	}
 	for _, outputPin := range activatedFlows {
-		if err := activateFlowFn(ctx, nodeID, outputPin); err != nil {
-			return err
+		// Skip flow activation for non-DefaultExecutionContext
+		if defaultCtx, ok := ctx.(*engineext.DefaultExecutionContext); ok {
+			if err := activateFlowFn(defaultCtx, nodeID, outputPin); err != nil {
+				return err
+			}
 		}
 	}
 

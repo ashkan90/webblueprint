@@ -527,6 +527,7 @@ type ActorExecutionContext struct {
 	logger         node.Logger
 	actor          *NodeActor
 	activatedFlows []string
+	activePin      string // The pin that triggered execution
 	mutex          sync.RWMutex
 }
 
@@ -587,6 +588,17 @@ func (ctx *ActorExecutionContext) GetBlueprint() *blueprint.Blueprint {
 }
 
 // Implementation of node.ExecutionContext interface for ActorExecutionContext
+
+// IsInputPinActive checks if the input pin triggered execution
+func (ctx *ActorExecutionContext) IsInputPinActive(pinID string) bool {
+	// If a specific active pin is set, check it
+	if ctx.activePin != "" {
+		return ctx.activePin == pinID
+	}
+
+	// Otherwise, for backward compatibility, assume the default execute pin is active
+	return pinID == "execute"
+}
 
 // GetInputValue retrieves an input value by pin ID
 func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool) {

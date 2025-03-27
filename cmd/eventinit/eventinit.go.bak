@@ -1,0 +1,21 @@
+package eventinit
+
+import (
+	"webblueprint/internal/engine"
+	"webblueprint/internal/event"
+	"webblueprint/internal/nodes/events"
+)
+
+// Initialize sets up the entire event system
+func Initialize(baseEngine *engine.ExecutionEngine) *engine.EventAwareExecutionEngine {
+	// First, register all event nodes with the global registry
+	events.RegisterWithGlobalRegistry()
+
+	// Initialize the event system
+	eventAwareEngine := event.InitializeEventSystem(baseEngine)
+
+	// Register event nodes with the engine
+	events.RegisterWithEngine(baseEngine)
+
+	return eventAwareEngine
+}

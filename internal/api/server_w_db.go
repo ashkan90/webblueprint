@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"webblueprint/internal/bperrors"
+	"webblueprint/internal/core"
 	"webblueprint/internal/engine"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
@@ -18,17 +21,19 @@ import (
 // APIServer handles HTTP API requests with repository integration
 type APIServerWithDB struct {
 	executionEngine  *engine.ExecutionEngine
-	errorAwareEngine *engine.ErrorAwareEngine
+	engineExtensions *engineext.ExecutionEngineExtensions
 	nodeRegistry     map[string]node.NodeFactory
 	wsManager        *WebSocketManager
 	debugManager     *engine.DebugManager
 	errorManager     *bperrors.ErrorManager
 	recoveryManager  *bperrors.RecoveryManager
+	eventManager     core.EventManagerInterface
 	repoFactory      repository.RepositoryFactory
 	blueprintService *service.BlueprintService
 	userService      *service.UserService
 	workspaceService *service.WorkspaceService
 	executionService *service.ExecutionService
+	eventService     *service.EventService
 	rw               *sync.RWMutex
 }
 
@@ -38,7 +43,7 @@ func NewAPIServerWithDB(
 	wsManager *WebSocketManager,
 	debugManager *engine.DebugManager,
 	repoFactory repository.RepositoryFactory,
-	errorAwareEngine *engine.ErrorAwareEngine, // Add errorAwareEngine parameter
+	engineExtensions *engineext.ExecutionEngineExtensions, // Changed from errorAwareEngine
 ) *APIServerWithDB {
 	// Create the blueprint service
 	blueprintService := service.NewBlueprintService(
@@ -63,26 +68,31 @@ func NewAPIServerWithDB(
 		repoFactory.GetBlueprintRepository(),
 	)
 
-	// Get error handling components from the errorAwareEngine
-	errorManager := errorAwareEngine.GetErrorManager()
-	recoveryManager := errorAwareEngine.GetRecoveryManager()
+	eventService := service.NewEventService(repoFactory.GetEventRepository())
+
+	// Get components from the engine extensions
+	errorManager := engineExtensions.GetErrorManager()
+	recoveryManager := engineExtensions.GetRecoveryManager()
+	eventManager := engineExtensions.GetEventManager()
 
 	// Register WebSocket handlers with error manager
 	wsManager.RegisterErrorHandlers(errorManager, nil)
 
 	return &APIServerWithDB{
 		executionEngine:  executionEngine,
-		errorAwareEngine: errorAwareEngine,
+		engineExtensions: engineExtensions,
 		nodeRegistry:     make(map[string]node.NodeFactory),
 		wsManager:        wsManager,
 		debugManager:     debugManager,
 		errorManager:     errorManager,
 		recoveryManager:  recoveryManager,
+		eventManager:     eventManager,
 		repoFactory:      repoFactory,
 		blueprintService: blueprintService,
 		userService:      userService,
 		workspaceService: workspaceService,
 		executionService: executionService,
+		eventService:     eventService,
 		rw:               &sync.RWMutex{},
 	}
 }
@@ -114,9 +124,7 @@ func (s *APIServerWithDB) RegisterNodeType(typeID string, factory node.NodeFacto
 }
 
 // SetupRoutes sets up the HTTP routes for the API server
-func (s *APIServerWithDB) SetupRoutes() *mux.Router {
-	r := mux.NewRouter()
-
+func (s *APIServerWithDB) SetupRoutes(r *mux.Router) *mux.Router {
 	// WebSocket endpoint
 	r.HandleFunc("/ws", s.wsManager.HandleWebSocket)
 
@@ -141,6 +149,9 @@ func (s *APIServerWithDB) SetupRoutes() *mux.Router {
 
 	// Setup error API
 	s.setupErrorAPI(api)
+
+	// Setup event API
+	s.setupEventAPI(api)
 
 	// Serve static files for the frontend
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
@@ -175,6 +186,26 @@ func (s *APIServerWithDB) setupErrorAPI(router *mux.Router) {
 	router.HandleFunc("/test/generate-scenario", testErrorAPI.HandleGenerateErrorScenario).Methods("POST")
 }
 
+// Setup event API endpoints
+func (s *APIServerWithDB) setupEventAPI(router *mux.Router) {
+	// Use the event manager from the engine extensions
+	eventManagerInterface := s.eventManager
+	if eventManagerInterface == nil {
+		slog.Error("Event manager is not available, events will not be functional", nil)
+		return
+	}
+
+	// Create event API handler
+	eventHandler := NewEventAPIHandler(eventManagerInterface, s.eventService, s.wsManager)
+	eventHandler.RegisterEventRoutes(router)
+
+	// Register event test route for triggering events from UI
+	eventTestHandler := NewEventTestHandler(eventManagerInterface, s.wsManager)
+	eventTestHandler.RegisterRoutes(router)
+
+	slog.Info("Event API endpoints registered")
+}
+
 func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *http.Request) {
 	nodeTypes := make([]map[string]interface{}, 0)
 
@@ -199,9 +230,9 @@ func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *htt
 	respondWithJSON(w, http.StatusOK, nodeTypes)
 }
 
-// GetErrorAwareEngine returns the error-aware execution engine
-func (s *APIServerWithDB) GetErrorAwareEngine() *engine.ErrorAwareEngine {
-	return s.errorAwareEngine
+// GetEngineExtensions returns the execution engine extensions
+func (s *APIServerWithDB) GetEngineExtensions() *engineext.ExecutionEngineExtensions {
+	return s.engineExtensions
 }
 
 // convertPinsToInfo converts pins to a format suitable for the client

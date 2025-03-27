@@ -7,6 +7,7 @@ import (
 	"time"
 	"webblueprint/internal/db"
 	"webblueprint/internal/engine"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
@@ -164,8 +165,8 @@ func (n *UserFunctionNode) Execute(ctx node.ExecutionContext) error {
 		// Even if there are no entry points, we might have simple data transformations
 	}
 
-	// Create a function execution context using the engine's implementation
-	functionContext := engine.NewFunctionExecutionContext(
+	// Create a function execution context using the engineext implementation
+	functionContext := engineext.NewFunctionExecutionContext(
 		ctx,                          // parent context
 		ctx.GetNodeID(),              // node ID
 		n.Metadata.TypeID,            // node type
@@ -243,7 +244,7 @@ func (n *UserFunctionNode) Execute(ctx node.ExecutionContext) error {
 }
 
 // executeFunction is a helper method to execute the internal nodes of the function
-func (n *UserFunctionNode) executeFunction(functionContext *engine.FunctionExecutionContext, entryPoints []string) error {
+func (n *UserFunctionNode) executeFunction(functionContext *engineext.FunctionExecutionContext, entryPoints []string) error {
 	logger := functionContext.Logger()
 
 	// We no longer filter out recursive entry points - instead, we'll handle them properly
@@ -319,7 +320,7 @@ func (n *UserFunctionNode) executeFunction(functionContext *engine.FunctionExecu
 }
 
 // executeNode executes a single node in the function
-func (n *UserFunctionNode) executeNode(functionContext *engine.FunctionExecutionContext, nodeID string) error {
+func (n *UserFunctionNode) executeNode(functionContext *engineext.FunctionExecutionContext, nodeID string) error {
 	// Get the blueprint that contains this function
 	bp, err := db.Blueprints.GetBlueprint(functionContext.GetBlueprintID())
 	if err != nil {
@@ -406,7 +407,7 @@ func (n *UserFunctionNode) executeNode(functionContext *engine.FunctionExecution
 
 	// Create a function to activate output flows
 	executionID := fmt.Sprintf("func-%s-%d", functionContext.GetBlueprintID(), time.Now().UnixNano())
-	activateFlowFn := func(ctx *engine.DefaultExecutionContext, nodeID, pinID string) error {
+	activateFlowFn := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
 		// Store all outputs in the function context
 		for outPinID, outValue := range ctx.GetOutputs() {
 			functionContext.StoreInternalOutput(nodeID, outPinID, outValue)
@@ -488,7 +489,7 @@ func (n *UserFunctionNode) executeNode(functionContext *engine.FunctionExecution
 	}
 
 	// Create execution context
-	ctx := engine.NewExecutionContext(
+	ctx := engineext.NewExecutionContext(
 		nodeID,
 		nodeConfig.Type,
 		functionContext.GetBlueprintID(),

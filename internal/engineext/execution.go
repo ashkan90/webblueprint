@@ -1,4 +1,4 @@
-package engine
+package engineext
 
 import (
 	"fmt"
@@ -25,6 +25,7 @@ type DefaultExecutionContext struct {
 	activateFlow       func(ctx *DefaultExecutionContext, nodeID, pinID string) error
 	activatedFlows     []string // Track which output pins were activated
 	activatedFlowMutex sync.Mutex
+	activePins         map[string]bool // Tracks which input pins triggered execution
 }
 
 // NewExecutionContext creates a new execution context
@@ -53,7 +54,28 @@ func NewExecutionContext(
 		hooks:          hooks,
 		activateFlow:   activateFlow,
 		activatedFlows: make([]string, 0),
+		activePins:     make(map[string]bool),
 	}
+}
+
+// SetActiveInputPin marks an input pin as the one that triggered execution
+func (ctx *DefaultExecutionContext) SetActiveInputPin(pinID string) {
+	ctx.activePins[pinID] = true
+}
+
+// IsInputPinActive checks if the input pin triggered execution
+func (ctx *DefaultExecutionContext) IsInputPinActive(pinID string) bool {
+	// By default, assume the "execute" pin is active when no specific active pin is set
+	if len(ctx.activePins) == 0 && pinID == "execute" {
+		return true
+	}
+
+	// Check if the pin is marked as active
+	if active, exists := ctx.activePins[pinID]; exists && active {
+		return true
+	}
+
+	return false
 }
 
 // GetInputValue retrieves an input value by pin ID
@@ -278,6 +300,8 @@ func (ctx *DefaultExecutionContext) GetBlueprintID() string {
 func (ctx *DefaultExecutionContext) GetExecutionID() string {
 	return ctx.executionID
 }
+
+// GetAllOutputs is implemented by GetOutputs method
 
 // GetOutputs returns all outputs from this execution context
 func (ctx *DefaultExecutionContext) GetOutputs() map[string]types.Value {

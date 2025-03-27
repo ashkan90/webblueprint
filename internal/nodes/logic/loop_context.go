@@ -2,7 +2,7 @@ package logic
 
 import (
 	"time"
-	"webblueprint/internal/engine"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
@@ -118,7 +118,7 @@ func (ctx *LoopContext) GetOutputValue(pinID string) (types.Value, bool) {
 	}
 
 	// Fall back to the parent context
-	return ctx.ExecutionContext.(*engine.DefaultExecutionContext).GetOutputValue(pinID)
+	return ctx.ExecutionContext.(*engineext.DefaultExecutionContext).GetOutputValue(pinID)
 }
 
 // GetOutputPins returns all output pins from the loop node

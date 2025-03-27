@@ -16,6 +16,7 @@ type PostgresRepositoryFactory struct {
 	userRepo      repository.UserRepository
 	executionRepo repository.ExecutionRepository
 	nodeRepo      repository.NodeRepository
+	eventRepo     repository.EventRepository
 }
 
 // NewRepositoryFactory creates a new PostgreSQL repository factory
@@ -71,4 +72,12 @@ func (f *PostgresRepositoryFactory) GetNodeRepository() repository.NodeRepositor
 	}
 
 	return f.nodeRepo
+}
+
+func (f *PostgresRepositoryFactory) GetEventRepository() repository.EventRepository {
+	if f.eventRepo == nil {
+		f.eventRepo = NewEventRepository(f.db)
+	}
+
+	return f.eventRepo
 }
