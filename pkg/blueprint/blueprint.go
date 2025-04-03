@@ -76,16 +76,17 @@ type Function struct {
 
 // Blueprint represents a complete blueprint definition
 type Blueprint struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Version     string            `json:"version"`
-	Nodes       []BlueprintNode   `json:"nodes"`
-	Functions   []Function        `json:"functions"`
-	Connections []Connection      `json:"connections"`
-	Variables   []Variable        `json:"variables,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Events      []EventDefinition `json:"events,omitempty"` // Added field for custom event definitions
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	Version       string            `json:"version"`
+	Nodes         []BlueprintNode   `json:"nodes"`
+	Functions     []Function        `json:"functions"`
+	Connections   []Connection      `json:"connections"`
+	Variables     []Variable        `json:"variables,omitempty"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
+	Events        []EventDefinition `json:"events,omitempty"`         // User-defined event definitions
+	EventBindings []EventBinding    `json:"event_bindings,omitempty"` // User-defined event bindings
 }
 
 // EventParameter defines a parameter for a custom event within a blueprint
@@ -106,17 +107,28 @@ type EventDefinition struct {
 	Category    string           `json:"category,omitempty"`    // Category for organization (defaults to "Custom")
 }
 
+// EventBinding defines a binding between an event and a handler
+type EventBinding struct {
+	ID          string `json:"id"`           // Unique identifier for the binding
+	EventID     string `json:"event_id"`     // ID of the event to bind to
+	HandlerID   string `json:"handler_id"`   // ID of the node that handles the event
+	HandlerType string `json:"handler_type"` // Type of handler (e.g., "node", "function")
+	Priority    int    `json:"priority"`     // Priority for execution order
+	Enabled     bool   `json:"enabled"`      // Whether the binding is enabled
+}
+
 // NewBlueprint creates a new empty blueprint
 func NewBlueprint(id, name, version string) *Blueprint {
 	return &Blueprint{
-		ID:          id,
-		Name:        name,
-		Version:     version,
-		Nodes:       make([]BlueprintNode, 0),
-		Connections: make([]Connection, 0),
-		Variables:   make([]Variable, 0),
-		Metadata:    make(map[string]string),
-		Events:      make([]EventDefinition, 0), // Initialize Events slice
+		ID:            id,
+		Name:          name,
+		Version:       version,
+		Nodes:         make([]BlueprintNode, 0),
+		Connections:   make([]Connection, 0),
+		Variables:     make([]Variable, 0),
+		Metadata:      make(map[string]string),
+		Events:        make([]EventDefinition, 0), // Initialize Events slice
+		EventBindings: make([]EventBinding, 0),    // Initialize EventBindings slice
 	}
 }
 

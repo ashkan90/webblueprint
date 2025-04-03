@@ -229,7 +229,8 @@ type BlueprintVersion struct {
 	Connections   JSONArray
 	Variables     JSONArray
 	Functions     JSONArray
-	Events        JSONArray
+	Events        JSONArray // User-defined events
+	EventBindings JSONArray // User-defined event bindings
 	Metadata      JSONB
 }
 

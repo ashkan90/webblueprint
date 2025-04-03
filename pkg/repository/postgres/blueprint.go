@@ -97,8 +97,8 @@ func (r *PostgresBlueprintRepository) Create(ctx context.Context, bp *models.Blu
 		versionQuery := `
 			INSERT INTO blueprint_versions (
 				id, blueprint_id, version_number, created_at, created_by,
-				comment, nodes, connections, variables, functions, metadata
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				comment, nodes, connections, variables, functions, events, event_bindings, metadata
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		`
 		_, err = tx.ExecContext(
 			ctx,
@@ -113,6 +113,8 @@ func (r *PostgresBlueprintRepository) Create(ctx context.Context, bp *models.Blu
 			bp.CurrentVersion.Connections,
 			bp.CurrentVersion.Variables,
 			bp.CurrentVersion.Functions,
+			bp.CurrentVersion.Events,
+			bp.CurrentVersion.EventBindings,
 			bp.CurrentVersion.Metadata,
 		)
 		if err != nil {
@@ -184,7 +186,7 @@ func (r *PostgresBlueprintRepository) GetByID(ctx context.Context, id string) (*
 		versionQuery := `
 			SELECT 
 				id, blueprint_id, version_number, created_at, created_by,
-				comment, nodes, connections, variables, functions, metadata
+				comment, nodes, connections, variables, functions, events, event_bindings, metadata
 			FROM blueprint_versions
 			WHERE id = $1
 		`
@@ -201,6 +203,8 @@ func (r *PostgresBlueprintRepository) GetByID(ctx context.Context, id string) (*
 			&version.Connections,
 			&version.Variables,
 			&version.Functions,
+			&version.Events,
+			&version.EventBindings,
 			&version.Metadata,
 		)
 
@@ -329,7 +333,7 @@ func (r *PostgresBlueprintRepository) GetAll(ctx context.Context, limit, offset 
 			versionQuery := `
 			SELECT 
 				id, blueprint_id, version_number, created_at, created_by,
-				comment, nodes, connections, variables, functions, metadata
+				comment, nodes, connections, variables, functions, events, event_bindings, metadata
 			FROM blueprint_versions
 			WHERE id = $1
 		`
@@ -346,6 +350,8 @@ func (r *PostgresBlueprintRepository) GetAll(ctx context.Context, limit, offset 
 				&version.Connections,
 				&version.Variables,
 				&version.Functions,
+				&version.Events,
+				&version.EventBindings,
 				&version.Metadata,
 			)
 
@@ -550,8 +556,8 @@ func (r *PostgresBlueprintRepository) CreateVersion(ctx context.Context, bluepri
 	versionQuery := `
 		INSERT INTO blueprint_versions (
 			id, blueprint_id, version_number, created_at, created_by,
-			comment, nodes, connections, variables, functions, metadata
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			comment, nodes, connections, variables, functions, events, event_bindings, metadata
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 	_, err = tx.ExecContext(
 		ctx,
@@ -566,6 +572,8 @@ func (r *PostgresBlueprintRepository) CreateVersion(ctx context.Context, bluepri
 		version.Connections,
 		version.Variables,
 		version.Functions,
+		version.Events,
+		version.EventBindings,
 		version.Metadata,
 	)
 	if err != nil {
@@ -624,7 +632,7 @@ func (r *PostgresBlueprintRepository) GetVersion(ctx context.Context, blueprintI
 	query := `
 		SELECT 
 			id, blueprint_id, version_number, created_at, created_by,
-			comment, nodes, connections, variables, functions, metadata
+			comment, nodes, connections, variables, functions, events, event_bindings, metadata
 		FROM blueprint_versions
 		WHERE blueprint_id = $1 AND version_number = $2
 	`
@@ -641,6 +649,8 @@ func (r *PostgresBlueprintRepository) GetVersion(ctx context.Context, blueprintI
 		&version.Connections,
 		&version.Variables,
 		&version.Functions,
+		&version.Events,
+		&version.EventBindings,
 		&version.Metadata,
 	)
 
@@ -743,6 +753,10 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 
 	// Create a new package blueprint
 	bp := blueprint.NewBlueprint(blueprintModel.ID, blueprintModel.Name, "1.0.0") // Version might need to be set differently
+
+	// Initialize empty events and event bindings slices
+	bp.Events = make([]blueprint.EventDefinition, 0)
+	bp.EventBindings = make([]blueprint.EventBinding, 0)
 
 	// Set description if provided
 	if blueprintModel.Description.Valid {
@@ -1073,6 +1087,93 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 			}
 
 			bp.Functions = append(bp.Functions, function)
+		}
+	}
+
+	// Convert user-defined events
+	if versionModel != nil && versionModel.Events != nil {
+		for _, eventData := range versionModel.Events {
+			eventMap, ok := eventData.(map[string]interface{})
+			if !ok {
+				continue // Skip invalid events
+			}
+
+			var event blueprint.EventDefinition
+			if id, ok := eventMap["id"].(string); ok {
+				event.ID = id
+			}
+			if name, ok := eventMap["name"].(string); ok {
+				event.Name = name
+			}
+			if desc, ok := eventMap["description"].(string); ok {
+				event.Description = desc
+			}
+			if category, ok := eventMap["category"].(string); ok {
+				event.Category = category
+			}
+
+			// Convert parameters
+			if params, ok := eventMap["parameters"].([]interface{}); ok {
+				for _, paramData := range params {
+					paramMap, ok := paramData.(map[string]interface{})
+					if !ok {
+						continue
+					}
+
+					var param blueprint.EventParameter
+					if name, ok := paramMap["name"].(string); ok {
+						param.Name = name
+					}
+					if typeID, ok := paramMap["typeId"].(string); ok {
+						param.TypeID = typeID
+					}
+					if desc, ok := paramMap["description"].(string); ok {
+						param.Description = desc
+					}
+					if optional, ok := paramMap["optional"].(bool); ok {
+						param.Optional = optional
+					}
+					if defaultVal, ok := paramMap["default"]; ok {
+						param.Default = defaultVal
+					}
+
+					event.Parameters = append(event.Parameters, param)
+				}
+			}
+
+			bp.Events = append(bp.Events, event)
+		}
+	}
+
+	// Convert user-defined event bindings
+	if versionModel != nil && versionModel.EventBindings != nil {
+		for _, bindingData := range versionModel.EventBindings {
+			bindingMap, ok := bindingData.(map[string]interface{})
+			if !ok {
+				continue // Skip invalid bindings
+			}
+
+			var binding blueprint.EventBinding
+			if id, ok := bindingMap["id"].(string); ok {
+				binding.ID = id
+			}
+			if eventID, ok := bindingMap["event_id"].(string); ok {
+				binding.EventID = eventID
+			}
+			if handlerID, ok := bindingMap["handler_id"].(string); ok {
+				binding.HandlerID = handlerID
+			}
+			if handlerType, ok := bindingMap["handler_type"].(string); ok {
+				binding.HandlerType = handlerType
+			}
+			if priority, ok := bindingMap["priority"].(float64); ok {
+				binding.Priority = int(priority)
+			}
+			if enabled, ok := bindingMap["enabled"].(bool); ok {
+				binding.Enabled = enabled
+			}
+
+			bp.EventBindings = append(bp.EventBindings, binding)
 		}
 	}
 
