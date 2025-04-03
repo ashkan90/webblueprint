@@ -9,11 +9,79 @@ import (
 
 // SafeDivideNode implements a division node with error recovery
 type SafeDivideNode struct {
+	inputs     []types.Pin
+	outputs    []types.Pin
+	properties []types.Property
 }
 
 // NewSafeDivideNode creates a new safe divide node
 func NewSafeDivideNode() node.Node {
-	return &SafeDivideNode{}
+	return &SafeDivideNode{
+		inputs: []types.Pin{
+			{
+				ID:          "exec",
+				Name:        "Execute",
+				Description: "Execution input",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "dividend",
+				Name:        "Dividend",
+				Description: "The number to divide (numerator)",
+				Type:        types.PinTypes.Number,
+			},
+			{
+				ID:          "divisor",
+				Name:        "Divisor",
+				Description: "The number to divide by (denominator)",
+				Type:        types.PinTypes.Number,
+			},
+			{
+				ID:          "default",
+				Name:        "Default Value",
+				Description: "Value to return if division by zero occurs",
+				Type:        types.PinTypes.Number,
+			},
+		},
+		outputs: []types.Pin{
+			{
+				ID:          "then",
+				Name:        "Then",
+				Description: "Execution continues when operation succeeds",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "catch",
+				Name:        "Catch",
+				Description: "Execution continues when error occurs",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "result",
+				Name:        "Result",
+				Description: "The division result",
+				Type:        types.PinTypes.Number,
+			},
+			{
+				ID:          "error",
+				Name:        "Error",
+				Description: "Error information if division failed",
+				Type:        types.PinTypes.Object,
+			},
+		},
+		properties: []types.Property{
+			{
+				Name:  "defaultValue",
+				Type:  types.PinTypes.Number,
+				Value: 0,
+			},
+			{
+				Name:  "errorHandlingMode",
+				Type:  types.PinTypes.String,
+				Value: "auto", // "auto", "manual", "default"
+			},
+		},
+	}
 }
 
 // NewSafeDivideNodeFactory returns a factory function for creating safe divide nodes
@@ -36,78 +104,27 @@ func (n *SafeDivideNode) GetMetadata() node.NodeMetadata {
 
 // GetInputPins returns input pins
 func (n *SafeDivideNode) GetInputPins() []types.Pin {
-	return []types.Pin{
-		{
-			ID:          "exec",
-			Name:        "Execute",
-			Description: "Execution input",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "dividend",
-			Name:        "Dividend",
-			Description: "The number to divide (numerator)",
-			Type:        types.PinTypes.Number,
-		},
-		{
-			ID:          "divisor",
-			Name:        "Divisor",
-			Description: "The number to divide by (denominator)",
-			Type:        types.PinTypes.Number,
-		},
-		{
-			ID:          "default",
-			Name:        "Default Value",
-			Description: "Value to return if division by zero occurs",
-			Type:        types.PinTypes.Number,
-		},
-	}
+	return n.inputs
+}
+
+// SetInputPins sets the input pins
+func (n *SafeDivideNode) SetInputPins(pins []types.Pin) {
+	n.inputs = pins
 }
 
 // GetOutputPins returns output pins
 func (n *SafeDivideNode) GetOutputPins() []types.Pin {
-	return []types.Pin{
-		{
-			ID:          "then",
-			Name:        "Then",
-			Description: "Execution continues when operation succeeds",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "catch",
-			Name:        "Catch",
-			Description: "Execution continues when error occurs",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "result",
-			Name:        "Result",
-			Description: "The division result",
-			Type:        types.PinTypes.Number,
-		},
-		{
-			ID:          "error",
-			Name:        "Error",
-			Description: "Error information if division failed",
-			Type:        types.PinTypes.Object,
-		},
-	}
+	return n.outputs
+}
+
+// SetOutputPins sets the output pins
+func (n *SafeDivideNode) SetOutputPins(pins []types.Pin) {
+	n.outputs = pins
 }
 
 // GetProperties returns node properties
 func (n *SafeDivideNode) GetProperties() []types.Property {
-	return []types.Property{
-		{
-			Name:  "defaultValue",
-			Type:  types.PinTypes.Number,
-			Value: 0,
-		},
-		{
-			Name:  "errorHandlingMode",
-			Type:  types.PinTypes.String,
-			Value: "auto", // "auto", "manual", "default"
-		},
-	}
+	return n.properties
 }
 
 // Execute runs the node

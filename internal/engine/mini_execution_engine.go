@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 	"webblueprint/internal/db"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
@@ -248,14 +250,14 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 
 	// Create a function to activate output flows
 	executionID := fmt.Sprintf("mini-%s-%d", blueprintID, time.Now().UnixNano())
-	activateFlowFn := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+	activateFlowFn := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
 		// Store outputs
 		e.mutex.Lock()
 		if _, exists := e.outputs[nodeID]; !exists {
 			e.outputs[nodeID] = make(map[string]types.Value)
 		}
-
-		for pin, value := range ctx.outputs {
+		// Call GetAllOutputs directly on the concrete context
+		for pin, value := range ctx.GetAllOutputs() {
 			e.outputs[nodeID][pin] = value
 		}
 		e.mutex.Unlock()
@@ -275,8 +277,10 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		return nil
 	}
 
+	storeCtx := context.WithValue(context.Background(), "bp", bp)
+
 	// Create execution context
-	ctx := NewExecutionContext(
+	ctx := engineext.NewExecutionContext(
 		nodeID,
 		nodeConfig.Type,
 		blueprintID,
@@ -286,6 +290,7 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		e.logger,
 		hooks,
 		activateFlowFn,
+		storeCtx,
 	)
 
 	// Notify node start
@@ -309,8 +314,8 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 	if _, exists := e.outputs[nodeID]; !exists {
 		e.outputs[nodeID] = make(map[string]types.Value)
 	}
-
-	for pin, value := range ctx.outputs {
+	// Call GetAllOutputs directly on the concrete context
+	for pin, value := range ctx.GetAllOutputs() {
 		e.outputs[nodeID][pin] = value
 	}
 	e.mutex.Unlock()

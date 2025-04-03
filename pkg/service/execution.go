@@ -40,14 +40,19 @@ func (s *ExecutionService) StartExecution(
 	initialVariables map[string]interface{},
 	userID string,
 ) (string, error) {
+	// Create a unique execution ID
+	executionID := uuid.New().String()
 	// Get the blueprint to validate it exists
 	blueprintModel, err := s.blueprintRepo.GetByID(ctx, blueprintID)
 	if err != nil {
+		s.AddLogEntry(ctx, executionID, "on.start", "ERROR", "blueprint not found", map[string]interface{}{
+			"blueprintID":      blueprintID,
+			"initialVariables": initialVariables,
+			"userId":           userID,
+			"error":            err.Error(),
+		})
 		return "", fmt.Errorf("blueprint not found: %w", err)
 	}
-
-	// Create a unique execution ID
-	executionID := uuid.New().String()
 
 	// Create execution record
 	execution := &models.Execution{
@@ -94,14 +99,14 @@ func (s *ExecutionService) StartExecution(
 	}
 	bp, _ := s.blueprintRepo.ToPkgBlueprint(blueprintModel, blueprintModel.CurrentVersion)
 
+	// Register hooks
+	s.executionEngine.OnAnyHook = s.AddLogEntry
+	s.executionEngine.OnNodeExecutionHook = s.RecordNodeExecution
+
 	// Execute the blueprint in a goroutine
 	go func(bp *blueprint.Blueprint) {
 		// Get a background context since the request context will be canceled
 		bgCtx := context.Background()
-
-		// Register hooks
-		s.executionEngine.OnAnyHook = s.AddLogEntry
-		s.executionEngine.OnNodeExecutionHook = s.RecordNodeExecution
 
 		// Execute the blueprint
 		result, err := s.executionEngine.Execute(bp, executionID, variables)
@@ -169,10 +174,10 @@ func (s *ExecutionService) GetExecutionLogs(ctx context.Context, executionID str
 // RecordNodeExecution records the execution of a node
 func (s *ExecutionService) RecordNodeExecution(
 	ctx context.Context,
-	executionID, nodeID, nodeType string,
+	executionID, nodeID, nodeType, execState string,
 	inputs, outputs map[string]interface{},
 ) error {
-	err := s.executionRepo.RecordNodeExecution(ctx, executionID, nodeID, nodeType, inputs, outputs)
+	err := s.executionRepo.RecordNodeExecution(ctx, executionID, nodeID, nodeType, execState, inputs, outputs)
 	if err != nil {
 		return fmt.Errorf("failed to record node execution: %w", err)
 	}

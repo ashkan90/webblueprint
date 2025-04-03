@@ -3,314 +3,151 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	"webblueprint/internal/api"
 	"webblueprint/internal/bperrors"
 	"webblueprint/internal/engine"
-	"webblueprint/internal/node"
-	"webblueprint/internal/nodes"
-	"webblueprint/internal/nodes/math"
-	"webblueprint/internal/nodes/web"
+	"webblueprint/internal/engineext"
+	"webblueprint/internal/event"
 	"webblueprint/internal/registry"
 	"webblueprint/pkg/db"
-	"webblueprint/pkg/repository"
 
 	"github.com/gorilla/mux"
 )
 
-func setupErrorHandling(baseEngine *engine.ExecutionEngine, wsManager *api.WebSocketManager) *engine.ErrorAwareEngine {
-	// Create error-aware engine
-	errorAwareEngine := engine.NewErrorAwareEngine(baseEngine)
-
-	// Get error manager from the engine
-	errorManager := errorAwareEngine.GetErrorManager()
-	recoveryManager := errorAwareEngine.GetRecoveryManager()
-
-	// Create WebSocket logger
-	wsLogger := &wsLogger{}
-
-	// Register error handlers with WebSocket manager
-	wsManager.RegisterErrorHandlers(errorManager, wsLogger)
-
-	// Create error notification handler
-	wsLoggerClient := api.NewWebSocketLogger(wsManager)
-	notificationHandler := api.NewErrorNotificationHandler(wsManager, wsLoggerClient, errorManager, recoveryManager)
-
-	// Register notification handler with error manager
-	for _, errType := range []bperrors.ErrorType{
-		bperrors.ErrorTypeExecution,
-		bperrors.ErrorTypeConnection,
-		bperrors.ErrorTypeValidation,
-		bperrors.ErrorTypeSystem,
-	} {
-		// Convert method to correct signature
-		handler := func(err *bperrors.BlueprintError) error {
-			notificationHandler.HandleExecutionError(err.ExecutionID, err)
-			return nil
-		}
-		errorManager.RegisterErrorHandler(errType, handler)
-	}
-
-	return errorAwareEngine
-}
-
-// Setup routes for error management API
-func setupErrorAPI(router *mux.Router, errorAwareEngine *engine.ErrorAwareEngine, wsManager *api.WebSocketManager) {
-	errorManager := errorAwareEngine.GetErrorManager()
-	recoveryManager := errorAwareEngine.GetRecoveryManager()
-
-	// Create recovery handler
-	recoveryHandler := api.NewErrorRecoveryHandler(wsManager, errorManager, recoveryManager)
-	recoveryHandler.RegisterRoutes(router)
-
-	// Create test error handler
-	testHandler := api.NewTestErrorHandler(errorManager, recoveryManager, wsManager)
-	testHandler.RegisterRoutes(router)
-}
-
-// Custom logger that implements the Logger interface
-type wsLogger struct{}
-
-func (l *wsLogger) Debug(msg string, fields map[string]interface{}) {
-	slog.Debug(msg, l.toFields(fields))
-}
-
-func (l *wsLogger) Info(msg string, fields map[string]interface{}) {
-	slog.Info(msg, l.toFields(fields)...)
-}
-
-func (l *wsLogger) Warn(msg string, fields map[string]interface{}) {
-	slog.Warn(msg, l.toFields(fields))
-}
-
-func (l *wsLogger) Error(msg string, fields map[string]interface{}) {
-	slog.Error(msg, l.toFields(fields))
-}
-
-func (l *wsLogger) Opts(options map[string]interface{}) {
-	// Set logger options
-}
-
-func (l *wsLogger) toFields(fields map[string]interface{}) []any {
-	_fields := make([]any, 0, len(fields))
-	for k, field := range fields {
-		if k == "" {
-			continue
-		}
-		_fields = append(_fields, slog.Any(k, field))
-	}
-
-	return _fields
-}
-
 func main() {
 	// Define command line flags
-	useActorSystem := flag.Bool("actor", true, "Use actor system for execution (default: true)")
-	useDatabase := flag.Bool("db", true, "Use database storage (default: true)")
 	port := flag.String("port", "8089", "Server port (default: 8089 or $PORT environment variable)")
 	flag.Parse()
 
-	// Set up based on flags
-	slog.Info("Using Actor System for execution")
-	log.Println()
-
-	// Create cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Set log level
+	h := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	slog.SetDefault(slog.New(h))
 
 	// Channel to catch SIGINT and SIGTERM signals
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start WebSocket manager
-	wsManager := api.NewWebSocketManager()
-
-	// Create debug manager
-	debugManager := engine.NewDebugManager()
-
-	// Start execution engine
-	var apiServer *api.APIServerWithDB
-	var apiRouter *mux.Router
-
-	var logger = &wsLogger{}
-
-	// Register the global node registry
-	registry.Make(nodes.Core)
-	globalRegistry := registry.GetInstance()
-
-	var executionEngine = engine.NewExecutionEngine(logger, debugManager)
-
-	if *useActorSystem {
-		slog.Info("Using actor system for execution")
-		executionEngine.SetExecutionMode(engine.ModeActor)
-		// TODO: Set actor system mode if needed
-	} else {
-		slog.Info("Using direct execution")
-		executionEngine.SetExecutionMode(engine.ModeStandard)
-		// TODO: Set direct execution mode if needed
-	}
-
-	// Setup error handling
-	errorAwareEngine := setupErrorHandling(executionEngine, wsManager)
-
-	// Set up database if requested
-	if *useDatabase {
-		slog.Info("Using database storage")
-
-		// Skip database setup for now to fix build
-		// TEMP STUB: direct database implementation
-		log.Println("Skipping database connection for build fixing")
-		connectionManager, repoFactory, err := db.Setup(context.Background())
-		if err != nil {
-			slog.Error(err.Error())
-			return
-		}
-		defer connectionManager.Close()
-
-		// Create API server with database
-		apiServer = api.NewAPIServerWithDB(executionEngine, wsManager, debugManager, repoFactory, errorAwareEngine)
-
-		// Register execution event listener
-		executionEventListener := api.NewExecutionEventListener(wsManager)
-		executionEngine.AddExecutionListener(executionEventListener)
-
-		// Register node types
-		registerCoreNodesWithServer(apiServer, globalRegistry)
-		registerCoreSafeNodesWithServer(apiServer, globalRegistry)
-
-		// Load blueprints from database
-		if err := loadBlueprintsFromDB(ctx, repoFactory, executionEngine); err != nil {
-			log.Printf("Warning: Failed to load blueprints from database: %v", err)
-		}
-
-		apiRouter = apiServer.SetupRoutes()
-
-		// Set up error handling API endpoints
-		setupErrorAPI(apiRouter, errorAwareEngine, wsManager)
-	} else {
-		log.Println("Using in-memory storage (no database)")
-		// Create server without database
-		// You'd need to implement this part based on your requirements
-	}
-
-	// Get server port from flag, environment, or default
+	// Determine port
 	serverPort := *port
-	if serverPort == "" {
-		serverPort = os.Getenv("PORT")
-		if serverPort == "" {
-			serverPort = "8089" // Default port
-		}
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		serverPort = envPort
 	}
 
-	// Create the HTTP server
+	ctx := context.Background()
+	// Create router
+	router := mux.NewRouter()
+
+	registry.Make()
+
+	//registerNodes()
+
+	setupAPI(ctx, router)
+
+	// Set up basic API endpoints
+	router.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "{\"status\":\"ok\",\"timestamp\":\"%s\"}", time.Now().Format(time.RFC3339))
+	})
+
+	// Serve static files
+	staticDir := "./web/dist"
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		staticDir = "./dist"
+	}
+
+	// Print info about where static files will be served from
+	slog.Info("Serving static files", slog.String("dir", staticDir))
+
+	// Set up static file server
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
+
+	// Start HTTP server
 	server := &http.Server{
-		Addr:    ":" + serverPort,
-		Handler: apiRouter,
+		Addr:         ":" + serverPort,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
 	}
 
-	// Start the server in a goroutine
+	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting server on port %s", serverPort)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
+		slog.Info("Starting server", slog.String("port", serverPort))
+		if err := server.ListenAndServe(); err != nil && !strings.Contains(err.Error(), "Server closed") {
+			slog.Error("Server error", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
 	// Wait for interrupt signal
 	<-signals
-	log.Println("Shutting down server...")
+	slog.Info("Shutdown signal received")
 
-	// Create a deadline context for server shutdown
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Create a timeout context for shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer shutdownCancel()
 
-	// Attempt graceful shutdown
-	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server shutdown failed: %v", err)
+	// Shutdown gracefully
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server shutdown error", slog.String("error", err.Error()))
 	}
 
-	log.Println("Server stopped")
+	slog.Info("Server shutdown complete")
 }
 
-// Helper function to register a node type
-func registerNodeType(server *api.APIServerWithDB, registry *registry.GlobalNodeRegistry, typeName string, factory func() node.Node) {
-	registry.RegisterNodeType(typeName, factory)
-	server.RegisterNodeType(typeName, factory)
-}
-
-// Helper function to register all nodes with the server
-func registerCoreSafeNodesWithServer(server *api.APIServerWithDB, registry *registry.GlobalNodeRegistry) {
-	// Register any types needed for the error handling demo
-	registerNodeType(server, registry, "http-request-with-recovery", web.NewHTTPRequestWithRecoveryNode)
-	registerNodeType(server, registry, "safe-divide", math.NewSafeDivideNode)
-}
-
-func registerCoreNodesWithServer(server *api.APIServerWithDB, registry *registry.GlobalNodeRegistry) {
-	for s, factory := range registry.GetAllNodeFactories() {
-		registerNodeType(server, registry, s, factory)
-	}
-}
-
-// Load blueprints from database
-func loadBlueprintsFromDB(ctx context.Context, repoFactory repository.RepositoryFactory, executionEngine *engine.ExecutionEngine) error {
-	// Get repositories
-	blueprintRepo := repoFactory.GetBlueprintRepository()
-
-	// Get all blueprint IDs
-	query := `SELECT id FROM blueprints`
-
-	rows, err := db.GetConnectionManager().GetDB().QueryContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	var blueprintIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return err
-		}
-		blueprintIDs = append(blueprintIDs, id)
+func setupAPI(ctx context.Context, router *mux.Router) {
+	_, repoFactory, dbErr := db.Setup(ctx)
+	if dbErr != nil {
+		return
 	}
 
-	if err = rows.Err(); err != nil {
-		return err
-	}
+	wsManager := api.NewWebSocketManager()
+	logger := api.NewWebSocketLogger(wsManager)
+	debugManager := engine.NewDebugManager()
+	errorManager := bperrors.NewErrorManager()
+	recoveryManager := bperrors.NewRecoveryManager(errorManager)
 
-	// Load each blueprint
-	for _, id := range blueprintIDs {
-		// Get model from database
-		blueprintModel, err := blueprintRepo.GetByID(ctx, id)
-		if err != nil {
-			log.Printf("Could not get blueprint %s: %v", id, err)
-			continue
-		}
+	flowEngine := engine.NewExecutionEngine(logger, debugManager)
+	// Create the concrete EventManager, passing the engine as the controller
+	eventManager := event.NewEventManager(flowEngine)
+	// Get the core interface adapter directly from the concrete manager
+	eventManagerCoreAdapter := eventManager.AsEventManagerInterface()
+	// eventManagerAdapter := event.NewEventManagerAdapter(eventManager) // Remove usage of the separate adapter
 
-		// Convert to package blueprint
-		bp, err := blueprintRepo.ToPkgBlueprint(
-			blueprintModel,
-			blueprintModel.CurrentVersion,
-		)
-		if err != nil {
-			log.Printf("Could not convert blueprint %s: %v", id, err)
-			continue
-		}
+	flowEngine.SetExecutionMode(engine.ModeActor)
 
-		// Load to execution engine
-		if err := executionEngine.LoadBlueprint(bp); err != nil {
-			log.Printf("Could not load blueprint %s to execution engine: %v", id, err)
-			continue
-		}
+	contextManager := engineext.NewContextManager(
+		errorManager,
+		recoveryManager,
+		eventManagerCoreAdapter, // Pass the core interface adapter
+	)
+	// engineext.InitializeExtensions expects the concrete manager
+	contextExtension := engineext.InitializeExtensions(
+		flowEngine,
+		contextManager,
+		errorManager,
+		recoveryManager,
+		eventManager, // Pass the concrete *event.EventManager
+	)
 
-		log.Printf("Blueprint loaded: %s (%s)", bp.Name, id)
-	}
+	flowEngine.SetExtensions(contextExtension)
 
-	return nil
+	server := api.NewAPIServerWithDB(
+		flowEngine,
+		wsManager,
+		debugManager,
+		repoFactory,
+		contextExtension,
+	)
+
+	server.InitiateCoreNodes()
+	server.SetupRoutes(router)
 }

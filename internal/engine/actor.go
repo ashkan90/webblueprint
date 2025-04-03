@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -13,26 +14,27 @@ import (
 
 // NodeActor represents a single node in the actor model system
 type NodeActor struct {
-	NodeID      string
-	NodeType    string
-	ExecutionID string
-	node        node.Node
-	bp          *blueprint.Blueprint
-	mailbox     chan NodeMessage
-	inputs      map[string]types.Value
-	outputs     map[string]types.Value
-	variables   map[string]types.Value
-	status      NodeStatus
-	ctx         *ActorExecutionContext
-	logger      node.Logger
-	listeners   []ExecutionListener
-	debugMgr    *DebugManager
-	done        chan struct{}
-	mutex       sync.RWMutex
-	properties  []types.Property // Store node properties from the blueprint
+	NodeID       string
+	NodeType     string
+	ExecutionID  string
+	node         node.Node
+	bp           *blueprint.Blueprint
+	mailbox      chan NodeMessage
+	inputs       map[string]types.Value
+	outputs      map[string]types.Value
+	variables    map[string]types.Value
+	status       NodeStatus
+	ctx          *ActorExecutionContext
+	logger       node.Logger
+	listeners    []ExecutionListener
+	debugMgr     *DebugManager
+	done         chan struct{}
+	mutex        sync.RWMutex
+	properties   []types.Property      // Store node properties from the blueprint
+	decoratedCtx node.ExecutionContext // Store the potentially decorated context passed to Start
 
 	// Add hooks
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error
@@ -64,7 +66,7 @@ func NewNodeActor(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	variables map[string]types.Value,
-	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType string,
+	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error,
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
 		details map[string]interface{}) error,
@@ -78,16 +80,19 @@ func NewNodeActor(
 	// Load node properties from blueprint
 	var properties []types.Property
 	if node := bp.FindNode(nodeID); node != nil {
+		propertyLog := make(map[string]interface{})
 		for _, property := range node.Properties {
 			properties = append(properties, types.Property{
 				Name:  property.Name,
 				Value: property.Value,
 			})
+			propertyLog["property."+property.Name] = property.Value
 		}
-		logger.Debug("Loaded node properties", map[string]interface{}{
-			"nodeId":          nodeID,
-			"propertiesCount": len(properties),
+		maps.Copy(propertyLog, map[string]interface{}{
+			"nodeId":           nodeID,
+			"properties.count": len(properties),
 		})
+		logger.Debug("Loaded node properties", propertyLog)
 	}
 
 	return &NodeActor{
@@ -114,16 +119,28 @@ func NewNodeActor(
 	}
 }
 
+// Helper interface to check if a context wraps another
+type contextWrapper interface {
+	Unwrap() node.ExecutionContext
+}
+
 // Start begins processing messages from the mailbox
-func (a *NodeActor) Start() {
-	// Initialize execution context
+func (a *NodeActor) Start(ctx node.ExecutionContext) {
+	if ctx == nil {
+		return
+	}
+
+	// Store the potentially decorated context if provided
+	a.decoratedCtx = ctx
+
+	// Always create a specific ActorExecutionContext for internal actor use
 	a.ctx = NewActorExecutionContext(
 		a.NodeID,
 		a.NodeType,
 		a.bp.ID,
 		a.ExecutionID,
 		a.logger,
-		a,
+		a, // Pass the actor itself
 	)
 
 	// Start processing messages
@@ -269,7 +286,7 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		a.mutex.RUnlock()
 
 		// Call the hook
-		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, inputMap, nil)
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, "executing", inputMap, nil)
 		if err != nil {
 			a.logger.Debug("Error in node execution hook", map[string]interface{}{
 				"nodeId": a.NodeID,
@@ -278,8 +295,8 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		}
 	}
 
-	// Execute the node
-	err := a.node.Execute(a.ctx)
+	// Execute the node using the potentially decorated context stored from Start()
+	err := a.node.Execute(a.decoratedCtx) // Use decoratedCtx
 
 	// Get the outputs
 	a.mutex.RLock()
@@ -298,7 +315,7 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 		}
 
 		// Call the hook
-		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, nil, outputMap)
+		err := a.nodeExecutionHook(context.Background(), a.ExecutionID, a.NodeID, a.NodeType, "completed", nil, outputMap)
 		if err != nil {
 			a.logger.Debug("Error in node execution hook", map[string]interface{}{
 				"nodeId": a.NodeID,
@@ -527,6 +544,7 @@ type ActorExecutionContext struct {
 	logger         node.Logger
 	actor          *NodeActor
 	activatedFlows []string
+	activePin      string // The pin that triggered execution
 	mutex          sync.RWMutex
 }
 
@@ -587,6 +605,17 @@ func (ctx *ActorExecutionContext) GetBlueprint() *blueprint.Blueprint {
 }
 
 // Implementation of node.ExecutionContext interface for ActorExecutionContext
+
+// IsInputPinActive checks if the input pin triggered execution
+func (ctx *ActorExecutionContext) IsInputPinActive(pinID string) bool {
+	// If a specific active pin is set, check it
+	if ctx.activePin != "" {
+		return ctx.activePin == pinID
+	}
+
+	// Otherwise, for backward compatibility, assume the default execute pin is active
+	return pinID == "execute"
+}
 
 // GetInputValue retrieves an input value by pin ID
 func (ctx *ActorExecutionContext) GetInputValue(pinID string) (types.Value, bool) {

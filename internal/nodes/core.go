@@ -3,6 +3,7 @@ package nodes
 import (
 	"webblueprint/internal/node"
 	"webblueprint/internal/nodes/data"
+	"webblueprint/internal/nodes/events"
 	"webblueprint/internal/nodes/logic"
 	"webblueprint/internal/nodes/math"
 	"webblueprint/internal/nodes/utility"
@@ -43,5 +44,18 @@ var (
 		// Yardımcı düğümler
 		"print": utility.NewPrintNode,
 		"timer": utility.NewTimerNode,
+
+		// Events
+		"event-definition":          events.NewEventDefinitionNode,
+		"event-dispatcher":          events.NewEventDispatcherNode,
+		"improved-event-dispatcher": events.NewImprovedEventDispatcherNode,
+		"event-bind":                events.NewEventBindNode,
+		"event-unbind":              events.NewEventUnbindNode,
+		"clear-event-bindings":      events.NewClearBindingsNode,
+		"timer-event":               events.NewTimerEventNode,
+		"event-with-payload":        events.NewEventWithPayloadNode,
+		"event-on-created":          events.NewOnCreatedEventNode,
+		"event-on-tick":             events.NewOnTickEventNode,
+		"event-on-input":            events.NewOnInputEventNode,
 	}
 )

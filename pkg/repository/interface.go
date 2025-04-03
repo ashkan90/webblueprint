@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"webblueprint/internal/event"
 	"webblueprint/internal/node"
 	"webblueprint/pkg/api/dt"
 	"webblueprint/pkg/blueprint"
@@ -147,7 +148,7 @@ type ExecutionRepository interface {
 	Complete(ctx context.Context, id string, success bool, result map[string]interface{}, errorMsg string) error
 
 	// Record node execution
-	RecordNodeExecution(ctx context.Context, executionID, nodeID, nodeType string, inputs, outputs map[string]interface{}) error
+	RecordNodeExecution(ctx context.Context, executionID, nodeID, nodeType, execState string, inputs, outputs map[string]interface{}) error
 
 	// Update node execution status
 	UpdateNodeStatus(ctx context.Context, executionID, nodeID, status string) error
@@ -175,6 +176,38 @@ type NodeRepository interface {
 	ToPkgNode(node *models.NodeType) (node.Node, error)
 }
 
+type EventRepository interface {
+	Create(ctx context.Context, event event.EventDefinition) error
+
+	GetByID(ctx context.Context, id string) (event.EventDefinition, error)
+
+	GetAll(ctx context.Context) ([]event.EventDefinition, error)
+
+	GetByBlueprintID(ctx context.Context, blueprintID string) ([]event.EventDefinition, error)
+
+	Update(ctx context.Context, event event.EventDefinition) error
+
+	Delete(ctx context.Context, id string) error
+
+	AddParameter(ctx context.Context, eventID string, parameter event.EventParameter) error
+
+	RemoveParameter(ctx context.Context, eventID string, parameterName string) error
+
+	CreateBinding(ctx context.Context, binding event.EventBinding) error
+
+	GetBindingByID(ctx context.Context, id string) (event.EventBinding, error)
+
+	GetBindingsByEventID(ctx context.Context, eventID string) ([]event.EventBinding, error)
+
+	DeleteBinding(ctx context.Context, id string) error
+
+	DeleteBindingsByEventID(ctx context.Context, eventID string) error
+
+	DeleteBindingsByBlueprintID(ctx context.Context, blueprintID string) error
+
+	GetAllBindings(ctx context.Context) ([]event.EventBinding, error)
+}
+
 // Repository factory interface for creating repository instances
 type RepositoryFactory interface {
 	// Get asset repository
@@ -194,4 +227,7 @@ type RepositoryFactory interface {
 
 	// Get node repository
 	GetNodeRepository() NodeRepository
+
+	// Get event repository
+	GetEventRepository() EventRepository
 }

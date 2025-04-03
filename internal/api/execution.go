@@ -28,6 +28,12 @@ func (h *ExecutionHandler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/api/executions/{id}/logs", h.handleGetExecutionLogs).Methods("GET")
 	router.HandleFunc("/api/executions/{id}/cancel", h.handleCancelExecution).Methods("POST")
 
+	//
+	router.HandleFunc("/api/executions/{id}/nodes/{nodeId}", func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusNotImplemented)
+		writer.Write([]byte("Not Implemented"))
+	}).Methods("GET")
+
 	// Blueprint execution endpoint (could also be in BlueprintHandler)
 	router.HandleFunc("/api/blueprints/{id}/execute", h.handleExecuteBlueprint).Methods("POST")
 }

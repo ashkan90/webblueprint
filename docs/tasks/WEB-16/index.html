@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Blueprint İzolasyonu ve Güvenlik Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Blueprint İzolasyonu ve Güvenlik Implementation Plan</h1>
+    <p>Task: <strong>WEB-16 - Blueprint İzolasyonu ve Güvenlik</strong></p>
+    <p>Priority: <span class="priority high">High</span> | Estimate: 4 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for developing blueprint isolation and security features for the WebBlueprint platform. 
+    These features will ensure that blueprints run within controlled environments with appropriate resource limits, security restrictions, 
+    and isolation mechanisms to prevent potential abuse or system overload.
+</p>
+
+<h2>Current Security Metrics</h2>
+
+<div class="metric">
+    <div class="metric-name">Resource Limiting</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Security Checks</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Rate Limiting</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Sandbox Execution</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 8%;">8%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Overall Security</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 12%;">12%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Resource Limiting System <span class="priority high">High</span></h3>
+    <p>Implement mechanisms to limit resource usage during blueprint execution.</p>
+    <ul class="task-list">
+        <li>Implement CPU usage monitoring and limiting</li>
+        <li>Develop memory allocation tracking and caps</li>
+        <li>Create execution time limits with graceful termination</li>
+        <li>Implement disk I/O usage restrictions</li>
+        <li>Create a configurable resource profile system for different blueprint types</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Security Checks for Dangerous Operations <span class="priority high">High</span></h3>
+    <p>Implement security checks and restrictions for potentially dangerous operations.</p>
+    <ul class="task-list">
+        <li>Create a security validator for network operations</li>
+        <li>Implement file system access restrictions</li>
+        <li>Add system command execution controls</li>
+        <li>Develop data access permission system</li>
+        <li>Implement content validation for user inputs</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Rate Limiting Implementation <span class="priority medium">Medium</span></h3>
+    <p>Implement rate limiting for blueprint execution and API calls.</p>
+    <ul class="task-list">
+        <li>Develop per-user rate limiting system</li>
+        <li>Implement per-blueprint execution frequency limits</li>
+        <li>Create API call throttling mechanisms</li>
+        <li>Implement gradual backoff for repeated executions</li>
+        <li>Develop monitoring and alerting for rate limit violations</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Sandbox Execution Control <span class="priority high">High</span></h3>
+    <p>Implement a sandbox execution environment for blueprints.</p>
+    <ul class="task-list">
+        <li>Design context isolation architecture</li>
+        <li>Implement execution environment containerization</li>
+        <li>Create secure inter-blueprint communication channels</li>
+        <li>Develop privilege level system for blueprint execution</li>
+        <li>Implement cleanup mechanisms for blueprint resources</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Permission System Infrastructure <span class="priority medium">Medium</span></h3>
+    <p>Create the foundation for a comprehensive permission system.</p>
+    <ul class="task-list">
+        <li>Design permission model for blueprint operations</li>
+        <li>Implement role-based access controls</li>
+        <li>Create permission enforcement points in execution pipeline</li>
+        <li>Develop audit logging for permission-related events</li>
+        <li>Implement permission management UI components</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Testing and Security Validation <span class="priority medium">Medium</span></h3>
+    <p>Create comprehensive tests and validation for security features.</p>
+    <ul class="task-list">
+        <li>Develop stress tests for resource limiting</li>
+        <li>Create security penetration test suite</li>
+        <li>Implement automated security scanning</li>
+        <li>Create edge case tests for isolation boundaries</li>
+        <li>Develop performance impact assessment tools</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Begin resource limiting system implementation</p>
+            <p>Design context isolation architecture</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete resource limiting system</p>
+            <p>Begin security checks implementation</p>
+            <p>Continue sandbox execution environment development</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Complete security checks</p>
+            <p>Begin rate limiting implementation</p>
+            <p>Continue sandbox execution environment</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete rate limiting system</p>
+            <p>Complete sandbox execution environment</p>
+            <p>Begin permission system infrastructure</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Complete permission system infrastructure</p>
+            <p>Begin testing and security validation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 6</div>
+        <div class="timeline-content">
+            <p>Complete testing and security validation</p>
+            <p>Perform integration testing</p>
+            <p>Final review and documentation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Implementation Examples</h2>
+
+<h3>Resource Monitoring and Limiting</h3>
+
+<pre><code>// ResourceMonitor tracks and limits resource usage
+package security
+
+import (
+    "context"
+    "runtime"
+    "sync"
+    "time"
+)
+
+// ResourceLimits defines constraints for blueprint execution
+type ResourceLimits struct {
+    MaxCPUTime        time.Duration  // Maximum CPU time allowed
+    MaxMemoryBytes    uint64         // Maximum memory allocation
+    MaxExecutionTime  time.Duration  // Maximum total execution time
+    MaxDiskIOBytes    uint64         // Maximum disk I/O operations
+    MaxNetworkIOBytes uint64         // Maximum network I/O operations
+}
+
+// ResourceMonitor tracks resource usage for a blueprint execution
+type ResourceMonitor struct {
+    limits       ResourceLimits
+    startTime    time.Time
+    currentMem   uint64
+    cpuTime      time.Duration
+    diskIO       uint64
+    networkIO    uint64
+    ctx          context.Context
+    cancel       context.CancelFunc
+    mutex        sync.RWMutex
+}
+
+// NewResourceMonitor creates a new resource monitor with specified limits
+func NewResourceMonitor(limits ResourceLimits) *ResourceMonitor {
+    ctx, cancel := context.WithTimeout(context.Background(), limits.MaxExecutionTime)
+    
+    monitor := &ResourceMonitor{
+        limits:     limits,
+        startTime:  time.Now(),
+        ctx:        ctx,
+        cancel:     cancel,
+    }
+    
+    // Start monitoring goroutine
+    go monitor.monitorResources()
+    
+    return monitor
+}
+
+// monitorResources continuously checks resource usage against limits
+func (rm *ResourceMonitor) monitorResources() {
+    ticker := time.NewTicker(100 * time.Millisecond)
+    defer ticker.Stop()
+    
+    var memStats runtime.MemStats
+    
+    for {
+        select {
+        case <-rm.ctx.Done():
+            return
+        case <-ticker.C:
+            rm.mutex.Lock()
+            
+            // Check memory usage
+            runtime.ReadMemStats(&memStats)
+            rm.currentMem = memStats.Alloc
+            
+            // Check if memory limit exceeded
+            if rm.currentMem > rm.limits.MaxMemoryBytes {
+                rm.cancel()
+                rm.mutex.Unlock()
+                return
+            }
+            
+            // Other resource checks would go here...
+            
+            rm.mutex.Unlock()
+        }
+    }
+}
+
+// TrackNetworkIO records network I/O operations
+func (rm *ResourceMonitor) TrackNetworkIO(bytes uint64) bool {
+    rm.mutex.Lock()
+    defer rm.mutex.Unlock()
+    
+    rm.networkIO += bytes
+    
+    // Check if network I/O limit exceeded
+    if rm.networkIO > rm.limits.MaxNetworkIOBytes {
+        rm.cancel()
+        return false
+    }
+    
+    return true
+}
+
+// TrackDiskIO records disk I/O operations
+func (rm *ResourceMonitor) TrackDiskIO(bytes uint64) bool {
+    rm.mutex.Lock()
+    defer rm.mutex.Unlock()
+    
+    rm.diskIO += bytes
+    
+    // Check if disk I/O limit exceeded
+    if rm.diskIO > rm.limits.MaxDiskIOBytes {
+        rm.cancel()
+        return false
+    }
+    
+    return true
+}
+
+// Context returns the monitor's context, which is canceled when limits are exceeded
+func (rm *ResourceMonitor) Context() context.Context {
+    return rm.ctx
+}
+
+// Cleanup releases resources used by the monitor
+func (rm *ResourceMonitor) Cleanup() {
+    rm.cancel()
+}
+</code></pre>
+
+<h3>Sandbox Execution Context</h3>
+
+<pre><code>// SandboxExecutionContext provides an isolated execution environment
+package execution
+
+import (
+    "context"
+    "fmt"
+    "github.com/myorg/webblueprint/internal/security"
+    "github.com/myorg/webblueprint/pkg/node"
+)
+
+// SandboxExecutionContext implements node.ExecutionContext with security constraints
+type SandboxExecutionContext struct {
+    node.ExecutionContext
+    resourceMonitor *security.ResourceMonitor
+    securityChecker *security.SecurityChecker
+    permissionLevel string
+    blueprintID     string
+    userID          string
+}
+
+// NewSandboxExecutionContext creates a new sandboxed execution context
+func NewSandboxExecutionContext(baseCtx node.ExecutionContext, limits security.ResourceLimits, 
+                               permLevel string, blueprintID, userID string) *SandboxExecutionContext {
+    
+    monitor := security.NewResourceMonitor(limits)
+    
+    ctx := &SandboxExecutionContext{
+        ExecutionContext: baseCtx,
+        resourceMonitor:  monitor,
+        securityChecker:  security.NewSecurityChecker(permLevel),
+        permissionLevel:  permLevel,
+        blueprintID:      blueprintID,
+        userID:           userID,
+    }
+    
+    return ctx
+}
+
+// ExecuteNode overrides base execution to add security checks
+func (ctx *SandboxExecutionContext) ExecuteNode(nodeID string) error {
+    // Check if resource limits have been exceeded
+    if ctx.resourceMonitor.Context().Err() != nil {
+        return fmt.Errorf("resource limits exceeded: %w", ctx.resourceMonitor.Context().Err())
+    }
+    
+    // Get node information for security check
+    nodeInfo, err := ctx.GetNodeInfo(nodeID)
+    if err != nil {
+        return err
+    }
+    
+    // Perform security check on node
+    if !ctx.securityChecker.IsNodeAllowed(nodeInfo.Type, ctx.permissionLevel) {
+        return fmt.Errorf("security violation: node type %s not allowed at permission level %s", 
+                         nodeInfo.Type, ctx.permissionLevel)
+    }
+    
+    // Execute node with monitoring context
+    return ctx.ExecutionContext.ExecuteNode(nodeID)
+}
+
+// GetValue overrides base method to add security checks for data access
+func (ctx *SandboxExecutionContext) GetValue(id string) (interface{}, bool) {
+    // Security check for data access
+    if !ctx.securityChecker.IsDataAccessAllowed(id, ctx.permissionLevel) {
+        return nil, false
+    }
+    
+    return ctx.ExecutionContext.GetValue(id)
+}
+
+// SetValue overrides base method to add resource tracking for memory
+func (ctx *SandboxExecutionContext) SetValue(id string, value interface{}) {
+    // Estimate memory size (simplified)
+    size := estimateSize(value)
+    
+    // Track memory allocation
+    if !ctx.resourceMonitor.TrackMemory(size) {
+        // Memory limit exceeded
+        ctx.LogError("Memory limit exceeded when setting value for " + id)
+        return
+    }
+    
+    ctx.ExecutionContext.SetValue(id, value)
+}
+
+// NetworkRequest performs a network request with security checks
+func (ctx *SandboxExecutionContext) NetworkRequest(url string, method string, data []byte) ([]byte, error) {
+    // Check if network request is allowed
+    if !ctx.securityChecker.IsNetworkRequestAllowed(url, method, ctx.permissionLevel) {
+        return nil, fmt.Errorf("security violation: network request to %s not allowed", url)
+    }
+    
+    // Track outgoing network I/O
+    if !ctx.resourceMonitor.TrackNetworkIO(uint64(len(data))) {
+        return nil, fmt.Errorf("network I/O limit exceeded")
+    }
+    
+    // Perform the actual request through the base context
+    return ctx.ExecutionContext.NetworkRequest(url, method, data)
+}
+
+// Cleanup releases resources used by the sandboxed context
+func (ctx *SandboxExecutionContext) Cleanup() {
+    ctx.resourceMonitor.Cleanup()
+    
+    // Call the base cleanup if it exists
+    if cleanup, ok := ctx.ExecutionContext.(interface{ Cleanup() }); ok {
+        cleanup.Cleanup()
+    }
+}
+</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Resource limiting mechanisms prevent blueprints from consuming excessive CPU, memory, or execution time</li>
+    <li>Security checks block potentially dangerous operations based on blueprint permission levels</li>
+    <li>Rate limiting successfully prevents abuse of the system through excessive blueprint executions</li>
+    <li>Sandbox execution provides proper isolation between different blueprints</li>
+    <li>Permission system correctly enforces access control for blueprint operations</li>
+    <li>All security components are properly tested with both normal and edge cases</li>
+    <li>Performance impact of security measures is minimal and acceptable for normal blueprint execution</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Excessive security measures impacting legitimate blueprint performance</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Carefully benchmark performance impact of each security measure and optimize where needed</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Security bypass through unanticipated vectors</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement defense in depth with multiple layers of security and comprehensive testing</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Resource limiting too restrictive for complex blueprints</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create tiered resource profiles with configurable limits for different blueprint complexity levels</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Integration with existing codebase causes unexpected behavior</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement incremental changes with extensive testing at each stage</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Context isolation implementation complexity</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Start with a simplified isolation model and incrementally enhance isolation capabilities</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to implementing blueprint isolation and security features
+    for the WebBlueprint platform. By addressing resource limiting, security checks, rate limiting, and sandbox execution,
+    we will create a robust security layer that protects the system from potential abuse while allowing legitimate
+    blueprint executions to proceed efficiently.
+</p>
+
+<p>
+    The estimated total effort is 6 days of development time, with the most critical components (resource limiting
+    and security checks) prioritized for early completion. This implementation will substantially improve the platform's
+    security posture and lay the groundwork for future security enhancements.
+</p>
+</body>
+</html>

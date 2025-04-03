@@ -42,6 +42,11 @@ func NewErrorContextWrapper(ctx node.ExecutionContext, em *ErrorManager, rm *Rec
 
 // Forward all standard ExecutionContext methods to the wrapped context
 
+// IsInputPinActive checks if an input pin triggered execution
+func (w *ErrorContextWrapper) IsInputPinActive(pinID string) bool {
+	return w.Context.IsInputPinActive(pinID)
+}
+
 // GetInputValue retrieves an input value by pin ID, with error recovery if needed
 func (w *ErrorContextWrapper) GetInputValue(pinID string) (types.Value, bool) {
 	// First try to get the value from the original context
@@ -141,6 +146,10 @@ func (w *ErrorContextWrapper) GetBlueprintID() string {
 // GetExecutionID returns the current execution ID
 func (w *ErrorContextWrapper) GetExecutionID() string {
 	return w.Context.GetExecutionID()
+}
+
+func (w *ErrorContextWrapper) SaveData(key string, value interface{}) {
+	w.Context.SaveData(key, value)
 }
 
 // Error handling methods

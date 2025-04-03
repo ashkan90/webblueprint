@@ -148,6 +148,38 @@
         </div>
       </div>
 
+      <!-- ENTRY POINT EVENTS Section -->
+      <div class="section">
+        <div class="section-header" @click="toggleSection('entryPointEvents')">
+          <div class="section-expand" :class="{ expanded: expandedSections.entryPointEvents }">
+            {{ expandedSections.entryPointEvents ? '▼' : '▶' }}
+          </div>
+          <div class="section-title">ENTRY POINT EVENTS</div>
+          <div class="section-actions">
+            <!-- No add button for entry point events as they're system-defined -->
+          </div>
+        </div>
+
+        <div v-if="expandedSections.entryPointEvents" class="section-content">
+          <div
+              v-for="event in filteredEntryPointEvents"
+              :key="event.id"
+              class="section-item"
+              :class="{ active: selectedItem === event.id }"
+              @click="selectItem(event.id)"
+              draggable="true"
+              @dragstart="onEntryPointEventDragStart($event, event)"
+          >
+            <div class="item-icon">🔌</div>
+            <div class="item-name">{{ event.name }}</div>
+          </div>
+
+          <div v-if="filteredEntryPointEvents.length === 0" class="empty-section">
+            No entry point events available
+          </div>
+        </div>
+      </div>
+
       <!-- EVENT DISPATCHERS Section -->
       <div class="section">
         <div class="section-header" @click="toggleSection('eventDispatchers')">
@@ -291,7 +323,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject } from 'vue'
+import { ref, computed, inject, onMounted } from 'vue'
 import { v4 as uuid } from 'uuid'
 import ModalDialog from '../common/ModalDialog.vue'
 import { useBlueprintStore } from '../../stores/blueprint'
@@ -301,6 +333,7 @@ import {NodeTypeDefinition} from "../../types/nodes";
 import router from "../../router";
 import {useRoute} from "vue-router";
 import {useWorkspaceStore} from "../../stores/workspace";
+import {EventDefinition} from "../../stores/events";
 
 const emit = defineEmits<{
   (e: 'add-node', data: any): void
@@ -324,6 +357,7 @@ const expandedSections = ref({
   functions: true,
   macros: true,
   variables: true,
+  entryPointEvents: true, // Added for entry point events
   eventDispatchers: true
 })
 
@@ -360,6 +394,29 @@ const newMacro = ref({
 const newEventDispatcher = ref({
   name: '',
   description: ''
+})
+
+// Add state for custom events from server
+const customEvents = ref([])
+
+// Entry point events
+const entryPointEvents = computed(() => {
+  const _nodeTypes: Record<string, NodeTypeDefinition> = nodeTypeStore.nodeTypes
+  const _entryNodes: EventDefinition[] = [];
+
+  Object.values(_nodeTypes).forEach((_node) => {
+    if (_node.category === 'Constructive Events') {
+      _entryNodes.push({
+        id: _node.typeId,
+        name: _node.name,
+        description: _node.description,
+        type: 'entry',
+        category: _node.category,
+      })
+    }
+  })
+
+  return _entryNodes;
 })
 
 // Computed values for variable menu positioning
@@ -413,16 +470,25 @@ const filteredVariables = computed(() => {
   )
 })
 
+const filteredEntryPointEvents = computed(() => {
+  if (!searchQuery.value) return entryPointEvents.value
+
+  return entryPointEvents.value.filter(e =>
+      e.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  )
+})
+
 const filteredEventDispatchers = computed(() => {
-  // Replace with actual event dispatcher data from store
-  const eventDispatchers = [
-    { id: 'event1', name: 'OnPlayerDeath' },
-    { id: 'event2', name: 'OnItemCollected' }
+  // Combine default dispatchers with custom events from server
+  const allDispatchers = [
+    // Default built-in dispatchers
+    { id: 'event-with-payload', name: 'Custom Event With Payload' },
+    ...customEvents.value
   ]
 
-  if (!searchQuery.value) return eventDispatchers
+  if (!searchQuery.value) return allDispatchers
 
-  return eventDispatchers.filter(e =>
+  return allDispatchers.filter(e =>
       e.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
@@ -442,6 +508,7 @@ function getItemType(id: string): string {
   if (filteredFunctions.value.some(f => f.id === id)) return 'function'
   if (filteredMacros.value.some(m => m.id === id)) return 'macro'
   if (filteredVariables.value.some(v => v.id === id)) return 'variable'
+  if (filteredEntryPointEvents.value.some(e => e.id === id)) return 'entryPointEvent'
   if (filteredEventDispatchers.value.some(e => e.id === id)) return 'eventDispatcher'
   return 'unknown'
 }
@@ -632,8 +699,32 @@ function onMacroDragStart(event: DragEvent, macro: any) {
   event.dataTransfer.effectAllowed = 'copy'
 }
 
+// Handle dragging an entry point event node
+function onEntryPointEventDragStart(event: DragEvent, entryPoint: any) {
+  if (!event.dataTransfer) return
+
+  console.log('Dragging entry point event:', entryPoint)
+
+  // Create a node representation of this entry point event
+  const nodeData = {
+    id: uuid(),
+    type: entryPoint.id, // Use the event ID as the node type
+    position: { x: 0, y: 0 },
+    properties: [
+      { name: 'eventType', value: entryPoint.type },
+      { name: 'eventName', value: entryPoint.name }
+    ]
+  }
+
+  event.dataTransfer.setData('application/json', JSON.stringify(nodeData))
+  event.dataTransfer.effectAllowed = 'copy'
+}
+
+// Handle dragging an event dispatcher node
 function onEventDragStart(event: DragEvent, eventDispatcher: any) {
   if (!event.dataTransfer) return
+
+  console.log('Dragging event dispatcher:', eventDispatcher)
 
   // Create a node representation of this event
   const nodeData = {
@@ -642,7 +733,8 @@ function onEventDragStart(event: DragEvent, eventDispatcher: any) {
     position: { x: 0, y: 0 },
     properties: [
       { name: 'eventId', value: eventDispatcher.id },
-      { name: 'eventName', value: eventDispatcher.name }
+      { name: 'eventName', value: eventDispatcher.name },
+      { name: 'dynamicParameters', value: true }
     ]
   }
 
@@ -771,15 +863,130 @@ function createMacro() {
   }
 }
 
-function createEventDispatcher() {
-  // Implement event dispatcher creation in your store
-  console.log('Creating event dispatcher:', newEventDispatcher.value)
-  showCreateEventDispatcherModal.value = false
+/**
+ * Creates an event dispatcher by calling the server API
+ */
+async function createEventDispatcher() {
+  try {
+    // Validate input
+    if (!newEventDispatcher.value.name) {
+      alert("Event name is required");
+      return;
+    }
+    
+    // Get current blueprint ID if available
+    const blueprintId = blueprintStore.blueprint?.id;
+    
+    // Prepare request
+    const requestData = {
+      name: newEventDispatcher.value.name,
+      description: newEventDispatcher.value.description || "",
+      category: "Custom Events"
+    };
+    
+    console.log("Creating event dispatcher:", requestData, "for blueprint:", blueprintId);
+    
+    // Call API to create event dispatcher
+    let url = '/api/events';
+    // If we have a blueprint ID, associate this event with it
+    if (blueprintId) {
+      url += `?blueprintId=${blueprintId}`;
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to create event: ${response.statusText}`);
+    }
+    
+    // Parse response
+    const createdEvent = await response.json();
+    console.log('Created event dispatcher:', createdEvent);
+    
+    // Close modal and reset form
+    showCreateEventDispatcherModal.value = false;
+    newEventDispatcher.value = {
+      name: '',
+      description: ''
+    };
+    
+    // Fetch events to refresh the list
+    await fetchEventDispatchers();
+    
+  } catch (error) {
+    console.error('Error creating event dispatcher:', error);
+    alert(`Failed to create event dispatcher: ${error.message}`);
+  }
+}
 
-  // Reset form
-  newEventDispatcher.value = {
-    name: '',
-    description: ''
+/**
+ * Fetches event dispatchers from the server
+ */
+async function fetchEventDispatchers() {
+  try {
+    // Get the current blueprint ID if available
+    const blueprintId = blueprintStore.blueprint?.id;
+    let url = '/api/events';
+    
+    if (blueprintId) {
+      // First fetch global events
+      const globalResponse = await fetch('/api/events', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!globalResponse.ok) {
+        throw new Error(`Failed to fetch global events: ${globalResponse.statusText}`);
+      }
+      
+      const globalEvents = await globalResponse.json();
+      
+      // Then fetch blueprint-specific events
+      const blueprintResponse = await fetch(`/api/events/blueprint/${blueprintId}`);
+      if (!blueprintResponse.ok) {
+        throw new Error(`Failed to fetch blueprint events: ${blueprintResponse.statusText}`);
+      }
+      
+      const blueprintEvents = await blueprintResponse.json();
+      
+      // Combine both, prioritizing blueprint events if there are duplicates
+      const combinedEvents = [...globalEvents];
+      
+      // Add blueprint events, avoiding duplicates
+      const globalEventIds = new Set(globalEvents.map(e => e.id));
+      for (const event of blueprintEvents) {
+        if (!globalEventIds.has(event.id)) {
+          combinedEvents.push(event);
+        }
+      }
+      
+      console.log('Fetched combined events:', combinedEvents);
+      
+      // Filter to only custom events and update the model
+      customEvents.value = combinedEvents.filter(e => e.id.startsWith('custom.') || e.category === 'Custom Events');
+    } else {
+      // No blueprint ID, just fetch all events
+      const response = await fetch('/api/events');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch events: ${response.statusText}`);
+      }
+      
+      const events = await response.json();
+      console.log('Fetched events:', events);
+      
+      // Filter to only custom events and update the model
+      customEvents.value = events.filter(e => e.id.startsWith('custom.') || e.category === 'Custom Events');
+    }
+  } catch (error) {
+    console.error('Error fetching event dispatchers:', error);
+    // Don't alert here as this is likely called on component mount
   }
 }
 
@@ -793,6 +1000,11 @@ function getDefaultValueForType(type: string): any {
     default: return null
   }
 }
+
+// Load event dispatchers when component mounts
+onMounted(() => {
+  fetchEventDispatchers();
+});
 </script>
 
 <style scoped>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Mocking Framework Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Mocking Framework Implementation Plan</h1>
+    <p>Task: <strong>WEB-15 - Create Mocking Framework for Testing</strong></p>
+    <p>Priority: <span class="priority medium">Medium</span> | Estimate: 5 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for developing a comprehensive mocking framework specifically designed for 
+    blueprint testing in the WebBlueprint platform. Effective testing of our system requires the ability to simulate external 
+    dependencies and specific conditions. This framework will make it easy to create test scenarios without requiring real 
+    implementations of external systems.
+</p>
+
+<h2>Current Mocking Status</h2>
+
+<div class="metric">
+    <div class="metric-name">External System Mocking</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 15%;">15%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Execution Flow Recording</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Error Injection</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Time/Latency Simulation</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Mock Helper Utilities</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 20%;">20%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Documentation</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Mock Framework Architecture <span class="priority high">High</span></h3>
+    <p>Design and implement the core architecture of the mocking framework.</p>
+    <ul class="task-list">
+        <li>Define the mocking framework architecture in <code>internal/test/mock</code></li>
+        <li>Implement mock registry for centralized management</li>
+        <li>Create mock interfaces for key system components</li>
+        <li>Design flexible configuration system for mocks</li>
+        <li>Implement mock lifecycle management</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>External System Mocks <span class="priority high">High</span></h3>
+    <p>Create mock implementations for external system interactions.</p>
+    <ul class="task-list">
+        <li>Implement HTTP client mock for API testing</li>
+        <li>Create database mock for repository testing</li>
+        <li>Develop WebSocket mock for real-time communication</li>
+        <li>Implement file system mock</li>
+        <li>Create external service client mocks</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Execution Flow Recording <span class="priority high">High</span></h3>
+    <p>Implement execution flow recording and replay functionality.</p>
+    <ul class="task-list">
+        <li>Create execution recorder to capture node execution flow</li>
+        <li>Implement execution trace serialization</li>
+        <li>Develop execution replay mechanism</li>
+        <li>Add execution verification utilities</li>
+        <li>Create execution visualization tools</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Error Injection <span class="priority medium">Medium</span></h3>
+    <p>Create an error injection framework for testing failure scenarios.</p>
+    <ul class="task-list">
+        <li>Implement error injection points in key components</li>
+        <li>Create error scenario configuration system</li>
+        <li>Develop conditional error triggering</li>
+        <li>Implement error rate and timing control</li>
+        <li>Create predefined error scenario library</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Time and Latency Simulation <span class="priority medium">Medium</span></h3>
+    <p>Create a system for simulating timing and latency in tests.</p>
+    <ul class="task-list">
+        <li>Implement virtual time controller</li>
+        <li>Create configurable latency simulator</li>
+        <li>Develop time-based scenario orchestration</li>
+        <li>Implement time acceleration for long-running tests</li>
+        <li>Create deterministic timing utilities</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Helper Functions and Utilities <span class="priority medium">Medium</span></h3>
+    <p>Develop helper functions for common mock scenarios.</p>
+    <ul class="task-list">
+        <li>Create blueprint test fixtures with mocked components</li>
+        <li>Implement mock scenario builders</li>
+        <li>Develop assertion utilities for mocked components</li>
+        <li>Create mock setup and teardown utilities</li>
+        <li>Implement mock chaining and composition tools</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Integration with Test Framework <span class="priority medium">Medium</span></h3>
+    <p>Integrate the mocking framework with the existing test system.</p>
+    <ul class="task-list">
+        <li>Create mock integration with unit test framework</li>
+        <li>Integrate with integration test suite</li>
+        <li>Implement mock support for benchmark tests</li>
+        <li>Create CI pipeline integration</li>
+        <li>Develop test coverage analysis for mocked components</li>
+    </ul>
+    <p>Estimated completion time: 0.5 day</p>
+</div>
+
+<div class="task">
+    <h3>Documentation and Examples <span class="priority medium">Medium</span></h3>
+    <p>Create comprehensive documentation and examples for the mocking framework.</p>
+    <ul class="task-list">
+        <li>Write developer documentation for the mocking framework</li>
+        <li>Create usage examples for common scenarios</li>
+        <li>Develop best practices guide for effective mocking</li>
+        <li>Create reference documentation for all mock components</li>
+        <li>Implement example tests using mocks</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Design and implement mock framework architecture</p>
+            <p>Begin external system mocks implementation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete external system mocks</p>
+            <p>Begin execution flow recording implementation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Complete execution flow recording</p>
+            <p>Implement error injection framework</p>
+            <p>Begin time and latency simulation</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete time and latency simulation</p>
+            <p>Implement helper functions and utilities</p>
+            <p>Begin test framework integration</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Complete test framework integration</p>
+            <p>Create documentation and examples</p>
+            <p>Final review and refinements</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 6</div>
+        <div class="timeline-content">
+            <p>Conduct team training session</p>
+            <p>Address feedback and make final adjustments</p>
+            <p>Finalize documentation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Implementation Examples</h2>
+
+<h3>Mock Framework Core Example</h3>
+
+<pre><code>// mock/registry.go
+package mock
+
+import (
+    "sync"
+)
+
+// MockRegistry manages all mock instances and their configurations
+type MockRegistry struct {
+    mocks     map[string]interface{}
+    scenarios map[string]*Scenario
+    mutex     sync.RWMutex
+}
+
+// NewMockRegistry creates a new registry for mock management
+func NewMockRegistry() *MockRegistry {
+    return &MockRegistry{
+        mocks:     make(map[string]interface{}),
+        scenarios: make(map[string]*Scenario),
+    }
+}
+
+// Register adds a mock to the registry
+func (r *MockRegistry) Register(name string, mock interface{}) {
+    r.mutex.Lock()
+    defer r.mutex.Unlock()
+    r.mocks[name] = mock
+}
+
+// Get retrieves a mock from the registry
+func (r *MockRegistry) Get(name string) (interface{}, bool) {
+    r.mutex.RLock()
+    defer r.mutex.RUnlock()
+    mock, exists := r.mocks[name]
+    return mock, exists
+}
+
+// RegisterScenario adds a test scenario to the registry
+func (r *MockRegistry) RegisterScenario(name string, scenario *Scenario) {
+    r.mutex.Lock()
+    defer r.mutex.Unlock()
+    r.scenarios[name] = scenario
+}
+
+// GetScenario retrieves a test scenario from the registry
+func (r *MockRegistry) GetScenario(name string) (*Scenario, bool) {
+    r.mutex.RLock()
+    defer r.mutex.RUnlock()
+    scenario, exists := r.scenarios[name]
+    return scenario, exists
+}
+
+// Reset resets all mocks to their default state
+func (r *MockRegistry) Reset() {
+    r.mutex.Lock()
+    defer r.mutex.Unlock()
+    for _, mock := range r.mocks {
+        if resettable, ok := mock.(Resettable); ok {
+            resettable.Reset()
+        }
+    }
+}
+
+// Global registry instance
+var DefaultRegistry = NewMockRegistry()
+</code></pre>
+
+<h3>HTTP Client Mock Example</h3>
+
+<pre><code>// mock/http_client.go
+package mock
+
+import (
+    "bytes"
+    "io"
+    "net/http"
+    "sync"
+)
+
+// MockHTTPClient implements http.Client for testing
+type MockHTTPClient struct {
+    Responses     map[string]*http.Response
+    RequestLog    []*http.Request
+    DefaultStatus int
+    DefaultBody   string
+    mutex         sync.RWMutex
+    ErrorScenarios map[string]error
+}
+
+// NewMockHTTPClient creates a new HTTP client mock
+func NewMockHTTPClient() *MockHTTPClient {
+    client := &MockHTTPClient{
+        Responses:     make(map[string]*http.Response),
+        RequestLog:    make([]*http.Request, 0),
+        DefaultStatus: http.StatusOK,
+        DefaultBody:   "{}",
+        ErrorScenarios: make(map[string]error),
+    }
+    // Register with global registry
+    DefaultRegistry.Register("http.Client", client)
+    return client
+}
+
+// Do implements the http.Client interface
+func (m *MockHTTPClient) Do(req *http.Request) (*http.Response, error) {
+    m.mutex.Lock()
+    defer m.mutex.Unlock()
+    
+    // Record the request
+    m.RequestLog = append(m.RequestLog, req)
+    
+    // Check for error scenario
+    if err, exists := m.ErrorScenarios[req.URL.String()]; exists {
+        return nil, err
+    }
+    
+    // Look for a predefined response
+    if resp, exists := m.Responses[req.URL.String()]; exists {
+        return resp, nil
+    }
+    
+    // Return default response
+    return &http.Response{
+        StatusCode: m.DefaultStatus,
+        Body:       io.NopCloser(bytes.NewBufferString(m.DefaultBody)),
+        Header:     make(http.Header),
+    }, nil
+}
+
+// AddResponse adds a predefined response for a URL
+func (m *MockHTTPClient) AddResponse(url string, statusCode int, body string, header http.Header) {
+    m.mutex.Lock()
+    defer m.mutex.Unlock()
+    
+    m.Responses[url] = &http.Response{
+        StatusCode: statusCode,
+        Body:       io.NopCloser(bytes.NewBufferString(body)),
+        Header:     header,
+    }
+}
+
+// AddErrorScenario adds an error response for a URL
+func (m *MockHTTPClient) AddErrorScenario(url string, err error) {
+    m.mutex.Lock()
+    defer m.mutex.Unlock()
+    
+    m.ErrorScenarios[url] = err
+}
+
+// GetRequestsCount returns the number of requests made
+func (m *MockHTTPClient) GetRequestsCount() int {
+    m.mutex.RLock()
+    defer m.mutex.RUnlock()
+    
+    return len(m.RequestLog)
+}
+
+// Reset implements the Resettable interface
+func (m *MockHTTPClient) Reset() {
+    m.mutex.Lock()
+    defer m.mutex.Unlock()
+    
+    m.Responses = make(map[string]*http.Response)
+    m.RequestLog = make([]*http.Request, 0)
+    m.ErrorScenarios = make(map[string]error)
+}
+</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Mock framework for blueprint testing is fully implemented</li>
+    <li>Support for simulating external system interactions is complete</li>
+    <li>Capability to record and replay execution flows is functioning</li>
+    <li>Error injection functionality works as expected</li>
+    <li>Time/latency simulation is implemented and tested</li>
+    <li>Helper functions for common mock scenarios are available</li>
+    <li>Documentation and examples for mock usage are complete</li>
+    <li>The framework is integrated with existing test utilities</li>
+    <li>All mocks provide consistent interfaces and behavior</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Mock implementations diverge from real components</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Develop rigorous interface conformance tests and update mocks when real components change</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Tests pass with mocks but fail with real components</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement integration tests that use both mocked and real components and verify consistency</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Mock framework is too complex for developers to use</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Create simple, high-level APIs with sensible defaults and comprehensive documentation</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Framework performance causes slow tests</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Optimize mock implementations and minimize overhead from recording/tracing</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Timing simulation creates flaky tests</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement deterministic time control that eliminates real-time dependencies</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to creating a comprehensive mocking framework for the WebBlueprint 
+    platform. The framework will enable efficient and reliable testing by simulating external system interactions, controlling 
+    timing, injecting errors, and recording execution flows.
+</p>
+
+<p>
+    The estimated total effort is 6 days of development time, with priority placed on the framework architecture and core 
+    mocking capabilities to establish a solid foundation for testing complex blueprint scenarios.
+</p>
+</body>
+</html>

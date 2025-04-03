@@ -19,6 +19,7 @@ type MockExecutionContext struct {
 	debugInfo     []types.DebugInfo
 	debugData     map[string]interface{}
 	executedPins  map[string]bool
+	activePins    map[string]bool
 }
 
 // NewMockExecutionContext creates a new mock execution context for testing
@@ -34,7 +35,24 @@ func NewMockExecutionContext(nodeID string, nodeType string, logger node.Logger)
 		logger:       logger,
 		debugData:    make(map[string]interface{}),
 		executedPins: make(map[string]bool),
+		activePins:   make(map[string]bool),
 	}
+}
+
+// IsInputPinActive checks if an input pin is active
+func (m *MockExecutionContext) IsInputPinActive(pinID string) bool {
+	// By default, assume the "execute" pin is active when no specific active pin is set
+	if len(m.activePins) == 0 && pinID == "execute" {
+		return true
+	}
+
+	active, exists := m.activePins[pinID]
+	return exists && active
+}
+
+// SetActiveInputPin sets an input pin as active
+func (m *MockExecutionContext) SetActiveInputPin(pinID string, active bool) {
+	m.activePins[pinID] = active
 }
 
 // GetInputValue returns an input value

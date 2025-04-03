@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebBlueprint - Blueprint Event System Implementation Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1, h2, h3, h4 {
+            color: #2d5986;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            border-bottom: 2px solid #2d5986;
+            padding-bottom: 10px;
+        }
+
+        .header {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            border-left: 5px solid #2d5986;
+        }
+
+        .task {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .task h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom:.5em;
+        }
+
+        .priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .high {
+            background-color: #ffeaea;
+            color: #d33a3a;
+        }
+
+        .medium {
+            background-color: #fff8e6;
+            color: #e6a817;
+        }
+
+        .low {
+            background-color: #e6f7ff;
+            color: #3498db;
+        }
+
+        .task-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .task-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .task-list li:last-child {
+            border-bottom: none;
+        }
+
+        .task-list li::before {
+            content: "→";
+            margin-right: 10px;
+            color: #2d5986;
+        }
+
+        .timeline {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: #e0e0e0;
+        }
+
+        .timeline-item {
+            padding-left: 30px;
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2d5986;
+        }
+
+        .timeline-date {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #e0e0e0;
+        }
+
+        .metric {
+            display: flex;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .metric-name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .metric-bar {
+            flex: 3;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 20px;
+        }
+
+        .metric-value {
+            height: 100%;
+            background-color: #2d5986;
+            text-align: right;
+            color: white;
+            font-size: 0.8em;
+            line-height: 20px;
+            padding-right: 5px;
+        }
+
+        .metric-target {
+            flex: 0.5;
+            text-align: right;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>WebBlueprint - Blueprint Event System Implementation Plan</h1>
+    <p>Task: <strong>WEB-17 - Blueprint Event Sistemi (Unreal Engine Model)</strong></p>
+    <p>Priority: <span class="priority high">Very High</span> | Estimate: 6 points</p>
+</div>
+
+<h2>Overview</h2>
+<p>
+    This implementation plan outlines the approach for developing a comprehensive Blueprint Event System inspired by 
+    Unreal Engine's Blueprint system. This event system will allow for decoupled communication between blueprint nodes, 
+    cross-blueprint event handling, and both system-defined and user-defined events. The system will enable more complex 
+    and flexible blueprint designs with improved modularity and reusability.
+</p>
+
+<h2>Current Event System Status</h2>
+
+<div class="metric">
+    <div class="metric-name">Event Dispatcher Implementation</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Custom Event Support</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 0%;">0%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Event Binding Mechanism</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 0%;">0%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Cross-Blueprint Event Communication</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 0%;">0%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">System Events</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 10%;">10%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<div class="metric">
+    <div class="metric-name">Event Node Types</div>
+    <div class="metric-bar">
+        <div class="metric-value" style="width: 5%;">5%</div>
+    </div>
+    <div class="metric-target">Target: 100%</div>
+</div>
+
+<h2>Implementation Tasks</h2>
+
+<div class="task">
+    <h3>Core Event System Architecture <span class="priority high">High</span></h3>
+    <p>Design and implement the core architecture for the event system.</p>
+    <ul class="task-list">
+        <li>Define EventDefinition, EventParameter, and EventBinding structures</li>
+        <li>Create global EventManager to manage events across blueprints</li>
+        <li>Implement event registration and lookup mechanisms</li>
+        <li>Design execution context extensions for event handling</li>
+        <li>Create interfaces for event dispatching and listening</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>System Event Implementation <span class="priority high">High</span></h3>
+    <p>Implement built-in system events that provide integration points with blueprint lifecycle.</p>
+    <ul class="task-list">
+        <li>Implement OnInitialize event triggered when a blueprint is started</li>
+        <li>Create OnShutdown event for blueprint termination handling</li>
+        <li>Develop OnTimer event for periodic execution</li>
+        <li>Add execution hooks for system events in ExecutionEngine</li>
+        <li>Create web hook events (OnWebhookReceived, OnApiResponse)</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Event Node Types <span class="priority high">High</span></h3>
+    <p>Implement the required node types for event definition, dispatching, and handling.</p>
+    <ul class="task-list">
+        <li>Create EventDefinitionNode for declaring custom events</li>
+        <li>Implement EventDispatcherNode for triggering events</li>
+        <li>Develop EventBindNode for receiving event notifications</li>
+        <li>Add EventWithPayloadNode for passing data with events</li>
+        <li>Create utility nodes for event management (RemoveBind, ClearBindings)</li>
+    </ul>
+    <p>Estimated completion time: 1.5 days</p>
+</div>
+
+<div class="task">
+    <h3>Cross-Blueprint Event Communication <span class="priority medium">Medium</span></h3>
+    <p>Enable events to be dispatched and handled across different blueprints.</p>
+    <ul class="task-list">
+        <li>Implement global event registry for cross-blueprint event lookup</li>
+        <li>Create blueprint reference mechanism for targeting specific blueprints</li>
+        <li>Add event namespacing to prevent collisions</li>
+        <li>Implement event propagation controls (local vs. global scope)</li>
+        <li>Add security controls for event access</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>Event Parameter System <span class="priority medium">Medium</span></h3>
+    <p>Create a flexible parameter system for events.</p>
+    <ul class="task-list">
+        <li>Implement dynamic pin generation based on event parameters</li>
+        <li>Develop parameter validation mechanisms</li>
+        <li>Create parameter type conversions for compatibility</li>
+        <li>Add support for optional and default parameters</li>
+        <li>Implement array parameters and variable argument support</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<div class="task">
+    <h3>UI Integration and Testing <span class="priority medium">Medium</span></h3>
+    <p>Integrate event system with the UI and create comprehensive tests.</p>
+    <ul class="task-list">
+        <li>Design UI representations for event nodes</li>
+        <li>Update UI to show event connections and flows</li>
+        <li>Create visual feedback for event dispatching</li>
+        <li>Implement unit tests for event system components</li>
+        <li>Create integration tests with mock blueprints</li>
+    </ul>
+    <p>Estimated completion time: 1 day</p>
+</div>
+
+<h2>Implementation Timeline</h2>
+
+<div class="timeline">
+    <div class="timeline-item">
+        <div class="timeline-date">Day 1</div>
+        <div class="timeline-content">
+            <p>Design core event system architecture</p>
+            <p>Implement EventDefinition, EventParameter, and EventBinding structures</p>
+            <p>Create EventManager skeleton</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 2</div>
+        <div class="timeline-content">
+            <p>Complete core event manager implementation</p>
+            <p>Begin system event integration</p>
+            <p>Start implementing event node types</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 3</div>
+        <div class="timeline-content">
+            <p>Complete system event implementation</p>
+            <p>Complete event node types</p>
+            <p>Begin cross-blueprint communication</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 4</div>
+        <div class="timeline-content">
+            <p>Complete cross-blueprint communication</p>
+            <p>Begin event parameter system</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 5</div>
+        <div class="timeline-content">
+            <p>Complete event parameter system</p>
+            <p>Begin UI integration and testing</p>
+        </div>
+    </div>
+
+    <div class="timeline-item">
+        <div class="timeline-date">Day 6</div>
+        <div class="timeline-content">
+            <p>Complete UI integration</p>
+            <p>Finalize tests</p>
+            <p>Write documentation</p>
+        </div>
+    </div>
+</div>
+
+<h2>Implementation Examples</h2>
+
+<h3>Core Event Types</h3>
+
+<pre><code>// event/types.go
+package event
+
+import (
+    "sync"
+    "time"
+    "webblueprint/internal/types"
+)
+
+// EventDefinition represents a blueprint event
+type EventDefinition struct {
+    ID          string            // Unique identifier for the event
+    Name        string            // Human-readable name
+    Description string            // Description of what the event does
+    Parameters  []EventParameter  // Parameters that can be passed with the event
+    Category    string            // Category for organization (System, UI, Custom, etc.)
+    BlueprintID string            // ID of the blueprint that defined this event (empty for system events)
+    CreatedAt   time.Time         // When the event was defined
+}
+
+// EventParameter represents a parameter that can be passed with an event
+type EventParameter struct {
+    Name        string        // Parameter name
+    Type        *types.PinType // Parameter data type
+    Description string        // Description of the parameter
+    Optional    bool          // Whether the parameter is optional
+    Default     interface{}   // Default value for optional parameters
+}
+
+// EventBinding represents a connection between an event source and a handler
+type EventBinding struct {
+    ID          string    // Unique identifier for this binding
+    EventID     string    // ID of the event being bound to
+    HandlerID   string    // ID of the node that handles the event
+    HandlerType string    // Type of the handler node
+    BlueprintID string    // ID of the blueprint containing the handler
+    Priority    int       // Priority (higher numbers execute first)
+    CreatedAt   time.Time // When the binding was created
+    Enabled     bool      // Whether the binding is active
+}
+
+// EventDispatchRequest represents a request to dispatch an event
+type EventDispatchRequest struct {
+    EventID     string                 // ID of the event to dispatch
+    Parameters  map[string]types.Value // Parameter values to pass
+    SourceID    string                 // ID of the node or entity that triggered the event
+    BlueprintID string                 // ID of the blueprint dispatching the event
+    ExecutionID string                 // Current execution ID
+    Timestamp   time.Time              // When the event was dispatched
+}
+
+// EventHandlerContext provides context for an event handler
+type EventHandlerContext struct {
+    EventID     string                 // ID of the event being handled
+    Parameters  map[string]types.Value // Parameter values passed with the event
+    SourceID    string                 // ID of the node or entity that triggered the event
+    BlueprintID string                 // ID of the source blueprint
+    BindingID   string                 // ID of the binding being executed
+    ExecutionID string                 // Current execution ID
+    HandlerID   string                 // ID of the handler node
+}
+
+// SystemEventType defines the built-in system event types
+type SystemEventType string
+
+const (
+    EventTypeInitialize    SystemEventType = "OnInitialize"    // Blueprint initialization
+    EventTypeShutdown      SystemEventType = "OnShutdown"      // Blueprint shutdown
+    EventTypeTimer         SystemEventType = "OnTimer"         // Periodic timer event
+    EventTypeWebhook       SystemEventType = "OnWebhook"       // External webhook received
+    EventTypeAPIResponse   SystemEventType = "OnAPIResponse"   // API response received
+    EventTypeDataChanged   SystemEventType = "OnDataChanged"   // Data variable changed
+    EventTypeNodeCreated   SystemEventType = "OnNodeCreated"   // New node created
+    EventTypeNodeDeleted   SystemEventType = "OnNodeDeleted"   // Node deleted
+    EventTypeError         SystemEventType = "OnError"         // Error occurred
+)
+</code></pre>
+
+<h3>Event Manager</h3>
+
+<pre><code>// event/manager.go
+package event
+
+import (
+    "fmt"
+    "sort"
+    "sync"
+    "webblueprint/internal/types"
+)
+
+// EventManager manages event registration, binding, and dispatching
+type EventManager struct {
+    definitions    map[string]EventDefinition           // EventID -> EventDefinition
+    bindings       map[string][]EventBinding            // EventID -> []EventBinding
+    handlers       map[string]func(EventHandlerContext) // BindingID -> HandlerFunc
+    systemEvents   map[SystemEventType]string           // SystemEventType -> EventID
+    blueprintEvents map[string][]string                 // BlueprintID -> []EventID
+    mutex          sync.RWMutex
+}
+
+// NewEventManager creates a new event manager
+func NewEventManager() *EventManager {
+    manager := &EventManager{
+        definitions:     make(map[string]EventDefinition),
+        bindings:        make(map[string][]EventBinding),
+        handlers:        make(map[string]func(EventHandlerContext)),
+        systemEvents:    make(map[SystemEventType]string),
+        blueprintEvents: make(map[string][]string),
+    }
+    
+    // Register built-in system events
+    manager.registerSystemEvents()
+    
+    return manager
+}
+
+// registerSystemEvents registers the built-in system events
+func (em *EventManager) registerSystemEvents() {
+    // Define system events
+    initEvent := EventDefinition{
+        ID:          "system.initialize",
+        Name:        string(EventTypeInitialize),
+        Description: "Triggered when a blueprint starts execution",
+        Parameters: []EventParameter{
+            {
+                Name:        "blueprintID",
+                Type:        types.PinTypes.String,
+                Description: "ID of the blueprint being initialized",
+                Optional:    false,
+            },
+            {
+                Name:        "executionID",
+                Type:        types.PinTypes.String,
+                Description: "ID of the execution instance",
+                Optional:    false,
+            },
+        },
+        Category:  "System",
+        CreatedAt: time.Now(),
+    }
+    
+    shutdownEvent := EventDefinition{
+        ID:          "system.shutdown",
+        Name:        string(EventTypeShutdown),
+        Description: "Triggered when a blueprint execution ends",
+        Parameters: []EventParameter{
+            {
+                Name:        "blueprintID",
+                Type:        types.PinTypes.String,
+                Description: "ID of the blueprint being shut down",
+                Optional:    false,
+            },
+            {
+                Name:        "executionID",
+                Type:        types.PinTypes.String,
+                Description: "ID of the execution instance",
+                Optional:    false,
+            },
+            {
+                Name:        "success",
+                Type:        types.PinTypes.Boolean,
+                Description: "Whether the execution completed successfully",
+                Optional:    false,
+            },
+            {
+                Name:        "errorMessage",
+                Type:        types.PinTypes.String,
+                Description: "Error message if execution failed",
+                Optional:    true,
+            },
+        },
+        Category:  "System",
+        CreatedAt: time.Now(),
+    }
+    
+    // Register system events
+    em.RegisterEvent(initEvent)
+    em.RegisterEvent(shutdownEvent)
+    
+    // Map system event types to event IDs
+    em.systemEvents[EventTypeInitialize] = initEvent.ID
+    em.systemEvents[EventTypeShutdown] = shutdownEvent.ID
+    
+    // Add additional system events here...
+}
+
+// RegisterEvent registers a new event definition
+func (em *EventManager) RegisterEvent(event EventDefinition) error {
+    em.mutex.Lock()
+    defer em.mutex.Unlock()
+    
+    // Check if event already exists
+    if _, exists := em.definitions[event.ID]; exists {
+        return fmt.Errorf("event with ID %s already exists", event.ID)
+    }
+    
+    // Store the event definition
+    em.definitions[event.ID] = event
+    
+    // Initialize empty bindings list
+    em.bindings[event.ID] = make([]EventBinding, 0)
+    
+    // Add to blueprint events if not a system event
+    if event.BlueprintID != "" {
+        em.blueprintEvents[event.BlueprintID] = append(
+            em.blueprintEvents[event.BlueprintID], 
+            event.ID,
+        )
+    }
+    
+    return nil
+}
+
+// BindEvent creates a binding between an event and a handler
+func (em *EventManager) BindEvent(binding EventBinding) error {
+    em.mutex.Lock()
+    defer em.mutex.Unlock()
+    
+    // Check if event exists
+    if _, exists := em.definitions[binding.EventID]; !exists {
+        return fmt.Errorf("event with ID %s does not exist", binding.EventID)
+    }
+    
+    // Add binding to the event's bindings
+    em.bindings[binding.EventID] = append(em.bindings[binding.EventID], binding)
+    
+    // Sort bindings by priority (higher priority first)
+    sort.Slice(em.bindings[binding.EventID], func(i, j int) bool {
+        return em.bindings[binding.EventID][i].Priority > em.bindings[binding.EventID][j].Priority
+    })
+    
+    return nil
+}
+
+// RegisterHandler registers a handler function for a binding
+func (em *EventManager) RegisterHandler(bindingID string, handler func(EventHandlerContext)) {
+    em.mutex.Lock()
+    defer em.mutex.Unlock()
+    
+    em.handlers[bindingID] = handler
+}
+
+// DispatchEvent dispatches an event to all matching handlers
+func (em *EventManager) DispatchEvent(request EventDispatchRequest) []error {
+    em.mutex.RLock()
+    
+    // Check if event exists
+    event, exists := em.definitions[request.EventID]
+    if !exists {
+        em.mutex.RUnlock()
+        return []error{fmt.Errorf("event with ID %s does not exist", request.EventID)}
+    }
+    
+    // Get bindings for this event
+    eventBindings := make([]EventBinding, len(em.bindings[request.EventID]))
+    copy(eventBindings, em.bindings[request.EventID])
+    
+    // Copy handlers to avoid holding the lock during execution
+    handlers := make(map[string]func(EventHandlerContext), len(em.handlers))
+    for id, handler := range em.handlers {
+        handlers[id] = handler
+    }
+    
+    em.mutex.RUnlock()
+    
+    // Validate parameters against event definition
+    errors := validateParameters(event, request.Parameters)
+    if len(errors) > 0 {
+        return errors
+    }
+    
+    // Execute handlers
+    for _, binding := range eventBindings {
+        if !binding.Enabled {
+            continue
+        }
+        
+        handler, exists := handlers[binding.ID]
+        if !exists {
+            errors = append(errors, fmt.Errorf("handler for binding %s not found", binding.ID))
+            continue
+        }
+        
+        // Create handler context
+        ctx := EventHandlerContext{
+            EventID:     request.EventID,
+            Parameters:  request.Parameters,
+            SourceID:    request.SourceID,
+            BlueprintID: request.BlueprintID,
+            BindingID:   binding.ID,
+            ExecutionID: request.ExecutionID,
+            HandlerID:   binding.HandlerID,
+        }
+        
+        // Execute handler (in real implementation, this might be done asynchronously)
+        go handler(ctx)
+    }
+    
+    return errors
+}
+
+// validateParameters validates event parameters against the event definition
+func validateParameters(event EventDefinition, params map[string]types.Value) []error {
+    var errors []error
+    
+    // Check for required parameters
+    for _, param := range event.Parameters {
+        if !param.Optional {
+            value, exists := params[param.Name]
+            if !exists {
+                errors = append(errors, fmt.Errorf("required parameter %s missing", param.Name))
+                continue
+            }
+            
+            // Validate parameter type
+            if value.Type.ID != param.Type.ID {
+                errors = append(errors, fmt.Errorf("parameter %s has incorrect type: expected %s, got %s", 
+                    param.Name, param.Type.ID, value.Type.ID))
+            }
+        }
+    }
+    
+    return errors
+}
+
+// GetSystemEventID returns the event ID for a system event type
+func (em *EventManager) GetSystemEventID(eventType SystemEventType) (string, bool) {
+    em.mutex.RLock()
+    defer em.mutex.RUnlock()
+    
+    id, exists := em.systemEvents[eventType]
+    return id, exists
+}
+
+// GetEventDefinition returns the definition for an event
+func (em *EventManager) GetEventDefinition(eventID string) (EventDefinition, bool) {
+    em.mutex.RLock()
+    defer em.mutex.RUnlock()
+    
+    def, exists := em.definitions[eventID]
+    return def, exists
+}
+
+// GetBlueprintEvents returns all events defined in a blueprint
+func (em *EventManager) GetBlueprintEvents(blueprintID string) []EventDefinition {
+    em.mutex.RLock()
+    defer em.mutex.RUnlock()
+    
+    eventIDs, exists := em.blueprintEvents[blueprintID]
+    if !exists {
+        return nil
+    }
+    
+    events := make([]EventDefinition, 0, len(eventIDs))
+    for _, id := range eventIDs {
+        if def, exists := em.definitions[id]; exists {
+            events = append(events, def)
+        }
+    }
+    
+    return events
+}
+
+// RemoveBinding removes an event binding
+func (em *EventManager) RemoveBinding(bindingID string) {
+    em.mutex.Lock()
+    defer em.mutex.Unlock()
+    
+    // Find and remove the binding
+    for eventID, bindings := range em.bindings {
+        for i, binding := range bindings {
+            if binding.ID == bindingID {
+                // Remove binding from slice
+                em.bindings[eventID] = append(bindings[:i], bindings[i+1:]...)
+                
+                // Remove handler
+                delete(em.handlers, bindingID)
+                return
+            }
+        }
+    }
+}
+</code></pre>
+
+<h3>Event Integration with ExecutionContext</h3>
+
+<pre><code>// event/context.go
+package event
+
+import (
+    "webblueprint/internal/node"
+    "webblueprint/internal/types"
+)
+
+// ExecutionContextWithEvents extends node.ExecutionContext with event capabilities
+type ExecutionContextWithEvents interface {
+    node.ExecutionContext
+    
+    // Event management
+    GetEventManager() *EventManager
+    DispatchEvent(eventID string, params map[string]types.Value) error
+    IsEventHandlerActive() bool
+    GetEventHandlerContext() *EventHandlerContext
+}
+
+// DefaultExecutionContextWithEvents adds event capabilities to DefaultExecutionContext
+type DefaultExecutionContextWithEvents struct {
+    node.ExecutionContext
+    eventManager       *EventManager
+    isEventHandler     bool
+    eventHandlerContext *EventHandlerContext
+}
+
+// NewExecutionContextWithEvents wraps an execution context with event capabilities
+func NewExecutionContextWithEvents(
+    baseCtx node.ExecutionContext,
+    eventManager *EventManager,
+    isEventHandler bool,
+    eventHandlerContext *EventHandlerContext,
+) *DefaultExecutionContextWithEvents {
+    return &DefaultExecutionContextWithEvents{
+        ExecutionContext:    baseCtx,
+        eventManager:        eventManager,
+        isEventHandler:      isEventHandler,
+        eventHandlerContext: eventHandlerContext,
+    }
+}
+
+// GetEventManager returns the event manager
+func (ctx *DefaultExecutionContextWithEvents) GetEventManager() *EventManager {
+    return ctx.eventManager
+}
+
+// DispatchEvent dispatches an event with the given parameters
+func (ctx *DefaultExecutionContextWithEvents) DispatchEvent(eventID string, params map[string]types.Value) error {
+    // Create a dispatch request
+    request := EventDispatchRequest{
+        EventID:     eventID,
+        Parameters:  params,
+        SourceID:    ctx.GetNodeID(),
+        BlueprintID: ctx.GetBlueprintID(),
+        ExecutionID: ctx.GetExecutionID(),
+        Timestamp:   time.Now(),
+    }
+    
+    // Dispatch the event
+    errors := ctx.eventManager.DispatchEvent(request)
+    if len(errors) > 0 {
+        // Log errors
+        for _, err := range errors {
+            ctx.Logger().Error("Error dispatching event", map[string]interface{}{
+                "eventID": eventID,
+                "error":   err.Error(),
+            })
+        }
+        return errors[0]
+    }
+    
+    return nil
+}
+
+// IsEventHandlerActive returns true if this context is handling an event
+func (ctx *DefaultExecutionContextWithEvents) IsEventHandlerActive() bool {
+    return ctx.isEventHandler
+}
+
+// GetEventHandlerContext returns the event handler context if this is an event handler
+func (ctx *DefaultExecutionContextWithEvents) GetEventHandlerContext() *EventHandlerContext {
+    return ctx.eventHandlerContext
+}
+</code></pre>
+
+<h3>Event Definition Node</h3>
+
+<pre><code>// node/events/event_definition_node.go
+package events
+
+import (
+    "fmt"
+    "time"
+    "webblueprint/internal/event"
+    "webblueprint/internal/node"
+    "webblueprint/internal/types"
+)
+
+// EventDefinitionNode defines a custom event
+type EventDefinitionNode struct {
+    node.BaseNode
+}
+
+// NewEventDefinitionNode creates a new event definition node
+func NewEventDefinitionNode() node.Node {
+    return &EventDefinitionNode{
+        BaseNode: node.BaseNode{
+            Metadata: node.NodeMetadata{
+                TypeID:      "event-definition",
+                Name:        "Define Event",
+                Description: "Defines a custom event that can be dispatched and handled",
+                Category:    "Events",
+                Version:     "1.0.0",
+            },
+            Inputs: []types.Pin{
+                {
+                    ID:          "name",
+                    Name:        "Event Name",
+                    Description: "Name of the event",
+                    Type:        types.PinTypes.String,
+                    Default:     "CustomEvent",
+                },
+                {
+                    ID:          "description",
+                    Name:        "Description",
+                    Description: "Description of the event",
+                    Type:        types.PinTypes.String,
+                    Optional:    true,
+                    Default:     "",
+                },
+                {
+                    ID:          "category",
+                    Name:        "Category",
+                    Description: "Category for organizing events",
+                    Type:        types.PinTypes.String,
+                    Optional:    true,
+                    Default:     "Custom",
+                },
+                // Dynamic parameters are handled separately
+            },
+            Outputs: []types.Pin{
+                {
+                    ID:          "eventID",
+                    Name:        "Event ID",
+                    Description: "Unique identifier for the defined event",
+                    Type:        types.PinTypes.String,
+                },
+                {
+                    ID:          "success",
+                    Name:        "Success",
+                    Description: "Whether the event was successfully defined",
+                    Type:        types.PinTypes.Boolean,
+                },
+            },
+            Properties: []types.Property{
+                {
+                    Name:        "parameters",
+                    Type:        "array",
+                    Description: "Parameters for the event",
+                    Value:       []interface{}{},
+                },
+            },
+        },
+    }
+}
+
+// Execute runs the node logic
+func (n *EventDefinitionNode) Execute(ctx node.ExecutionContext) error {
+    logger := ctx.Logger()
+    logger.Debug("Executing EventDefinitionNode", nil)
+    
+    // Get input values
+    nameValue, nameExists := ctx.GetInputValue("name")
+    descValue, descExists := ctx.GetInputValue("description")
+    categoryValue, categoryExists := ctx.GetInputValue("category")
+    
+    // Default values
+    name := "CustomEvent"
+    if nameExists {
+        nameStr, err := nameValue.AsString()
+        if err == nil && nameStr != "" {
+            name = nameStr
+        }
+    }
+    
+    description := ""
+    if descExists {
+        descStr, err := descValue.AsString()
+        if err == nil {
+            description = descStr
+        }
+    }
+    
+    category := "Custom"
+    if categoryExists {
+        categoryStr, err := categoryValue.AsString()
+        if err == nil && categoryStr != "" {
+            category = categoryStr
+        }
+    }
+    
+    // Get parameters from properties
+    var parameters []event.EventParameter
+    
+    // Find parameters property
+    for _, prop := range n.GetProperties() {
+        if prop.Name == "parameters" {
+            if paramsArray, ok := prop.Value.([]interface{}); ok {
+                for _, paramItem := range paramsArray {
+                    if paramMap, ok := paramItem.(map[string]interface{}); ok {
+                        param := event.EventParameter{
+                            Name:        paramMap["name"].(string),
+                            Description: paramMap["description"].(string),
+                            Optional:    paramMap["optional"].(bool),
+                        }
+                        
+                        // Get type from type ID
+                        typeID := paramMap["typeID"].(string)
+                        if paramType, exists := types.GetPinTypeByID(typeID); exists {
+                            param.Type = paramType
+                        } else {
+                            param.Type = types.PinTypes.Any
+                        }
+                        
+                        // Get default value if present
+                        if defaultVal, ok := paramMap["default"]; ok {
+                            param.Default = defaultVal
+                        }
+                        
+                        parameters = append(parameters, param)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Create a unique event ID
+    blueprintID := ctx.GetBlueprintID()
+    nodeID := ctx.GetNodeID()
+    eventID := fmt.Sprintf("%s.%s.%s", blueprintID, nodeID, name)
+    
+    // Create event definition
+    eventDef := event.EventDefinition{
+        ID:          eventID,
+        Name:        name,
+        Description: description,
+        Parameters:  parameters,
+        Category:    category,
+        BlueprintID: blueprintID,
+        CreatedAt:   time.Now(),
+    }
+    
+    // Get event manager from context
+    var eventManager *event.EventManager
+    if evtCtx, ok := ctx.(event.ExecutionContextWithEvents); ok {
+        eventManager = evtCtx.GetEventManager()
+    } else {
+        logger.Error("Event manager not available in context", nil)
+        
+        // Set outputs
+        ctx.SetOutputValue("eventID", types.NewValue(types.PinTypes.String, ""))
+        ctx.SetOutputValue("success", types.NewValue(types.PinTypes.Boolean, false))
+        
+        return fmt.Errorf("event manager not available in context")
+    }
+    
+    // Register the event
+    err := eventManager.RegisterEvent(eventDef)
+    if err != nil {
+        logger.Error("Failed to register event", map[string]interface{}{
+            "error": err.Error(),
+        })
+        
+        // Set outputs
+        ctx.SetOutputValue("eventID", types.NewValue(types.PinTypes.String, eventID))
+        ctx.SetOutputValue("success", types.NewValue(types.PinTypes.Boolean, false))
+        
+        return err
+    }
+    
+    // Set outputs
+    ctx.SetOutputValue("eventID", types.NewValue(types.PinTypes.String, eventID))
+    ctx.SetOutputValue("success", types.NewValue(types.PinTypes.Boolean, true))
+    
+    logger.Info("Event defined successfully", map[string]interface{}{
+        "eventID": eventID,
+    })
+    
+    return nil
+}
+</code></pre>
+
+<h2>Success Criteria</h2>
+
+<p>The implementation will be considered successful when the following criteria are met:</p>
+
+<ul>
+    <li>Events can be defined, dispatched, and handled within blueprints</li>
+    <li>System events properly integrate with the blueprint lifecycle</li>
+    <li>Custom events can be created with dynamic parameters</li>
+    <li>Events can be dispatched and handled across different blueprints</li>
+    <li>The event system is properly integrated with the execution engine</li>
+    <li>All event node types are fully functional</li>
+    <li>The UI properly displays event connections and flows</li>
+    <li>Comprehensive tests verify the event system's functionality</li>
+    <li>Events maintain proper parameter type checking and validation</li>
+</ul>
+
+<h2>Risks and Mitigation</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+    <tr style="background-color: #f2f2f2;">
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Risk</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Impact</th>
+        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Mitigation</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Event handling across blueprints creating circular dependencies</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement cycle detection in event dispatch, max depth for event chains, timeout mechanism</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Performance impact of complex event chains</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Optimize event dispatch, consider async handling for non-critical events, implement rate limiting</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Event system becoming a security vulnerability</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">High</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement permission system for event access, validation of event data, sandboxing for event handlers</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Complexity of UI representation for events</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Design clear visual representations, clear documentation for users, use intuitive node designs</td>
+    </tr>
+    <tr>
+        <td style="border: 1px solid #ddd; padding: 8px;">Memory leaks from uncleared event bindings</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Medium</td>
+        <td style="border: 1px solid #ddd; padding: 8px;">Implement proper cleanup mechanisms, reference tracking, lifecycle management for event bindings</td>
+    </tr>
+    </tbody>
+</table>
+
+<h2>Conclusion</h2>
+
+<p>
+    This implementation plan provides a structured approach to developing a comprehensive Blueprint Event System inspired by 
+    Unreal Engine's model. The event system will significantly enhance the capabilities of WebBlueprint by enabling more 
+    flexible, modular, and reactive designs.
+</p>
+
+<p>
+    The estimated total effort is 6 days of development time, with priority placed on core architecture and system event 
+    integration to establish a solid foundation for the event system. By following this plan, we will create a powerful event 
+    system that enables advanced blueprint designs with improved modularity and reusability.
+</p>
+</body>
+</html>

@@ -830,6 +830,7 @@ function handleAddSpecificNode(nodeType: NodeTypeDefinition) {
     }
 
     const nodeProperty: NodeProperty = {
+      displayName: input.name,
       name: `input_${input.id}`,
       value: input.default,
     }
@@ -838,7 +839,7 @@ function handleAddSpecificNode(nodeType: NodeTypeDefinition) {
   })
 
   // Add the node to the blueprint
-  const newNode = structuredClone(node)
+  const newNode = structuredClone(JSON.parse(JSON.stringify(node)))
   emit('node-added', newNode)
   // props.nodes.push(newNode)
 

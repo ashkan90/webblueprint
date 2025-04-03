@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -13,6 +14,18 @@ type PinType struct {
 	Description string                                       // Description of the type
 	Validator   func(value interface{}) error                // Function to validate values of this type
 	Converter   func(value interface{}) (interface{}, error) // Function to convert values to this type
+}
+
+func (p *PinType) String() string {
+	return fmt.Sprintf(`{'id': '%s', 'name': '%s', 'description': '%s'}`, p.ID, p.Name, p.Description)
+}
+
+func (p *PinType) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + p.String() + `"`), nil
+}
+
+func (p *PinType) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, p)
 }
 
 // Value represents a strongly-typed value that can flow between nodes
@@ -55,6 +68,9 @@ func (v Value) AsString() (string, error) {
 // AsNumber converts the value to a float64
 func (v Value) AsNumber() (float64, error) {
 	if v.Type == PinTypes.Number {
+		if _v, ok := v.RawValue.(int); ok {
+			return float64(_v), nil
+		}
 		return v.RawValue.(float64), nil
 	}
 

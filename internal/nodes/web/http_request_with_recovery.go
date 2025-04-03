@@ -12,11 +12,123 @@ import (
 
 // HTTPRequestWithRecoveryNode is an HTTP request node with enhanced error handling
 type HTTPRequestWithRecoveryNode struct {
+	inputs     []types.Pin
+	outputs    []types.Pin
+	properties []types.Property
 }
 
 // NewHTTPRequestWithRecoveryNode creates a new HTTP request node with error handling
 func NewHTTPRequestWithRecoveryNode() node.Node {
-	return &HTTPRequestWithRecoveryNode{}
+	return &HTTPRequestWithRecoveryNode{
+		inputs: []types.Pin{
+			{
+				ID:          "exec",
+				Name:        "Execute",
+				Description: "Execution input",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "url",
+				Name:        "URL",
+				Description: "The URL to request",
+				Type:        types.PinTypes.String,
+			},
+			{
+				ID:          "method",
+				Name:        "Method",
+				Description: "HTTP method (GET, POST, etc.)",
+				Type:        types.PinTypes.String,
+			},
+			{
+				ID:          "headers",
+				Name:        "Headers",
+				Description: "HTTP headers",
+				Type:        types.PinTypes.Object,
+			},
+			{
+				ID:          "body",
+				Name:        "Body",
+				Description: "Request body",
+				Type:        types.PinTypes.String,
+			},
+			{
+				ID:          "timeout",
+				Name:        "Timeout (ms)",
+				Description: "Request timeout in milliseconds",
+				Type:        types.PinTypes.Number,
+			},
+		},
+		outputs: []types.Pin{
+			{
+				ID:          "then",
+				Name:        "Then",
+				Description: "Execution output when successful",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "catch",
+				Name:        "Catch",
+				Description: "Execution output when error occurs",
+				Type:        types.PinTypes.Execution,
+			},
+			{
+				ID:          "response",
+				Name:        "Response",
+				Description: "HTTP response",
+				Type:        types.PinTypes.Object,
+			},
+			{
+				ID:          "statusCode",
+				Name:        "Status Code",
+				Description: "HTTP status code",
+				Type:        types.PinTypes.Number,
+			},
+			{
+				ID:          "body",
+				Name:        "Response Body",
+				Description: "Response body as string",
+				Type:        types.PinTypes.String,
+			},
+			{
+				ID:          "headers",
+				Name:        "Response Headers",
+				Description: "Response headers",
+				Type:        types.PinTypes.Object,
+			},
+			{
+				ID:          "error",
+				Name:        "Error",
+				Description: "Error object if request failed",
+				Type:        types.PinTypes.Object,
+			},
+		},
+		properties: []types.Property{
+			{
+				Name:        "defaultMethod",
+				DisplayName: "Default Method",
+				Type:        types.PinTypes.String,
+				Value:       "GET",
+			},
+			{
+				Name:        "defaultTimeout",
+				DisplayName: "Default Timeout",
+				Type:        types.PinTypes.Number,
+				Value:       5000,
+			},
+			{
+				Name:        "retryCount",
+				DisplayName: "Retry Count",
+				Type:        types.PinTypes.Number,
+				Value:       3,
+			},
+			{
+				Name:        "fallbackUrl",
+				DisplayName: "Fallback URL",
+				Type:        types.PinTypes.String,
+				Value:       "",
+			},
+		},
+	}
 }
 
 // NewHttpRequestWithRecoveryNodeFactory returns a factory function for creating HTTP request with recovery nodes
@@ -39,122 +151,27 @@ func (n *HTTPRequestWithRecoveryNode) GetMetadata() node.NodeMetadata {
 
 // GetInputPins returns input pins
 func (n *HTTPRequestWithRecoveryNode) GetInputPins() []types.Pin {
-	return []types.Pin{
-		{
-			ID:          "exec",
-			Name:        "Execute",
-			Description: "Execution input",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "url",
-			Name:        "URL",
-			Description: "The URL to request",
-			Type:        types.PinTypes.String,
-		},
-		{
-			ID:          "method",
-			Name:        "Method",
-			Description: "HTTP method (GET, POST, etc.)",
-			Type:        types.PinTypes.String,
-		},
-		{
-			ID:          "headers",
-			Name:        "Headers",
-			Description: "HTTP headers",
-			Type:        types.PinTypes.Object,
-		},
-		{
-			ID:          "body",
-			Name:        "Body",
-			Description: "Request body",
-			Type:        types.PinTypes.String,
-		},
-		{
-			ID:          "timeout",
-			Name:        "Timeout (ms)",
-			Description: "Request timeout in milliseconds",
-			Type:        types.PinTypes.Number,
-		},
-	}
+	return n.inputs
+}
+
+// SetInputPins sets the input pins
+func (n *HTTPRequestWithRecoveryNode) SetInputPins(pins []types.Pin) {
+	n.inputs = pins
 }
 
 // GetOutputPins returns output pins
 func (n *HTTPRequestWithRecoveryNode) GetOutputPins() []types.Pin {
-	return []types.Pin{
-		{
-			ID:          "then",
-			Name:        "Then",
-			Description: "Execution output when successful",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "catch",
-			Name:        "Catch",
-			Description: "Execution output when error occurs",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "response",
-			Name:        "Response",
-			Description: "HTTP response",
-			Type:        types.PinTypes.Object,
-		},
-		{
-			ID:          "statusCode",
-			Name:        "Status Code",
-			Description: "HTTP status code",
-			Type:        types.PinTypes.Number,
-		},
-		{
-			ID:          "body",
-			Name:        "Response Body",
-			Description: "Response body as string",
-			Type:        types.PinTypes.String,
-		},
-		{
-			ID:          "headers",
-			Name:        "Response Headers",
-			Description: "Response headers",
-			Type:        types.PinTypes.Object,
-		},
-		{
-			ID:          "error",
-			Name:        "Error",
-			Description: "Error object if request failed",
-			Type:        types.PinTypes.Object,
-		},
-	}
+	return n.outputs
+}
+
+// SetOutputPins sets the output pins
+func (n *HTTPRequestWithRecoveryNode) SetOutputPins(pins []types.Pin) {
+	n.outputs = pins
 }
 
 // GetProperties returns node properties
 func (n *HTTPRequestWithRecoveryNode) GetProperties() []types.Property {
-	return []types.Property{
-		{
-			Name:        "defaultMethod",
-			DisplayName: "Default Method",
-			Type:        types.PinTypes.String,
-			Value:       "GET",
-		},
-		{
-			Name:        "defaultTimeout",
-			DisplayName: "Default Timeout",
-			Type:        types.PinTypes.Number,
-			Value:       5000,
-		},
-		{
-			Name:        "retryCount",
-			DisplayName: "Retry Count",
-			Type:        types.PinTypes.Number,
-			Value:       3,
-		},
-		{
-			Name:        "fallbackUrl",
-			DisplayName: "Fallback URL",
-			Type:        types.PinTypes.String,
-			Value:       "",
-		},
-	}
+	return n.properties
 }
 
 // Execute runs the node
