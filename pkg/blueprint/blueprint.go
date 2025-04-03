@@ -85,6 +85,25 @@ type Blueprint struct {
 	Connections []Connection      `json:"connections"`
 	Variables   []Variable        `json:"variables,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+	Events      []EventDefinition `json:"events,omitempty"` // Added field for custom event definitions
+}
+
+// EventParameter defines a parameter for a custom event within a blueprint
+type EventParameter struct {
+	Name        string      `json:"name"`                  // Parameter name
+	TypeID      string      `json:"typeId"`                // Pin Type ID (e.g., "string", "number")
+	Description string      `json:"description,omitempty"` // Description of the parameter
+	Optional    bool        `json:"optional,omitempty"`    // Whether the parameter is optional
+	Default     interface{} `json:"default,omitempty"`     // Default value for optional parameters
+}
+
+// EventDefinition defines a custom event within a blueprint
+type EventDefinition struct {
+	ID          string           `json:"id"`                    // Unique identifier for the event (e.g., "custom.my-event")
+	Name        string           `json:"name"`                  // Human-readable name
+	Description string           `json:"description,omitempty"` // Description of what the event does
+	Parameters  []EventParameter `json:"parameters,omitempty"`  // Parameters that can be passed with the event
+	Category    string           `json:"category,omitempty"`    // Category for organization (defaults to "Custom")
 }
 
 // NewBlueprint creates a new empty blueprint
@@ -97,6 +116,7 @@ func NewBlueprint(id, name, version string) *Blueprint {
 		Connections: make([]Connection, 0),
 		Variables:   make([]Variable, 0),
 		Metadata:    make(map[string]string),
+		Events:      make([]EventDefinition, 0), // Initialize Events slice
 	}
 }
 
@@ -221,29 +241,31 @@ func (b *Blueprint) RemoveConnection(connID string) {
 func (b *Blueprint) FindEntryPoints() []string {
 	entryPoints := make([]string, 0)
 
-	// Create maps to track nodes with execution inputs and outputs
-	execInputs := make(map[string]bool)
-	execOutputs := make(map[string]bool)
-
-	// Find all nodes with execution connections
-	for _, conn := range b.Connections {
-		if conn.ConnectionType == "execution" {
-			execOutputs[conn.SourceNodeID] = true
-			execInputs[conn.TargetNodeID] = true
-		}
-	}
-
-	// Find nodes with execution outputs but no execution inputs
-	for _, node := range b.Nodes {
-		if execOutputs[node.ID] && !execInputs[node.ID] {
-			entryPoints = append(entryPoints, node.ID)
-		}
-	}
+	//// Create maps to track nodes with execution inputs and outputs
+	//execInputs := make(map[string]bool)
+	//execOutputs := make(map[string]bool)
+	//
+	//// Find all nodes with execution connections
+	//for _, conn := range b.Connections {
+	//	if conn.ConnectionType == "execution" {
+	//		execOutputs[conn.SourceNodeID] = true
+	//		execInputs[conn.TargetNodeID] = true
+	//	}
+	//}
+	//
+	//// Find nodes with execution outputs but no execution inputs
+	//for _, node := range b.Nodes {
+	//	if execOutputs[node.ID] && !execInputs[node.ID] {
+	//		entryPoints = append(entryPoints, node.ID)
+	//	}
+	//}
 
 	// Also include special entry point nodes like DOM events
 	for _, node := range b.Nodes {
-		if node.Type == "dom-event" && !contains(entryPoints, node.ID) {
-			entryPoints = append(entryPoints, node.ID)
+		for _, property := range node.Properties {
+			if property.Name == "eventType" && property.Value.(string) == "entry" {
+				entryPoints = append(entryPoints, node.ID)
+			}
 		}
 	}
 

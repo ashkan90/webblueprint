@@ -2,37 +2,11 @@ package integration
 
 import (
 	"fmt"
-	"webblueprint/internal/bperrors"
 	"webblueprint/internal/core"
-	"webblueprint/internal/engine"
 	"webblueprint/internal/engineext"
-	"webblueprint/internal/event"
 )
 
 // Bridge connects components that can't import each other directly
-
-// InitializeEventSystem sets up the event system without creating import cycles
-// It now requires an EngineController to pass to the EventManager.
-func InitializeEventSystem(baseEngine *engine.ExecutionEngine, engineController core.EngineController) *engineext.ExecutionEngineExtensions {
-	// Create system components
-	errorManager := bperrors.NewErrorManager()
-	recoveryManager := bperrors.NewRecoveryManager(errorManager)
-
-	// Create event manager, passing the engine controller
-	eventManager := event.NewEventManager(engineController)
-
-	// Use the adapter to convert to the core interface
-	eventManagerInterface := eventManager.AsEventManagerInterface()
-
-	// Create engine extensions
-	extensions := baseEngine.InitializeExtensions(
-		errorManager,
-		recoveryManager,
-		eventManagerInterface,
-	)
-
-	return extensions
-}
 
 // CreateEventHandler creates an event handler that can be registered with the event system
 func CreateEventHandler(id string, handler func(core.EventDispatchRequest) error) core.EventHandler {

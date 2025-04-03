@@ -25,9 +25,9 @@ func NewOnCreatedEventNode() node.Node {
 			Inputs: []types.Pin{},
 			Outputs: []types.Pin{
 				{
-					ID:          "execution",
-					Name:        "Execution",
-					Description: "Execution flow when the blueprint is created",
+					ID:          "then",
+					Name:        "Then",
+					Description: "Then flow when the blueprint is created",
 					Type:        types.PinTypes.Execution,
 				},
 				{
@@ -57,7 +57,7 @@ func (n *OnCreatedEventNode) Execute(ctx node.ExecutionContext) error {
 	ctx.SetOutputValue("timestamp", types.NewValue(types.PinTypes.Number, float64(time.Now().UnixNano()/1e6)))
 
 	// Activate the execution flow
-	return ctx.ActivateOutputFlow("execution")
+	return ctx.ActivateOutputFlow("then")
 }
 
 // OnTickEventNode represents the periodic tick event

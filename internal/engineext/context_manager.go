@@ -5,6 +5,7 @@ import (
 	"webblueprint/internal/core"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	"webblueprint/pkg/blueprint"
 )
 
 // ContextManager provides a centralized way to create and manage execution contexts
@@ -30,6 +31,7 @@ func NewContextManager(
 
 // CreateContextBuilder creates a new context builder with default settings
 func (cm *ContextManager) CreateContextBuilder(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -41,6 +43,7 @@ func (cm *ContextManager) CreateContextBuilder(
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
 ) *ContextBuilder {
 	return NewContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -55,6 +58,7 @@ func (cm *ContextManager) CreateContextBuilder(
 
 // CreateStandardContext creates a context with the most common settings
 func (cm *ContextManager) CreateStandardContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -67,6 +71,7 @@ func (cm *ContextManager) CreateStandardContext(
 ) node.ExecutionContext {
 	// Create a context with common settings
 	return NewContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -84,6 +89,7 @@ func (cm *ContextManager) CreateStandardContext(
 
 // CreateActorContext creates a context optimized for actor-based execution
 func (cm *ContextManager) CreateActorContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -96,6 +102,7 @@ func (cm *ContextManager) CreateActorContext(
 ) node.ExecutionContext {
 	// Create a context optimized for actor-based execution
 	return NewContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -114,6 +121,7 @@ func (cm *ContextManager) CreateActorContext(
 
 // CreateEventHandlerContext creates a context for event handlers
 func (cm *ContextManager) CreateEventHandlerContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -127,6 +135,7 @@ func (cm *ContextManager) CreateEventHandlerContext(
 ) node.ExecutionContext {
 	// Create a context for event handlers
 	return NewContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -143,6 +152,7 @@ func (cm *ContextManager) CreateEventHandlerContext(
 }
 
 func (cm *ContextManager) CreateFunctionContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -155,6 +165,7 @@ func (cm *ContextManager) CreateFunctionContext(
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
 ) node.ExecutionContext {
 	return NewContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,

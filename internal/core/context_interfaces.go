@@ -90,10 +90,14 @@ type ErrorAwareContext interface {
 	GetDefaultValue(pinType *types.PinType) (types.Value, bool)
 }
 
+type ActorAwareContext interface {
+	node.ExecutionContext
+
+	SetInputPinActive(pinID string)
+}
+
 // ContextProvider defines an interface for providing execution contexts with additional capabilities
 type ContextProvider interface {
-	MigrateContext(oldCtx node.ExecutionContext) (node.ExecutionContext, error)
-
 	// CreateEventAwareContext creates a context with event capabilities
 	CreateEventAwareContext(
 		baseCtx node.ExecutionContext,

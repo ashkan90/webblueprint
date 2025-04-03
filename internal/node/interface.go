@@ -51,6 +51,7 @@ type Logger interface {
 
 // ExecutionContext provides services to nodes during execution
 type ExecutionContext interface {
+	SaveData(key string, value interface{})
 	// Input/output access
 	GetInputValue(pinID string) (types.Value, bool)
 	SetOutputValue(pinID string, value types.Value)

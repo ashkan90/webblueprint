@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/gorilla/mux"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,7 +16,10 @@ import (
 	"webblueprint/internal/engine"
 	"webblueprint/internal/engineext"
 	"webblueprint/internal/event"
+	"webblueprint/internal/registry"
 	"webblueprint/pkg/db"
+
+	"github.com/gorilla/mux"
 )
 
 func main() {
@@ -42,6 +44,10 @@ func main() {
 	ctx := context.Background()
 	// Create router
 	router := mux.NewRouter()
+
+	registry.Make()
+
+	//registerNodes()
 
 	setupAPI(ctx, router)
 
@@ -110,20 +116,29 @@ func setupAPI(ctx context.Context, router *mux.Router) {
 	recoveryManager := bperrors.NewRecoveryManager(errorManager)
 
 	flowEngine := engine.NewExecutionEngine(logger, debugManager)
+	// Create the concrete EventManager, passing the engine as the controller
 	eventManager := event.NewEventManager(flowEngine)
-	eventManagerAdapter := event.NewEventManagerAdapter(eventManager)
+	// Get the core interface adapter directly from the concrete manager
+	eventManagerCoreAdapter := eventManager.AsEventManagerInterface()
+	// eventManagerAdapter := event.NewEventManagerAdapter(eventManager) // Remove usage of the separate adapter
+
+	flowEngine.SetExecutionMode(engine.ModeActor)
+
 	contextManager := engineext.NewContextManager(
 		errorManager,
 		recoveryManager,
-		eventManagerAdapter,
+		eventManagerCoreAdapter, // Pass the core interface adapter
 	)
+	// engineext.InitializeExtensions expects the concrete manager
 	contextExtension := engineext.InitializeExtensions(
 		flowEngine,
 		contextManager,
 		errorManager,
 		recoveryManager,
-		eventManagerAdapter,
+		eventManager, // Pass the concrete *event.EventManager
 	)
+
+	flowEngine.SetExtensions(contextExtension)
 
 	server := api.NewAPIServerWithDB(
 		flowEngine,
@@ -133,5 +148,6 @@ func setupAPI(ctx context.Context, router *mux.Router) {
 		contextExtension,
 	)
 
+	server.InitiateCoreNodes()
 	server.SetupRoutes(router)
 }

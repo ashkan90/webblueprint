@@ -6,6 +6,7 @@ import (
 	"webblueprint/internal/event"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	"webblueprint/pkg/blueprint"
 )
 
 // ExecutionEngineExtensions adds context management capabilities to the execution engine
@@ -17,9 +18,10 @@ type ExecutionEngineExtensions struct {
 	ContextManager *ContextManager
 
 	// Dependencies
-	ErrorManager    *bperrors.ErrorManager
-	RecoveryManager *bperrors.RecoveryManager
-	EventManager    core.EventManagerInterface
+	ErrorManager         *bperrors.ErrorManager
+	RecoveryManager      *bperrors.RecoveryManager
+	EventManager         core.EventManagerInterface // Core interface for general use
+	ConcreteEventManager *event.EventManager        // Concrete type for specific needs
 
 	// Logger from engine
 	logger node.Logger
@@ -27,6 +29,7 @@ type ExecutionEngineExtensions struct {
 
 // CreateContext creates an execution context with the appropriate capabilities
 func (ext *ExecutionEngineExtensions) CreateContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -47,6 +50,7 @@ func (ext *ExecutionEngineExtensions) CreateContext(
 	// Create the appropriate context using the context manager
 	if executionMode == "actor" {
 		return ext.ContextManager.CreateActorContext(
+			bp,
 			nodeID,
 			nodeType,
 			blueprintID,
@@ -61,6 +65,7 @@ func (ext *ExecutionEngineExtensions) CreateContext(
 
 	// For standard mode, determine if event or error handling is required
 	return ext.ContextManager.CreateStandardContext(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -75,6 +80,7 @@ func (ext *ExecutionEngineExtensions) CreateContext(
 
 // CreateEventHandlerContext creates a context for event handlers
 func (ext *ExecutionEngineExtensions) CreateEventHandlerContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -86,6 +92,7 @@ func (ext *ExecutionEngineExtensions) CreateEventHandlerContext(
 	eventHandlerContext *core.EventHandlerContext,
 ) node.ExecutionContext {
 	return ext.ContextManager.CreateEventHandlerContext(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -100,6 +107,7 @@ func (ext *ExecutionEngineExtensions) CreateEventHandlerContext(
 }
 
 func (ext *ExecutionEngineExtensions) CreateFunctionContext(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -111,6 +119,7 @@ func (ext *ExecutionEngineExtensions) CreateFunctionContext(
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
 ) node.ExecutionContext {
 	return ext.ContextManager.CreateFunctionContext(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -142,6 +151,11 @@ func (ext *ExecutionEngineExtensions) GetRecoveryManager() *bperrors.RecoveryMan
 // GetEventManager returns the event manager
 func (ext *ExecutionEngineExtensions) GetEventManager() core.EventManagerInterface {
 	return ext.EventManager
+}
+
+// GetConcreteEventManager returns the concrete event manager instance
+func (ext *ExecutionEngineExtensions) GetConcreteEventManager() *event.EventManager {
+	return ext.ConcreteEventManager
 }
 
 // EventAwareExecutionEngine backwards compatibility type

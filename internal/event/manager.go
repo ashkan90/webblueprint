@@ -2,6 +2,7 @@ package event
 
 import (
 	"fmt"
+	"webblueprint/internal/core"
 )
 
 // EventListener interface for subscribing to event notifications
@@ -32,6 +33,15 @@ func (l *defaultLogger) Error(msg string, fields map[string]interface{}) {
 
 func (l *defaultLogger) Opts(options map[string]interface{}) {
 	// No-op for default logger
+}
+
+func ExtractEventManager(e core.EventManagerInterface) *EventManager {
+	m, ok := e.(*eventManagerAdapter)
+	if !ok {
+		return nil
+	}
+
+	return m.manager
 }
 
 // EventManager manages event registration, binding, and dispatching

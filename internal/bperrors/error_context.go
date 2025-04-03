@@ -148,6 +148,10 @@ func (w *ErrorContextWrapper) GetExecutionID() string {
 	return w.Context.GetExecutionID()
 }
 
+func (w *ErrorContextWrapper) SaveData(key string, value interface{}) {
+	w.Context.SaveData(key, value)
+}
+
 // Error handling methods
 
 // ReportError reports an error during node execution

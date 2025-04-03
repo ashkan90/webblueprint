@@ -2,20 +2,23 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"log"
 	"log/slog"
 	"net/http"
 	"sync"
 	"webblueprint/internal/bperrors"
-	"webblueprint/internal/core"
+	"webblueprint/internal/nodes"
+	// "webblueprint/internal/core" // No longer needed directly
 	"webblueprint/internal/engine"
 	"webblueprint/internal/engineext"
+	"webblueprint/internal/event" // Ensure event is imported
 	"webblueprint/internal/node"
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/repository"
 	"webblueprint/pkg/service"
+
+	"github.com/gorilla/mux"
 )
 
 // APIServer handles HTTP API requests with repository integration
@@ -27,7 +30,7 @@ type APIServerWithDB struct {
 	debugManager     *engine.DebugManager
 	errorManager     *bperrors.ErrorManager
 	recoveryManager  *bperrors.RecoveryManager
-	eventManager     core.EventManagerInterface
+	eventManager     *event.EventManager // Ensure concrete type is used
 	repoFactory      repository.RepositoryFactory
 	blueprintService *service.BlueprintService
 	userService      *service.UserService
@@ -73,10 +76,16 @@ func NewAPIServerWithDB(
 	// Get components from the engine extensions
 	errorManager := engineExtensions.GetErrorManager()
 	recoveryManager := engineExtensions.GetRecoveryManager()
-	eventManager := engineExtensions.GetEventManager()
+
+	// Get the concrete event manager instead
+	concreteEventManager := engineExtensions.GetConcreteEventManager()
+	if concreteEventManager == nil {
+		// Handle error: concrete manager should exist if extensions were initialized correctly
+		panic("Concrete Event Manager not found in engine extensions")
+	}
 
 	// Register WebSocket handlers with error manager
-	wsManager.RegisterErrorHandlers(errorManager, nil)
+	wsManager.RegisterErrorHandlers(errorManager, wsManager.Logger)
 
 	return &APIServerWithDB{
 		executionEngine:  executionEngine,
@@ -86,7 +95,7 @@ func NewAPIServerWithDB(
 		debugManager:     debugManager,
 		errorManager:     errorManager,
 		recoveryManager:  recoveryManager,
-		eventManager:     eventManager,
+		eventManager:     concreteEventManager,
 		repoFactory:      repoFactory,
 		blueprintService: blueprintService,
 		userService:      userService,
@@ -99,6 +108,9 @@ func NewAPIServerWithDB(
 
 // RegisterNodeType registers a node type with both the execution engine and API server
 func (s *APIServerWithDB) RegisterNodeType(typeID string, factory node.NodeFactory) {
+	// Store in global registry to distribute to UI
+	registry.GetInstance().RegisterNodeType(typeID, factory)
+
 	// This method stays the same as the original API server
 	// Store locally
 	s.nodeRegistry[typeID] = factory
@@ -188,19 +200,20 @@ func (s *APIServerWithDB) setupErrorAPI(router *mux.Router) {
 
 // Setup event API endpoints
 func (s *APIServerWithDB) setupEventAPI(router *mux.Router) {
-	// Use the event manager from the engine extensions
-	eventManagerInterface := s.eventManager
-	if eventManagerInterface == nil {
-		slog.Error("Event manager is not available, events will not be functional", nil)
+	// Use the concrete event manager stored in the server struct
+	concreteEventManager := s.eventManager // s.eventManager is now *event.EventManager
+	if concreteEventManager == nil {
+		slog.Error("Concrete Event manager is not available, events will not be functional", nil)
 		return
 	}
 
-	// Create event API handler
-	eventHandler := NewEventAPIHandler(eventManagerInterface, s.eventService, s.wsManager)
+	// Create event API handler (expects concrete *event.EventManager)
+	eventHandler := NewEventAPIHandler(concreteEventManager, s.eventService, s.wsManager)
 	eventHandler.RegisterEventRoutes(router)
 
 	// Register event test route for triggering events from UI
-	eventTestHandler := NewEventTestHandler(eventManagerInterface, s.wsManager)
+	// NewEventTestHandler expects event.EventManagerInterface, which *event.EventManager implements
+	eventTestHandler := NewEventTestHandler(concreteEventManager, s.wsManager)
 	eventTestHandler.RegisterRoutes(router)
 
 	slog.Info("Event API endpoints registered")
@@ -233,6 +246,13 @@ func (s *APIServerWithDB) handleGetNodeTypes(w http.ResponseWriter, request *htt
 // GetEngineExtensions returns the execution engine extensions
 func (s *APIServerWithDB) GetEngineExtensions() *engineext.ExecutionEngineExtensions {
 	return s.engineExtensions
+}
+
+func (s *APIServerWithDB) InitiateCoreNodes() {
+	for k, factory := range nodes.Core {
+		s.RegisterNodeType(k, factory)
+		//registry.GetInstance().RegisterNodeType(s, factory)
+	}
 }
 
 // convertPinsToInfo converts pins to a format suitable for the client

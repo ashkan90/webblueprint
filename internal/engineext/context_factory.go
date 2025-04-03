@@ -8,6 +8,7 @@ import (
 	"webblueprint/internal/event"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	"webblueprint/pkg/blueprint"
 )
 
 // ContextFactory provides utility methods for creating different kinds of contexts
@@ -15,7 +16,7 @@ import (
 type ContextFactory struct {
 	errorManager    *bperrors.ErrorManager
 	recoveryManager *bperrors.RecoveryManager
-	eventManager    core.EventManagerInterface // Use concrete type
+	eventManager    *event.EventManager // Use concrete type
 	contextManager  *ContextManager
 }
 
@@ -23,13 +24,13 @@ type ContextFactory struct {
 func NewContextFactory(
 	errorManager *bperrors.ErrorManager,
 	recoveryManager *bperrors.RecoveryManager,
-	eventManager core.EventManagerInterface, // Expect concrete type
+	eventManager *event.EventManager, // Expect concrete type
 ) *ContextFactory {
 	// Create a context manager, passing the concrete event manager's core interface
 	contextManager := NewContextManager(
 		errorManager,
 		recoveryManager,
-		eventManager, // Pass core interface to ContextManager
+		eventManager.AsEventManagerInterface(), // Pass core interface adapter to ContextManager
 	)
 
 	return &ContextFactory{
@@ -40,105 +41,108 @@ func NewContextFactory(
 	}
 }
 
-// MigrateContext migrates an old context to the new context system
-func (f *ContextFactory) MigrateContext(oldCtx node.ExecutionContext) (node.ExecutionContext, error) {
-	// Check if this is already a new-style context
-	if _, ok := oldCtx.(*DefaultExecutionContext); ok {
-		return oldCtx, nil
-	}
-
-	// Get basic information from the old context
-	nodeID := oldCtx.GetNodeID()
-	nodeType := oldCtx.GetNodeType()
-	blueprintID := oldCtx.GetBlueprintID()
-	executionID := oldCtx.GetExecutionID()
-
-	// Create a dummy activate flow function
-	activateFlow := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
-		// Try to call the old context's activate flow method
-		return oldCtx.ActivateOutputFlow(pinID)
-	}
-
-	// Try to extract variables from the old context
-	variables := make(map[string]types.Value)
-
-	// Try to extract inputs from the old context
-	inputs := make(map[string]types.Value)
-
-	// Check capabilities of the old context
-	capabilities := make(map[string]bool)
-
-	// Check for error handling via type assertion
-	if _, ok := oldCtx.(*ErrorAwareContext); ok {
-		capabilities["error_handling"] = true
-	}
-
-	// Check for event handling via type assertion
-	if _, ok := oldCtx.(core.EventAwareContext); ok {
-		capabilities["events"] = true
-	}
-
-	// Check for actor mode
-	if _, ok := oldCtx.(*ActorExecutionContext); ok {
-		capabilities["actor"] = true
-	}
-
-	// Check for function context
-	if _, ok := oldCtx.(*FunctionExecutionContext); ok {
-		capabilities["function"] = true
-	}
-
-	// Create a new context with the same capabilities
-	builder := f.contextManager.CreateContextBuilder(
-		nodeID,
-		nodeType,
-		blueprintID,
-		executionID,
-		inputs,
-		variables,
-		oldCtx.Logger(),
-		nil, // We don't have access to hooks
-		activateFlow,
-	)
-
-	// Add capabilities based on what was detected
-	if capabilities["error_handling"] {
-		builder.WithErrorHandling(f.errorManager, f.recoveryManager)
-	}
-
-	if capabilities["events"] {
-		builder.WithEventSupport(f.eventManager, false, nil) // Use adapter
-	}
-
-	if capabilities["actor"] {
-		builder.WithActorMode()
-	}
-
-	// Build the new context
-	newCtx := builder.Build()
-
-	// For function contexts, create a specialized function context
-	if capabilities["function"] {
-		// Extract function ID from context - since we can't access the field directly anymore
-		functionID := "unknown"
-		// Try to extract it from context data if available
-
-		return f.contextManager.CreateFunctionContext(
-			nodeID,
-			nodeType,
-			blueprintID,
-			executionID,
-			functionID,
-			inputs,
-			variables,
-			oldCtx.Logger(),
-			nil,
-			activateFlow,
-		), nil
-	}
-
-	return newCtx, nil
-}
+//// MigrateContext migrates an old context to the new context system
+//func (f *ContextFactory) MigrateContext(oldCtx node.ExecutionContext) (node.ExecutionContext, error) {
+//	// Check if this is already a new-style context
+//	if _, ok := oldCtx.(*DefaultExecutionContext); ok {
+//		return oldCtx, nil
+//	}
+//
+//	// Get basic information from the old context
+//	nodeID := oldCtx.GetNodeID()
+//	nodeType := oldCtx.GetNodeType()
+//	blueprintID := oldCtx.GetBlueprintID()
+//	executionID := oldCtx.GetExecutionID()
+//
+//	// Create a dummy activate flow function
+//	activateFlow := func(ctx *DefaultExecutionContext, nodeID, pinID string) error {
+//		// Try to call the old context's activate flow method
+//		return oldCtx.ActivateOutputFlow(pinID)
+//	}
+//
+//	// Try to extract variables from the old context
+//	variables := make(map[string]types.Value)
+//
+//	// Try to extract inputs from the old context
+//	inputs := make(map[string]types.Value)
+//
+//	// Check capabilities of the old context
+//	capabilities := make(map[string]bool)
+//
+//	// Check for error handling via type assertion
+//	if _, ok := oldCtx.(*ErrorAwareContext); ok {
+//		capabilities["error_handling"] = true
+//	}
+//
+//	// Check for event handling via type assertion
+//	if _, ok := oldCtx.(core.EventAwareContext); ok {
+//		capabilities["events"] = true
+//	}
+//
+//	// Check for actor mode
+//	if _, ok := oldCtx.(*ActorExecutionContext); ok {
+//		capabilities["actor"] = true
+//	}
+//
+//	// Check for function context
+//	if _, ok := oldCtx.(*FunctionExecutionContext); ok {
+//		capabilities["function"] = true
+//	}
+//
+//	// Create a new context with the same capabilities
+//	builder := f.contextManager.CreateContextBuilder(
+//		bp,
+//		nodeID,
+//		nodeType,
+//		blueprintID,
+//		executionID,
+//		inputs,
+//		variables,
+//		oldCtx.Logger(),
+//		nil, // We don't have access to hooks
+//		activateFlow,
+//	)
+//
+//	// Add capabilities based on what was detected
+//	if capabilities["error_handling"] {
+//		builder.WithErrorHandling(f.errorManager, f.recoveryManager)
+//	}
+//
+//	if capabilities["events"] {
+//		// Pass the core interface adapter to WithEventSupport
+//		builder.WithEventSupport(f.eventManager.AsEventManagerInterface(), false, nil)
+//	}
+//
+//	if capabilities["actor"] {
+//		builder.WithActorMode()
+//	}
+//
+//	// Build the new context
+//	newCtx := builder.Build()
+//
+//	// For function contexts, create a specialized function context
+//	if capabilities["function"] {
+//		// Extract function ID from context - since we can't access the field directly anymore
+//		functionID := "unknown"
+//		// Try to extract it from context data if available
+//
+//		return f.contextManager.CreateFunctionContext(
+//			bp,
+//			nodeID,
+//			nodeType,
+//			blueprintID,
+//			executionID,
+//			functionID,
+//			inputs,
+//			variables,
+//			oldCtx.Logger(),
+//			nil,
+//			activateFlow,
+//		), nil
+//	}
+//
+//	return newCtx, nil
+//}
 
 // CreateErrorAwareContext creates a context with error handling capabilities
 func (f *ContextFactory) CreateErrorAwareContext(
@@ -182,7 +186,7 @@ func (f *ContextFactory) CreateActorContext(
 	baseCtx node.ExecutionContext,
 ) node.ExecutionContext {
 	// Check if the context already has event handling
-	if _, ok := baseCtx.(core.EventAwareContext); ok {
+	if _, ok := baseCtx.(core.ActorAwareContext); ok {
 		return baseCtx
 	}
 
@@ -240,7 +244,7 @@ func (f *ContextFactory) GetOrCreateEventManager(ctx node.ExecutionContext) (nod
 	)
 
 	// Return the new context and the core interface adapter
-	return newCtx, f.eventManager
+	return newCtx, f.eventManager.AsEventManagerInterface()
 }
 
 // GetContextManager returns the context manager
@@ -250,6 +254,7 @@ func (f *ContextFactory) GetContextManager() *ContextManager {
 
 // CreateContextFromSettings creates a context with the specified settings
 func (f *ContextFactory) CreateContextFromSettings(
+	bp *blueprint.Blueprint,
 	nodeID string,
 	nodeType string,
 	blueprintID string,
@@ -276,6 +281,7 @@ func (f *ContextFactory) CreateContextFromSettings(
 
 	// Create a context builder
 	builder := f.contextManager.CreateContextBuilder(
+		bp,
 		nodeID,
 		nodeType,
 		blueprintID,
@@ -303,7 +309,8 @@ func (f *ContextFactory) CreateContextFromSettings(
 			}
 		}
 
-		builder.WithEventSupport(f.eventManager, isEventHandler, eventHandlerContext) // Use adapter
+		// Pass the core interface adapter to WithEventSupport
+		builder.WithEventSupport(f.eventManager.AsEventManagerInterface(), isEventHandler, eventHandlerContext)
 	}
 
 	if useActorMode {

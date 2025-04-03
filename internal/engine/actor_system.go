@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"webblueprint/internal/common"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
@@ -13,6 +14,7 @@ import (
 
 // ActorSystem manages all actors for a blueprint execution
 type ActorSystem struct {
+	ctxManager    *engineext.ContextManager
 	actors        map[string]*NodeActor
 	connections   map[string][]Connection
 	executionID   string
@@ -27,6 +29,7 @@ type ActorSystem struct {
 	waitGroup     sync.WaitGroup
 
 	// Add hooks
+	hooks             *node.ExecutionHooks
 	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
@@ -45,6 +48,7 @@ type Connection struct {
 
 // NewActorSystem creates a new actor system for a blueprint execution
 func NewActorSystem(
+	ctxManager *engineext.ContextManager,
 	executionID string,
 	bp *blueprint.Blueprint,
 	nodeRegistry map[string]node.NodeFactory,
@@ -52,6 +56,7 @@ func NewActorSystem(
 	listeners []ExecutionListener,
 	debugMgr *DebugManager,
 	initialVariables map[string]types.Value,
+	hooks *node.ExecutionHooks,
 	nodeExecutionHook func(ctx context.Context, executionID, nodeID, nodeType, execState string,
 		inputs, outputs map[string]interface{}) error,
 	anyHook func(ctx context.Context, executionID, nodeID, level, message string,
@@ -78,6 +83,7 @@ func NewActorSystem(
 	}
 
 	return &ActorSystem{
+		ctxManager:        ctxManager,
 		actors:            make(map[string]*NodeActor),
 		connections:       connections,
 		executionID:       executionID,
@@ -88,6 +94,7 @@ func NewActorSystem(
 		debugMgr:          debugMgr,
 		variables:         variables,
 		executionDone:     make(chan struct{}),
+		hooks:             hooks,
 		nodeExecutionHook: nodeExecutionHook,
 		anyHook:           anyHook,
 	}, nil
@@ -115,6 +122,19 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			"nodeId": nodeConfig.ID,
 		})
 
+		actorCtx := s.ctxManager.CreateActorContext(
+			bp,
+			nodeConfig.ID,
+			nodeConfig.Type,
+			bp.ID,
+			s.executionID,
+			make(map[string]types.Value),
+			s.variables,
+			s.logger,
+			s.hooks,
+			nil,
+		)
+
 		// Create the actor
 		actor := NewNodeActor(
 			nodeConfig.ID,
@@ -126,15 +146,18 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			s.listeners,
 			s.debugMgr,
 			s.variables,
-			s.nodeExecutionHook, // Pass the node execution hook
-			s.anyHook,           // Pass the any hook
+			s.nodeExecutionHook,
+			s.anyHook,
 		)
+
+		actorCtx.SaveData("node.properties", actor.properties)
+		actorCtx.SaveData("node.inputPins", nodeInstance.GetInputPins())
 
 		// Store the actor
 		s.actors[nodeConfig.ID] = actor
 
 		// Start the actor
-		actor.Start()
+		actor.Start(actorCtx)
 	}
 
 	// Second pass: execute data nodes immediately
@@ -306,8 +329,15 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 		return
 	}
 
-	// Get activated flows
-	activatedFlows := actor.ctx.GetActivatedOutputFlows()
+	// Get activated flows using the helper function
+	var activatedFlows []string
+	if extCtx := engineext.GetExtendedContext(actor.decoratedCtx); extCtx != nil {
+		activatedFlows = extCtx.GetActivatedOutputFlows()
+	} else {
+		// Fallback or log error if ExtendedExecutionContext was not found
+		s.logger.Warn("Could not retrieve ExtendedExecutionContext to get activated flows", map[string]interface{}{"nodeId": actor.NodeID, "contextType": fmt.Sprintf("%T", actor.decoratedCtx)})
+		activatedFlows = []string{} // Initialize to empty slice
+	}
 
 	// Process data connections first to ensure data is available before execution
 	for _, conn := range connections {

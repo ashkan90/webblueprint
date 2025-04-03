@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -255,8 +256,8 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		if _, exists := e.outputs[nodeID]; !exists {
 			e.outputs[nodeID] = make(map[string]types.Value)
 		}
-
-		for pin, value := range ctx.outputs {
+		// Call GetAllOutputs directly on the concrete context
+		for pin, value := range ctx.GetAllOutputs() {
 			e.outputs[nodeID][pin] = value
 		}
 		e.mutex.Unlock()
@@ -276,6 +277,8 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		return nil
 	}
 
+	storeCtx := context.WithValue(context.Background(), "bp", bp)
+
 	// Create execution context
 	ctx := engineext.NewExecutionContext(
 		nodeID,
@@ -287,6 +290,7 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		e.logger,
 		hooks,
 		activateFlowFn,
+		storeCtx,
 	)
 
 	// Notify node start
@@ -310,8 +314,8 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 	if _, exists := e.outputs[nodeID]; !exists {
 		e.outputs[nodeID] = make(map[string]types.Value)
 	}
-
-	for pin, value := range ctx.outputs {
+	// Call GetAllOutputs directly on the concrete context
+	for pin, value := range ctx.GetAllOutputs() {
 		e.outputs[nodeID][pin] = value
 	}
 	e.mutex.Unlock()

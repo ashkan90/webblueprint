@@ -127,3 +127,11 @@ func (ctx *EventAwareContextImpl) GetEventSourceID() string {
 func (ctx *EventAwareContextImpl) AsEventAwareContext() ExecutionContextWithEvents {
 	return ctx
 }
+
+// Unwrap returns the underlying ExecutionContext that this context decorates.
+func (ctx *EventAwareContextImpl) Unwrap() node.ExecutionContext {
+	return ctx.ExecutionContext
+}
+
+// Ensure EventAwareContextImpl implements ExecutionContextWithEvents
+var _ ExecutionContextWithEvents = (*EventAwareContextImpl)(nil)

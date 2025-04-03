@@ -2,24 +2,26 @@ package events
 
 import (
 	"fmt"
-	"webblueprint/internal/bperrors"
+	"webblueprint/internal/bperrors" // Keep bperrors for Validate
 	"webblueprint/internal/event"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	// "webblueprint/internal/core" // No longer needed? Check usage
 )
 
 // EventBindNodeMetadata defines metadata for the event bind node
 var EventBindNodeMetadata = node.NodeMetadata{
 	TypeID:      "event-bind",
-	Name:        "Event Bind",
-	Description: "Binds a function to an event",
+	Name:        "On Event Received",                                                   // Updated Name to reflect behavior
+	Description: "Listens for a specific event and triggers execution when it occurs.", // Updated description
 	Category:    "Events",
-	Version:     "1.0.0",
+	Version:     "1.1.0", // Bump version due to significant change
 	Properties: []types.Property{
+		// Keep description and priority properties
 		{
 			Name:        "description",
 			DisplayName: "Description",
-			Description: "Optional description for this binding",
+			Description: "Optional description for this listener",
 			Value:       "",
 		},
 		{
@@ -28,424 +30,149 @@ var EventBindNodeMetadata = node.NodeMetadata{
 			Description: "Execution priority (higher numbers execute first)",
 			Value:       0,
 		},
-	},
-	InputPins: []types.Pin{
+		// Add Event ID as a property instead of an input pin
 		{
-			ID:          "bind",
-			Name:        "Bind",
-			Description: "Trigger to bind the event",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "unbind",
-			Name:        "Unbind",
-			Description: "Trigger to unbind the event",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "eventID",
-			Name:        "Event ID",
-			Description: "ID of the event to bind to",
-			Type:        types.PinTypes.String,
+			Name:        "eventID",
+			DisplayName: "Event ID",
+			Description: "ID of the event to listen for",
+			Value:       "", // Default to empty, user must configure
 		},
 	},
 	OutputPins: []types.Pin{
 		{
-			ID:          "onBound",
-			Name:        "On Bound",
-			Description: "Triggered when the event is bound",
+			ID:          "onEventReceived",   // Changed ID for clarity
+			Name:        "On Event Received", // Changed Name for clarity
+			Description: "Triggered when the specified event is received",
 			Type:        types.PinTypes.Execution,
 		},
-		{
-			ID:          "onUnbound",
-			Name:        "On Unbound",
-			Description: "Triggered when the event is unbound",
-			Type:        types.PinTypes.Execution,
-		},
-		{
-			ID:          "bindingID",
-			Name:        "Binding ID",
-			Description: "ID of the binding (for later unbinding)",
-			Type:        types.PinTypes.String,
-		},
+		// Dynamic output pins for event parameters will be added by AddDynamicOutputPins
 	},
 }
 
-// EventBindNode binds an event handler to an event
+// EventBindNode listens for a specific event and triggers execution when it occurs.
 type EventBindNode struct {
 	node.BaseNode
-	bindingID string // Track the binding ID
 }
 
 // NewEventBindNode creates a new event bind node
 func NewEventBindNode() node.Node {
+	// Initialize BaseNode directly using metadata
 	return &EventBindNode{
 		BaseNode: node.BaseNode{
-			Metadata: EventBindNodeMetadata,
+			Metadata:   EventBindNodeMetadata,
+			Inputs:     EventBindNodeMetadata.InputPins,  // Get pins from metadata
+			Outputs:    EventBindNodeMetadata.OutputPins, // Get pins from metadata
+			Properties: EventBindNodeMetadata.Properties, // Get properties from metadata
 		},
-		bindingID: "",
 	}
 }
 
 // AddDynamicOutputPins adds output pins based on event parameters
+// This might be called during blueprint load/validation or when the event definition is known
 func (n *EventBindNode) AddDynamicOutputPins(eventDef event.EventDefinition) {
 	// Get existing pins
 	pins := n.GetOutputPins()
+	pinMap := make(map[string]bool)
+	for _, p := range pins {
+		pinMap[p.ID] = true
+	}
 
-	// Check if the pin already exists
+	// Add pins for parameters if they don't already exist
 	for _, param := range eventDef.Parameters {
-		exists := false
-		for _, pin := range pins {
-			if pin.ID == param.Name {
-				exists = true
-				break
-			}
-		}
-
-		// If the pin doesn't exist, add it
-		if !exists {
-			// Add a pin for each parameter
+		if !pinMap[param.Name] {
 			n.AddOutputPin(types.Pin{
 				ID:          param.Name,
-				Name:        param.Name,
+				Name:        param.Name, // Use parameter name as pin name
 				Description: param.Description,
 				Type:        param.Type,
-				Optional:    true, // All event parameters are optional
+				Optional:    true, // Event parameters are treated as optional outputs here
 			})
+			pinMap[param.Name] = true // Mark as added
 		}
 	}
 }
 
-// Execute binds an event handler
+// Execute handles the event trigger from the EventManager
 func (n *EventBindNode) Execute(ctx node.ExecutionContext) error {
-	// Get the logger
 	logger := ctx.Logger()
 
-	// Check which pin was activated
-	inputPin := ""
-	if activationCtx, ok := ctx.(node.ActivationAwareContext); ok {
-		for _, pin := range []string{"bind", "unbind"} {
-			if activationCtx.IsInputPinActive(pin) {
-				inputPin = pin
+	// This node should ONLY execute when triggered by an event.
+	evtCtx, ok := ctx.(event.ExecutionContextWithEvents)
+	if !ok || !evtCtx.IsEventHandlerActive() {
+		// If not triggered by an event, this node shouldn't do anything.
+		logger.Warn("EventBindNode executed but not via an event trigger. Ignoring.", map[string]interface{}{"nodeID": ctx.GetNodeID()})
+		return nil // Not an error, just unexpected activation
+	}
+
+	handlerCtx := evtCtx.GetEventHandlerContext()
+	if handlerCtx == nil {
+		// This shouldn't happen if IsEventHandlerActive is true, but check defensively.
+		err := fmt.Errorf("event handler context is nil despite being active for node %s", ctx.GetNodeID())
+		logger.Error(err.Error(), nil)
+		return err
+	}
+
+	// Optional: Verify the received eventID matches the configured one?
+	// configuredEventID := n.GetProperty("eventID").Value.(string) // Assuming property access method
+	// if configuredEventID != "" && handlerCtx.EventID != configuredEventID {
+	//     logger.Warn("EventBindNode received event it wasn't configured for?", map[string]interface{}{"configured": configuredEventID, "received": handlerCtx.EventID})
+	//     return nil // Ignore if mismatch? Or should binding prevent this?
+	// }
+
+	logger.Debug("Executing EventBindNode as event handler", map[string]interface{}{
+		"eventID":   handlerCtx.EventID,
+		"bindingID": handlerCtx.BindingID, // Still useful for debugging maybe
+		"sourceID":  handlerCtx.SourceID,
+	})
+
+	// Get the Event Definition to potentially add dynamic pins
+	// This might happen too late if pins are needed immediately.
+	// Consider if AddDynamicOutputPins should be called earlier (e.g., during binding/load).
+	eventManager := evtCtx.GetEventManager()
+	eventDef, exists := eventManager.GetEventDefinition(handlerCtx.EventID)
+	if exists {
+		n.AddDynamicOutputPins(eventDef)
+	} else {
+		logger.Warn("Event definition not found while handling event", map[string]interface{}{"eventID": handlerCtx.EventID, "nodeID": ctx.GetNodeID()})
+	}
+
+	// Set output values based on event parameters
+	for paramName, paramValue := range handlerCtx.Parameters {
+		pinExists := false
+		for _, pin := range n.GetOutputPins() {
+			if pin.ID == paramName {
+				pinExists = true
 				break
 			}
 		}
-	} else {
-		// Fallback - assume "bind" was activated
-		inputPin = "bind"
-	}
-
-	// Get the event ID
-	eventIDValue, exists := ctx.GetInputValue("eventID")
-	if !exists {
-		logger.Error("Event ID not provided", nil)
-		return fmt.Errorf("event ID not provided")
-	}
-
-	// Convert to string
-	eventID, ok := eventIDValue.RawValue.(string)
-	if !ok {
-		logger.Error("Event ID is not a string", nil)
-		return fmt.Errorf("event ID is not a string")
-	}
-
-	// Get event manager from context
-	var eventManager event.EventManagerInterface
-	if evtCtx, ok := ctx.(event.ExecutionContextWithEvents); ok {
-		eventManager = evtCtx.GetEventManager()
-	} else {
-		logger.Error("Event manager not available in context", nil)
-
-		// Set outputs
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-
-		return fmt.Errorf("event manager not available in context")
-	}
-
-	// Check if the event exists
-	eventDef, exists := eventManager.GetEventDefinition(eventID)
-	if !exists {
-		logger.Error("Event does not exist", map[string]interface{}{
-			"eventID": eventID,
-		})
-
-		// Set outputs
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-
-		return fmt.Errorf("event does not exist: %s", eventID)
-	}
-
-	// Handle unbind first
-	if inputPin == "unbind" {
-		if n.bindingID != "" {
-			// Unbind the event
-			eventManager.RemoveBinding(n.bindingID)
-			logger.Info("Event unbound", map[string]interface{}{
-				"eventID":   eventID,
-				"bindingID": n.bindingID,
-			})
-
-			// Trigger the onUnbound output
-			ctx.ActivateOutputFlow("onUnbound")
-		}
-
-		// Set the binding ID output (empty)
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-		n.bindingID = ""
-
-		return nil
-	}
-
-	// Get binding settings from properties
-	var priority int
-	var description string // Used for documentation purposes
-
-	for _, prop := range n.GetProperties() {
-		if prop.Name == "description" {
-			description, _ = prop.Value.(string)
-			// Log the description for debugging purposes
-			if description != "" {
-				logger.Debug("Binding description", map[string]interface{}{
-					"description": description,
-				})
-			}
-		} else if prop.Name == "priority" {
-			if val, ok := prop.Value.(float64); ok {
-				priority = int(val)
-			} else if val, ok := prop.Value.(int); ok {
-				priority = val
-			}
-		}
-	}
-
-	// Add dynamic output pins for event parameters
-	n.AddDynamicOutputPins(eventDef)
-
-	// Create a binding ID
-	bindingID := fmt.Sprintf("binding-%s-%s", eventID, ctx.GetNodeID())
-
-	// Create a binding struct later when calling BindEvent
-	// binding := event.EventBinding{ ... } // Removed unused declaration
-
-	// Bind the event (this internally registers the handler func now)
-	err := eventManager.BindEvent(event.EventBinding{ // Create struct here
-		ID:          bindingID,
-		EventID:     eventID,
-		HandlerID:   ctx.GetNodeID(), // This node itself is the handler
-		HandlerType: "event-bind",
-		BlueprintID: ctx.GetBlueprintID(),
-		Priority:    priority,
-		Enabled:     true,
-	}) // Close parenthesis for BindEvent call
-	if err != nil {
-		logger.Error("Failed to bind event", map[string]interface{}{
-			"eventID":   eventID,
-			"bindingID": bindingID,
-			"error":     err.Error(),
-		})
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-		return fmt.Errorf("failed to bind event: %w", err)
-	}
-
-	// Check if this execution is triggered by an event being handled
-	if evtCtx, ok := ctx.(event.ExecutionContextWithEvents); ok && evtCtx.IsEventHandlerActive() {
-		handlerCtx := evtCtx.GetEventHandlerContext()
-		if handlerCtx == nil {
-			return fmt.Errorf("event handler context is nil despite being active")
-		}
-
-		logger.Debug("Executing EventBindNode as event handler", map[string]interface{}{
-			"eventID":   handlerCtx.EventID,
-			"bindingID": handlerCtx.BindingID,
-		})
-
-		// Ensure dynamic pins for parameters exist (might be redundant if done reliably elsewhere)
-		eventDef, exists := eventManager.GetEventDefinition(handlerCtx.EventID)
-		if exists {
-			n.AddDynamicOutputPins(eventDef)
+		if pinExists {
+			// Use the context passed into Execute, which is already event-aware
+			ctx.SetOutputValue(paramName, paramValue)
 		} else {
-			logger.Warn("Event definition not found while handling event", map[string]interface{}{"eventID": handlerCtx.EventID})
-		}
-
-		// Set output values based on event parameters
-		for paramName, paramValue := range handlerCtx.Parameters {
-			// Check if output pin exists before setting
-			pinExists := false
-			for _, pin := range n.GetOutputPins() {
-				if pin.ID == paramName {
-					pinExists = true
-					break
-				}
-			}
-			if pinExists {
-				ctx.SetOutputValue(paramName, paramValue)
-			} else {
-				logger.Warn("Output pin not found for event parameter", map[string]interface{}{
-					"paramName": paramName,
-					"eventID":   handlerCtx.EventID,
-					"nodeID":    ctx.GetNodeID(),
-				})
-			}
-		}
-
-		// Set the binding ID output (redundant if already set during bind?)
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, handlerCtx.BindingID))
-
-		// Trigger the onBound output flow (representing the event handler execution)
-		return ctx.ActivateOutputFlow("onBound") // Use the 'onBound' pin to signify event received
-	}
-
-	// --- Handle regular execution (Bind/Unbind pins) ---
-
-	// Get the event ID (already done above)
-
-	// Handle unbind first
-	if inputPin == "unbind" {
-		if n.bindingID != "" {
-			// Unbind the event
-			eventManager.RemoveBinding(n.bindingID) // Assumes RemoveBinding exists and works
-			logger.Info("Event unbound", map[string]interface{}{
-				"eventID":   eventID,
-				"bindingID": n.bindingID,
+			// This might happen if AddDynamicOutputPins failed or wasn't called yet
+			logger.Warn("Output pin not found for event parameter", map[string]interface{}{
+				"paramName": paramName,
+				"eventID":   handlerCtx.EventID,
+				"nodeID":    ctx.GetNodeID(),
 			})
-			ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, "")) // Clear output
-			n.bindingID = ""                                                           // Clear internal state
-			return ctx.ActivateOutputFlow("onUnbound")                                 // Activate unbind flow
 		}
-		// If already unbound or never bound, just pass through
-		logger.Debug("Unbind called but no active binding found", map[string]interface{}{"nodeID": ctx.GetNodeID()})
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-		return ctx.ActivateOutputFlow("onUnbound") // Still activate flow? Or maybe a different 'alreadyUnbound' flow?
 	}
 
-	// Handle bind
-	if inputPin == "bind" {
-		// Get binding settings from properties (already done above)
-
-		// Add dynamic output pins for event parameters (already done above)
-
-		// Create a binding ID
-		// Ensure this is unique enough, maybe include blueprint instance ID if relevant?
-		bindingID := fmt.Sprintf("binding-%s-%s", eventID, ctx.GetNodeID())
-
-		// Create a binding struct
-		binding := event.EventBinding{
-			ID:          bindingID,
-			EventID:     eventID,
-			HandlerID:   ctx.GetNodeID(), // This node itself is the handler
-			HandlerType: n.Metadata.TypeID,
-			BlueprintID: ctx.GetBlueprintID(),
-			Priority:    priority,
-			Enabled:     true, // Default to enabled
-		}
-
-		// Bind the event (this internally registers the handler func now)
-		err := eventManager.BindEvent(binding)
-		if err != nil {
-			logger.Error("Failed to bind event", map[string]interface{}{
-				"eventID":   eventID,
-				"bindingID": bindingID,
-				"error":     err.Error(),
-			})
-			ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, ""))
-			return fmt.Errorf("failed to bind event: %w", err)
-		}
-
-		// Store the binding ID internally
-		n.bindingID = bindingID
-
-		// Set the binding ID output
-		ctx.SetOutputValue("bindingID", types.NewValue(types.PinTypes.String, bindingID))
-
-		logger.Info("Event bound successfully", map[string]interface{}{
-			"eventID":   eventID,
-			"bindingID": bindingID,
-		})
-
-		// Activate the onBound flow to indicate successful binding
-		return ctx.ActivateOutputFlow("onBound")
-	}
-
-	// If neither bind nor unbind was activated (shouldn't happen with current logic)
-	logger.Warn("EventBindNode executed without bind or unbind activation", nil)
-	return nil
+	// Trigger the output execution flow
+	return ctx.ActivateOutputFlow("onEventReceived")
 }
 
-// GetBindingID returns the current binding ID
-func (n *EventBindNode) GetBindingID() string {
-	return n.bindingID
-}
-
-// SetBindingID sets the binding ID
-func (n *EventBindNode) SetBindingID(id string) {
-	n.bindingID = id
-}
-
-// Validate validates the node
+// Validate validates the node (basic implementation)
 func (n *EventBindNode) Validate() []bperrors.BlueprintError {
-	// Validation will be added in a future update
-	return nil
+	// TODO: Add validation logic - e.g., check if Event ID property is set?
+	var errors []bperrors.BlueprintError
+	// Example validation: Check if eventID property is configured
+	// eventIDProp := n.GetProperty("eventID")
+	// if eventIDProp == nil || eventIDProp.Value == "" {
+	//     errors = append(errors, bperrors.NewValidationError("EventBindNode requires 'eventID' property to be configured.", n.Metadata.TypeID, "MISSING_EVENT_ID"))
+	// }
+	return errors
 }
 
-// The helper functions for event conversions have been moved to event_utils.go
-
-// eventAwareExecutionAdapter is an adapter for execution contexts with event capabilities
-type eventAwareExecutionAdapter struct {
-	node.ExecutionContext
-	eventManager   event.EventManagerInterface
-	isEventHandler bool
-	handlerContext event.EventHandlerContext
-}
-
-// GetEventManager returns the event manager
-func (ctx *eventAwareExecutionAdapter) GetEventManager() event.EventManagerInterface {
-	return ctx.eventManager
-}
-
-// DispatchEvent dispatches an event with the given parameters
-func (ctx *eventAwareExecutionAdapter) DispatchEvent(eventID string, params map[string]types.Value) error {
-	// Create a dispatch request
-	request := event.EventDispatchRequest{
-		EventID:     eventID,
-		Parameters:  params,
-		SourceID:    ctx.GetNodeID(),
-		BlueprintID: ctx.GetBlueprintID(),
-		ExecutionID: ctx.GetExecutionID(),
-		Timestamp:   ctx.handlerContext.Timestamp,
-	}
-
-	// Dispatch the event
-	errors := ctx.eventManager.DispatchEvent(request)
-	if len(errors) > 0 {
-		// Log errors
-		for _, err := range errors {
-			ctx.Logger().Error("Error dispatching event", map[string]interface{}{
-				"eventID": eventID,
-				"error":   err.Error(),
-			})
-		}
-		return errors[0]
-	}
-
-	return nil
-}
-
-// IsEventHandlerActive returns true if this context is handling an event
-func (ctx *eventAwareExecutionAdapter) IsEventHandlerActive() bool {
-	return ctx.isEventHandler
-}
-
-// GetEventHandlerContext returns the event handler context
-func (ctx *eventAwareExecutionAdapter) GetEventHandlerContext() *event.EventHandlerContext {
-	return &ctx.handlerContext
-}
-
-// GetEventParameter gets a parameter from the event being handled
-func (ctx *eventAwareExecutionAdapter) GetEventParameter(paramName string) (types.Value, bool) {
-	if !ctx.isEventHandler {
-		return types.Value{}, false
-	}
-
-	param, exists := ctx.handlerContext.Parameters[paramName]
-	return param, exists
-}
+// Removed GetBindingID and SetBindingID methods
+// Removed eventAwareExecutionAdapter struct and methods

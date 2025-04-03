@@ -1,12 +1,10 @@
 package engine
 
 import (
-	"fmt"
 	"reflect"
 	errors "webblueprint/internal/bperrors"
 	"webblueprint/internal/common"
 	"webblueprint/internal/engineext"
-	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
 )
@@ -18,7 +16,7 @@ func SetInputValue(ctx interface{}, pinID string, value types.Value) {
 	if defaultCtx, ok := ctx.(*engineext.DefaultExecutionContext); ok {
 		val := reflect.ValueOf(defaultCtx).Elem()
 		inputsField := val.FieldByName("inputs")
-		
+
 		if inputsField.IsValid() && inputsField.Kind() == reflect.Map {
 			// Create a reflect.Value for the key
 			keyValue := reflect.ValueOf(pinID)
@@ -37,16 +35,16 @@ func SetActivateFlow(ctx *engineext.DefaultExecutionContext, fn interface{}) {
 	if ctx == nil || fn == nil {
 		return
 	}
-	
+
 	// Get the value of the context
 	val := reflect.ValueOf(ctx).Elem()
-	
+
 	// Find the activateFlow field
 	field := val.FieldByName("activateFlow")
 	if !field.IsValid() || !field.CanSet() {
 		return // Field not found or can't be set
 	}
-	
+
 	// Set the field value
 	fnVal := reflect.ValueOf(fn)
 	if fnVal.Type().AssignableTo(field.Type()) {
@@ -181,6 +179,7 @@ func (e *ErrorAwareExecutionEngine) Execute(bp *blueprint.Blueprint, executionID
 	return result, nil
 }
 
+/*
 // executeNode overrides the base executeNode method to add error handling
 func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks) error {
 	// Get the basic execution context from base implementation
@@ -364,6 +363,7 @@ func (e *ErrorAwareExecutionEngine) executeNode(nodeID string, bp *blueprint.Blu
 
 	return nil
 }
+*/ // End of commented out executeNode override
 
 // UpdateExecutionResult extends ExecutionResult with error information
 func (e *ErrorAwareExecutionEngine) UpdateExecutionResult(result *common.ExecutionResult, executionID string) {

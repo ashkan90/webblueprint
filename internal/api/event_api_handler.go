@@ -129,6 +129,10 @@ func (h *EventAPIHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 		result = append(result, evt)
 	}
 
+	for _, definition := range events {
+		h.eventManager.RegisterEvent(definition)
+	}
+
 	// Set response headers
 	w.Header().Set("Content-Type", "application/json")
 

@@ -186,3 +186,8 @@ func (ctx *ErrorAwareContext) GetDefaultValue(pinType *types.PinType) (types.Val
 
 // Ensure ErrorAwareContext implements core.ErrorAwareContext
 var _ core.ErrorAwareContext = (*ErrorAwareContext)(nil)
+
+// Unwrap returns the underlying ExecutionContext that this context decorates.
+func (ctx *ErrorAwareContext) Unwrap() node.ExecutionContext {
+	return ctx.ExecutionContext
+}
