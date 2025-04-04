@@ -85,8 +85,8 @@ type Blueprint struct {
 	Connections   []Connection      `json:"connections"`
 	Variables     []Variable        `json:"variables,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
-	Events        []EventDefinition `json:"events,omitempty"`         // User-defined event definitions
-	EventBindings []EventBinding    `json:"event_bindings,omitempty"` // User-defined event bindings
+	Events        []EventDefinition `json:"events,omitempty"`        // User-defined event definitions
+	EventBindings []EventBinding    `json:"eventBindings,omitempty"` // User-defined event bindings
 }
 
 // EventParameter defines a parameter for a custom event within a blueprint
@@ -109,12 +109,12 @@ type EventDefinition struct {
 
 // EventBinding defines a binding between an event and a handler
 type EventBinding struct {
-	ID          string `json:"id"`           // Unique identifier for the binding
-	EventID     string `json:"event_id"`     // ID of the event to bind to
-	HandlerID   string `json:"handler_id"`   // ID of the node that handles the event
-	HandlerType string `json:"handler_type"` // Type of handler (e.g., "node", "function")
-	Priority    int    `json:"priority"`     // Priority for execution order
-	Enabled     bool   `json:"enabled"`      // Whether the binding is enabled
+	ID          string `json:"id"`          // Unique identifier for the binding
+	EventID     string `json:"eventId"`     // ID of the event to bind to
+	HandlerID   string `json:"handlerId"`   // ID of the node that handles the event
+	HandlerType string `json:"handlerType"` // Type of handler (e.g., "node", "function")
+	Priority    int    `json:"priority"`    // Priority for execution order
+	Enabled     bool   `json:"enabled"`     // Whether the binding is enabled
 }
 
 // NewBlueprint creates a new empty blueprint
@@ -274,22 +274,10 @@ func (b *Blueprint) FindEntryPoints() []string {
 
 	// Also include special entry point nodes like DOM events
 	for _, node := range b.Nodes {
-		for _, property := range node.Properties {
-			if property.Name == "eventType" && property.Value.(string) == "entry" {
-				entryPoints = append(entryPoints, node.ID)
-			}
+		if node.Type == "event-on-created" || node.Type == "event-on-tick" || node.Type == "event-on-input" {
+			entryPoints = append(entryPoints, node.ID)
 		}
 	}
 
 	return entryPoints
-}
-
-// Helper function to check if a slice contains a string
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

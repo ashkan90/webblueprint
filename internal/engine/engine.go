@@ -137,163 +137,100 @@ func (e *ExecutionEngine) RegisterNodeType(typeID string, factory node.NodeFacto
 
 // LoadBlueprint registers a blueprint with the engine and auto-binds event listeners
 func (e *ExecutionEngine) LoadBlueprint(bp *blueprint.Blueprint) error {
+	// --- Step 1: Update Engine State (Requires Lock) ---
 	e.mutex.Lock()
-	defer e.mutex.Unlock()
-
 	// Initialize variables for this blueprint if not already present
 	if _, exists := e.variables[bp.ID]; !exists {
 		e.variables[bp.ID] = make(map[string]types.Value)
 	}
-
 	// Store the blueprint
 	e.blueprints[bp.ID] = bp
+	// Get extensions reference while holding lock
+	extensions := e.extensions
+	logger := e.logger // Get logger reference
+	e.mutex.Unlock()   // --- Release Lock ---
 
-	// --- Register Custom Event Definitions & Auto-bind event listener nodes ---
+	// --- Step 2: Get Event Manager (Does not require engine lock) ---
 	var concreteEventManager *event.EventManager
-	if extensions := e.GetExtensions(); extensions != nil {
+	if extensions != nil {
 		concreteEventManager = extensions.GetConcreteEventManager()
 	}
 
 	if concreteEventManager == nil {
-		e.logger.Warn("Cannot register custom events or bind listeners: EventManager not available.", map[string]interface{}{"blueprintId": bp.ID})
-	} else {
-		// Register Custom Events FIRST
-		for _, customEventDef := range bp.Events {
-			eventParams := make([]event.EventParameter, len(customEventDef.Parameters))
-			validParams := true
-			for i, bpParam := range customEventDef.Parameters {
-				pinType, exists := types.GetPinTypeByID(bpParam.TypeID)
-				if !exists {
-					e.logger.Error("Invalid pin type ID found in custom event definition", map[string]interface{}{
-						"blueprintId": bp.ID,
-						"eventId":     customEventDef.ID,
-						"paramName":   bpParam.Name,
-						"typeId":      bpParam.TypeID,
-					})
-					validParams = false
-					break
-				}
-				eventParams[i] = event.EventParameter{
-					Name:        bpParam.Name,
-					Type:        pinType,
-					Description: bpParam.Description,
-					Optional:    bpParam.Optional,
-					Default:     bpParam.Default,
-				}
-			}
-
-			if !validParams {
-				continue
-			}
-
-			managerEventDef := event.EventDefinition{
-				ID:          customEventDef.ID,
-				Name:        customEventDef.Name,
-				Description: customEventDef.Description,
-				Parameters:  eventParams,
-				Category:    customEventDef.Category,
-				BlueprintID: bp.ID,
-				CreatedAt:   time.Now(),
-			}
-			if managerEventDef.Category == "" {
-				managerEventDef.Category = "Custom"
-			}
-
-			err := concreteEventManager.RegisterEvent(managerEventDef)
-			if err != nil {
-				// Log error, but maybe don't fail the whole load?
-				// Check if it's just "already exists" which might be okay on reload.
-				if !strings.Contains(err.Error(), "already exists") {
-					e.logger.Error("Failed to register custom event definition", map[string]interface{}{
-						"blueprintId": bp.ID,
-						"eventId":     managerEventDef.ID,
-						"error":       err.Error(),
-					})
-				}
-			} else {
-				e.logger.Info("Registered custom event definition", map[string]interface{}{
-					"blueprintId": bp.ID,
-					"eventId":     managerEventDef.ID,
-				})
-			}
-		}
-
-		// THEN Auto-bind event listener nodes
-		for _, nodeConfig := range bp.Nodes {
-			if nodeConfig.Type == "event-bind" {
-				var eventIDToBind string
-				var priority int = 0
-
-				for _, prop := range nodeConfig.Properties {
-					if prop.Name == "eventID" {
-						if idStr, ok := prop.Value.(string); ok {
-							eventIDToBind = idStr
-						}
-					} else if prop.Name == "priority" {
-						switch v := prop.Value.(type) {
-						case float64:
-							priority = int(v)
-						case int:
-							priority = v
-						case int32:
-							priority = int(v)
-						case int64:
-							priority = int(v)
-						}
-					}
-				}
-
-				if eventIDToBind == "" {
-					e.logger.Warn("Skipping event-bind node: 'eventID' property is missing or empty.", map[string]interface{}{"nodeId": nodeConfig.ID, "blueprintId": bp.ID})
-					continue
-				}
-
-				// Check if the event definition actually exists before binding
-				if _, exists := concreteEventManager.GetEventDefinition(eventIDToBind); !exists {
-					e.logger.Warn("Skipping event-bind node: Target event definition does not exist.", map[string]interface{}{
-						"nodeId":      nodeConfig.ID,
-						"eventId":     eventIDToBind,
-						"blueprintId": bp.ID,
-					})
-					continue
-				}
-
-				bindingID := fmt.Sprintf("binding-%s-%s", eventIDToBind, nodeConfig.ID)
-				binding := event.EventBinding{
-					ID:          bindingID,
-					EventID:     eventIDToBind,
-					HandlerID:   nodeConfig.ID,
-					HandlerType: nodeConfig.Type,
-					BlueprintID: bp.ID,
-					Priority:    priority,
-					Enabled:     true,
-					CreatedAt:   time.Now(),
-				}
-
-				// Use BindEvent which now internally registers the handler
-				err := concreteEventManager.BindEvent(binding)
-				if err != nil {
-					// Log error, but maybe don't fail the whole load?
-					// Check if it's just "already exists" which might be okay on reload.
-					if !strings.Contains(err.Error(), "already exists") {
-						e.logger.Error("Failed to auto-bind event listener node", map[string]interface{}{
-							"nodeId":    nodeConfig.ID,
-							"eventId":   eventIDToBind,
-							"bindingId": bindingID,
-							"error":     err.Error(),
-						})
-					}
-				} else {
-					e.logger.Info("Auto-bound event listener node", map[string]interface{}{
-						"nodeId":    nodeConfig.ID,
-						"eventId":   eventIDToBind,
-						"bindingId": bindingID,
-					})
-				}
-			}
-		}
+		logger.Warn("Cannot register custom events or bind listeners: EventManager not available.", map[string]interface{}{"blueprintId": bp.ID})
+		return nil // Allow loading blueprint even if event manager isn't ready
 	}
-	// --- End Register/Auto-bind ---
+
+	for _, definition := range bp.Events {
+		eventParams := make([]event.EventParameter, len(definition.Parameters))
+		for _, parameter := range definition.Parameters {
+			pinType, _ := types.GetPinTypeByID(parameter.TypeID)
+			eventParams = append(eventParams, event.EventParameter{
+				Name:        parameter.Name,
+				Type:        pinType,
+				Description: parameter.Description,
+				Optional:    parameter.Optional,
+				Default:     parameter.Default,
+			})
+		}
+		rErr := concreteEventManager.RegisterEvent(event.EventDefinition{
+			ID:          definition.ID,
+			Name:        definition.Name,
+			Description: definition.Description,
+			Parameters:  eventParams,
+			Category:    definition.Category,
+			BlueprintID: bp.ID,
+			CreatedAt:   time.Now(),
+		})
+		if rErr != nil {
+			logger.Error("An error occurred while event registration", map[string]interface{}{
+				"blueprintId": bp.ID,
+				"name":        definition.Name,
+				"description": definition.Description,
+				"parameters":  eventParams,
+				"category":    definition.Category,
+				"error":       rErr.Error(),
+			})
+			continue
+		}
+		logger.Info("Registered custom event", map[string]interface{}{
+			"blueprintId": bp.ID,
+			"name":        definition.Name,
+			"description": definition.Description,
+			"parameters":  eventParams,
+			"category":    definition.Category,
+		})
+	}
+
+	for _, binding := range bp.EventBindings {
+		bErr := concreteEventManager.BindEvent(event.EventBinding{
+			ID:          binding.ID,
+			EventID:     binding.EventID,
+			HandlerID:   binding.HandlerID,
+			HandlerType: binding.HandlerType,
+			BlueprintID: bp.ID,
+			Priority:    binding.Priority,
+			CreatedAt:   time.Now(),
+			Enabled:     binding.Enabled,
+		})
+		if bErr != nil {
+			logger.Error("An error occurred while event binding", map[string]interface{}{
+				"blueprintId": bp.ID,
+				"eventID":     binding.EventID,
+				"handlerID":   binding.HandlerID,
+				"handlerType": binding.HandlerType,
+				"error":       bErr.Error(),
+			})
+			continue
+		}
+
+		logger.Info("EventBind successful", map[string]interface{}{
+			"blueprintId": bp.ID,
+			"eventID":     binding.EventID,
+			"handlerID":   binding.HandlerID,
+			"handlerType": binding.HandlerType,
+		})
+	}
 
 	return nil
 }
@@ -513,9 +450,7 @@ func (e *ExecutionEngine) TriggerNodeExecution(blueprintID string, nodeID string
 	}
 	e.mutex.RUnlock()
 
-	// Define hooks similar to executeWithStandardEngine
-	// Use the triggerContext.ExecutionID for status updates
-	executionID := triggerContext.ExecutionID // Use execution ID from trigger
+	executionID := triggerContext.ExecutionID
 	hooks := &node.ExecutionHooks{
 		OnNodeStart: func(nID, nodeType string) {
 			e.mutex.Lock()
@@ -590,8 +525,10 @@ func (e *ExecutionEngine) TriggerNodeExecution(blueprintID string, nodeID string
 
 	e.logger.Info("Triggering event handler node execution", map[string]interface{}{"nodeId": nodeID, "eventId": triggerContext.EventID})
 
+	//entryPoints := []string{triggerContext.HandlerID}
+	//err := e.executeWithActorSystem(bp, executionID, entryPoints, variables)
 	// Call executeNode, passing the triggerContext and the newly defined hooks.
-	err := e.executeNode(nodeID, bp, blueprintID, executionID, variables, hooks, &triggerContext) // Pass hooks
+	err := e.executeNode(triggerContext.HandlerID, bp, blueprintID, executionID, variables, hooks, &triggerContext) // Pass hooks
 	if err != nil {
 		e.logger.Error("Error executing triggered event handler node", map[string]interface{}{"nodeId": nodeID, "error": err.Error()})
 		// Potentially call OnNodeError hook here as well if executeNode fails immediately
@@ -602,7 +539,7 @@ func (e *ExecutionEngine) TriggerNodeExecution(blueprintID string, nodeID string
 	}
 
 	return nil
-} // End TriggerNodeExecution
+}
 
 // GetNodeDebugData returns debug data for a specific node
 func (e *ExecutionEngine) GetNodeDebugData(executionID, nodeID string) (map[string]interface{}, bool) {
@@ -614,16 +551,16 @@ func (e *ExecutionEngine) Execute(bp *blueprint.Blueprint, executionID string, i
 	e.nodeRegistry = registry.GetInstance().GetAllNodeFactories()
 
 	// Load the blueprint (this will register event bindings)
-	//if err := e.LoadBlueprint(bp); err != nil {
-	//	// Create minimal error result
-	//	return common.ExecutionResult{
-	//		ExecutionID: executionID,
-	//		Success:     false,
-	//		Error:       fmt.Errorf("failed to load blueprint: %w", err),
-	//		StartTime:   time.Now(), // Or get from somewhere?
-	//		EndTime:     time.Now(),
-	//	}, err
-	//}
+	if err := e.LoadBlueprint(bp); err != nil {
+		// Create minimal error result
+		return common.ExecutionResult{
+			ExecutionID: executionID,
+			Success:     false,
+			Error:       fmt.Errorf("failed to load blueprint: %w", err),
+			StartTime:   time.Now(), // Or get from somewhere?
+			EndTime:     time.Now(),
+		}, err
+	}
 	// Keep mutex locked for status/variable initialization? No, LoadBlueprint unlocks. Lock again.
 	blueprintID := bp.ID
 
@@ -1170,7 +1107,6 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 
 // executeWithActorSystem executes a blueprint using the actor system
 func (e *ExecutionEngine) executeWithActorSystem(bp *blueprint.Blueprint, executionID string, entryPoints []string, variables map[string]types.Value) error {
-
 	// Create an actor system for this execution
 	actorSystem, err := NewActorSystem(
 		e.GetExtensions().GetContextManager(),
@@ -1490,6 +1426,9 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	if e.hooks != nil && e.hooks.OnNodeStart != nil {
 		e.hooks.OnNodeStart(nodeID, nodeConfig.Type)
 	}
+
+	//ctx.SaveData("node.properties", actor.properties)
+	ctx.SaveData("node.inputPins", nodeInstance.GetInputPins())
 
 	// Execute the node
 	err := nodeInstance.Execute(ctx)

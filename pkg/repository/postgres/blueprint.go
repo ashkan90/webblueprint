@@ -1157,13 +1157,13 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 			if id, ok := bindingMap["id"].(string); ok {
 				binding.ID = id
 			}
-			if eventID, ok := bindingMap["event_id"].(string); ok {
+			if eventID, ok := bindingMap["eventId"].(string); ok {
 				binding.EventID = eventID
 			}
-			if handlerID, ok := bindingMap["handler_id"].(string); ok {
+			if handlerID, ok := bindingMap["handlerId"].(string); ok {
 				binding.HandlerID = handlerID
 			}
-			if handlerType, ok := bindingMap["handler_type"].(string); ok {
+			if handlerType, ok := bindingMap["handlerType"].(string); ok {
 				binding.HandlerType = handlerType
 			}
 			if priority, ok := bindingMap["priority"].(float64); ok {
@@ -1397,6 +1397,41 @@ func (r *PostgresBlueprintRepository) FromPkgBlueprint(bp *blueprint.Blueprint) 
 		functions[i] = funcMap
 	}
 	versionModel.Functions = functions
+
+	events := make([]interface{}, len(bp.Events))
+	for j, event := range bp.Events {
+		parameters := make([]interface{}, len(event.Parameters))
+		for jk, parameter := range event.Parameters {
+			parameters[jk] = map[string]interface{}{
+				"name":        parameter.Name,
+				"typeId":      parameter.TypeID,
+				"default":     parameter.Default,
+				"optional":    parameter.Optional,
+				"description": parameter.Description,
+			}
+		}
+		events[j] = map[string]interface{}{
+			"id":          event.ID,
+			"name":        event.Name,
+			"category":    event.Category,
+			"description": event.Description,
+			"parameters":  parameters,
+		}
+	}
+	versionModel.Events = events
+
+	eventBindings := make([]interface{}, len(bp.EventBindings))
+	for j, eventBinding := range bp.EventBindings {
+		eventBindings[j] = map[string]interface{}{
+			"id":          eventBinding.ID,
+			"eventId":     eventBinding.EventID,
+			"handlerId":   eventBinding.HandlerID,
+			"handlerType": eventBinding.HandlerType,
+			"priority":    eventBinding.Priority,
+			"enabled":     eventBinding.Enabled,
+		}
+	}
+	versionModel.EventBindings = eventBindings
 
 	// Set counts
 	blueprintModel.NodeCount = len(bp.Nodes)

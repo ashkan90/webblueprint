@@ -44,12 +44,12 @@ func NewValue(pinType *PinType, rawValue interface{}) Value {
 
 // AsString converts the value to string
 func (v Value) AsString() (string, error) {
-	if v.Type == PinTypes.String {
-		return v.RawValue.(string), nil
-	}
-
 	if v.RawValue == nil {
 		return "", nil
+	}
+
+	if v.Type == PinTypes.String {
+		return v.RawValue.(string), nil
 	}
 
 	if v.Type.Converter != nil {

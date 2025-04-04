@@ -141,8 +141,6 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 		}
 	}
 
-	// Check for property-based defaults
-
 	// First, check if there's a node property for this input
 	// Check for "input_[pinID]" property (used for print's message input)
 	if propValue, exists := ctx.getPropertyValue(fmt.Sprintf("input_%s", pinID)); exists {
@@ -212,6 +210,7 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 		ctx.Logger().Error("somehow DefaultExecutionContext has no inputPins", nil)
 	}
 
+	defNode := bp.FindNode(ctx.GetNodeID())
 	for _, pin := range inputPins {
 		if pin.ID == pinID && pin.Default != nil {
 			defaultValue := types.NewValue(pin.Type, pin.Default)
@@ -228,6 +227,23 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 			})
 
 			return defaultValue, true
+		} else if pin.ID == pinID && defNode != nil {
+			if defaults, ok := defNode.Data["defaults"].(map[string]interface{}); ok {
+				defaultValue := types.NewValue(pin.Type, defaults[pin.ID])
+
+				ctx.RecordDebugInfo(types.DebugInfo{
+					NodeID:      ctx.nodeID,
+					PinID:       pinID,
+					Description: "Pin default value used",
+					Value: map[string]interface{}{
+						"default": pin.Default,
+						"source":  "pin definition",
+					},
+					Timestamp: time.Now(),
+				})
+
+				return defaultValue, true
+			}
 		}
 	}
 

@@ -1,5 +1,6 @@
 // Represents a position on the canvas
 import {NodeTypeDefinition} from "./nodes";
+import {EventBinding, EventDefinition} from "../services/eventService";
 
 export interface Position {
     x: number
@@ -61,6 +62,8 @@ export interface Blueprint {
     functions: Function[]
     connections: Connection[]
     variables: Variable[]
+    events: EventDefinition[]
+    eventBindings: EventBinding[]
     metadata: Record<string, string>
 }
 

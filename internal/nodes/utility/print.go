@@ -36,6 +36,7 @@ func NewPrintNode() node.Node {
 					Name:        "Message",
 					Description: "Value to print",
 					Type:        types.PinTypes.Any,
+					Optional:    true,
 				},
 				{
 					ID:          "prefix",
@@ -59,6 +60,7 @@ func NewPrintNode() node.Node {
 					Type:        types.PinTypes.Any,
 				},
 			},
+			Properties: make([]types.Property, 0),
 		},
 	}
 }

@@ -208,7 +208,19 @@ func (b *ContextBuilder) Build() node.ExecutionContext {
 				currentCtx = ctxFactory.CreateFunctionContext(currentCtx, b.functionID) // Wrap result with function
 			}
 		} // End else block for standard wrapping
-	} // End if b.withActorMode block <-- Add missing brace here
+	} else if b.withEventSupport {
+		currentCtx = baseCtx
+
+		if b.withErrorHandling {
+			currentCtx = ctxFactory.CreateErrorAwareContext(currentCtx)
+		}
+
+		if b.withActorMode {
+			currentCtx = ctxFactory.CreateActorContext(currentCtx)
+		}
+
+		currentCtx = ctxFactory.CreateEventAwareContext(currentCtx, b.isEventHandler, b.eventHandlerContext)
+	}
 
 	return currentCtx
 }

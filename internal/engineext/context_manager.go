@@ -114,7 +114,7 @@ func (cm *ContextManager) CreateActorContext(
 		activateFlow,
 	).
 		WithErrorHandling(cm.errorManager, cm.recoveryManager).
-		WithEventSupport(cm.eventManager, false, nil).
+		WithEventSupport(cm.eventManager, true, nil).
 		WithActorMode().
 		Build()
 }

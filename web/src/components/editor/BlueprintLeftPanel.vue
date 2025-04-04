@@ -397,7 +397,9 @@ const newEventDispatcher = ref({
 })
 
 // Add state for custom events from server
-const customEvents = ref([])
+const customEvents = computed(() => {
+  return blueprintStore.blueprint.events;
+})
 
 // Entry point events
 const entryPointEvents = computed(() => {
@@ -879,35 +881,40 @@ async function createEventDispatcher() {
     
     // Prepare request
     const requestData = {
+      id: `custom.${newEventDispatcher.value.name}`,
+      blueprintId: blueprintId,
       name: newEventDispatcher.value.name,
       description: newEventDispatcher.value.description || "",
-      category: "Custom Events"
+      category: "Custom Events",
+      parameters: [],
     };
     
     console.log("Creating event dispatcher:", requestData, "for blueprint:", blueprintId);
     
-    // Call API to create event dispatcher
-    let url = '/api/events';
-    // If we have a blueprint ID, associate this event with it
-    if (blueprintId) {
-      url += `?blueprintId=${blueprintId}`;
-    }
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestData)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to create event: ${response.statusText}`);
-    }
-    
-    // Parse response
-    const createdEvent = await response.json();
-    console.log('Created event dispatcher:', createdEvent);
+    // // Call API to create event dispatcher
+    // let url = '/api/events';
+    // // If we have a blueprint ID, associate this event with it
+    // if (blueprintId) {
+    //   url += `?blueprintId=${blueprintId}`;
+    // }
+    //
+    // const response = await fetch(url, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json'
+    //   },
+    //   body: JSON.stringify(requestData)
+    // });
+    //
+    // if (!response.ok) {
+    //   throw new Error(`Failed to create event: ${response.statusText}`);
+    // }
+    //
+    // // Parse response
+    // const createdEvent = await response.json();
+    // console.log('Created event dispatcher:', createdEvent);
+
+    blueprintStore.addEvent(requestData);
     
     // Close modal and reset form
     showCreateEventDispatcherModal.value = false;
@@ -915,78 +922,11 @@ async function createEventDispatcher() {
       name: '',
       description: ''
     };
-    
-    // Fetch events to refresh the list
-    await fetchEventDispatchers();
+
     
   } catch (error) {
     console.error('Error creating event dispatcher:', error);
     alert(`Failed to create event dispatcher: ${error.message}`);
-  }
-}
-
-/**
- * Fetches event dispatchers from the server
- */
-async function fetchEventDispatchers() {
-  try {
-    // Get the current blueprint ID if available
-    const blueprintId = blueprintStore.blueprint?.id;
-    let url = '/api/events';
-    
-    if (blueprintId) {
-      // First fetch global events
-      const globalResponse = await fetch('/api/events', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-      if (!globalResponse.ok) {
-        throw new Error(`Failed to fetch global events: ${globalResponse.statusText}`);
-      }
-      
-      const globalEvents = await globalResponse.json();
-      
-      // Then fetch blueprint-specific events
-      const blueprintResponse = await fetch(`/api/events/blueprint/${blueprintId}`);
-      if (!blueprintResponse.ok) {
-        throw new Error(`Failed to fetch blueprint events: ${blueprintResponse.statusText}`);
-      }
-      
-      const blueprintEvents = await blueprintResponse.json();
-      
-      // Combine both, prioritizing blueprint events if there are duplicates
-      const combinedEvents = [...globalEvents];
-      
-      // Add blueprint events, avoiding duplicates
-      const globalEventIds = new Set(globalEvents.map(e => e.id));
-      for (const event of blueprintEvents) {
-        if (!globalEventIds.has(event.id)) {
-          combinedEvents.push(event);
-        }
-      }
-      
-      console.log('Fetched combined events:', combinedEvents);
-      
-      // Filter to only custom events and update the model
-      customEvents.value = combinedEvents.filter(e => e.id.startsWith('custom.') || e.category === 'Custom Events');
-    } else {
-      // No blueprint ID, just fetch all events
-      const response = await fetch('/api/events');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch events: ${response.statusText}`);
-      }
-      
-      const events = await response.json();
-      console.log('Fetched events:', events);
-      
-      // Filter to only custom events and update the model
-      customEvents.value = events.filter(e => e.id.startsWith('custom.') || e.category === 'Custom Events');
-    }
-  } catch (error) {
-    console.error('Error fetching event dispatchers:', error);
-    // Don't alert here as this is likely called on component mount
   }
 }
 
@@ -1000,11 +940,6 @@ function getDefaultValueForType(type: string): any {
     default: return null
   }
 }
-
-// Load event dispatchers when component mounts
-onMounted(() => {
-  fetchEventDispatchers();
-});
 </script>
 
 <style scoped>

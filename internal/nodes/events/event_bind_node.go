@@ -173,6 +173,3 @@ func (n *EventBindNode) Validate() []bperrors.BlueprintError {
 	// }
 	return errors
 }
-
-// Removed GetBindingID and SetBindingID methods
-// Removed eventAwareExecutionAdapter struct and methods

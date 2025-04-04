@@ -3,7 +3,8 @@ import {computed, ref} from 'vue'
 import type {Blueprint, Function, Connection, Node, Position, Variable} from '../types/blueprint'
 import {v4 as uuid} from 'uuid'
 import {useWorkspaceStore} from "./workspace";
-import {isEqual} from 'lodash' // Need to add this import for comparing objects
+import {isEqual} from 'lodash'
+import {EventDefinition} from "../services/eventService"; // Need to add this import for comparing objects
 
 export const useBlueprintStore = defineStore('blueprint', () => {
     // State
@@ -16,6 +17,8 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         nodes: [],
         connections: [],
         variables: [],
+        events: [],
+        eventBindings: [],
         metadata: {}
     })
 
@@ -119,6 +122,8 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             nodes: [],
             connections: [],
             variables: [],
+            events: [],
+            eventBindings: [],
             metadata: {}
         }
         // Reset the saved state
@@ -156,7 +161,15 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             if (!blueprint.value.nodes) {
                 blueprint.value.nodes = [];
             }
-            
+
+            if (!blueprint.value.events) {
+                blueprint.value.events = [];
+            }
+
+            if (!blueprint.value.eventBindings) {
+                blueprint.value.eventBindings = [];
+            }
+
             console.log('Blueprint structure after loading:', blueprint.value);
             
             // Save the loaded blueprint as the latest saved state
@@ -281,6 +294,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
             if (!blueprint.value.nodes) {
                 blueprint.value.nodes = [];
             }
+
+            if (!blueprint.value.eventBindings) {
+                blueprint.value.eventBindings = [];
+            }
             
             // Update the latest saved state
             latestSavedBlueprint.value = JSON.parse(JSON.stringify(blueprint.value));
@@ -340,6 +357,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         }
     }
 
+    function checkNodeBind(node: Node) {
+        return node.type === 'event-bind'
+    }
+
     function addNode(node: Node) {
         // Make sure we're creating a deep copy to avoid shared references
         const nodeCopy = JSON.parse(JSON.stringify(node));
@@ -371,13 +392,16 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         const node = blueprint.value.nodes.find(node => node.id === nodeId)
         if (node) {
             // Find the property
-            const propIndex = node.properties.findIndex(p => p.name === propertyName)
+            const propIndex = node.properties?.findIndex(p => p.name === propertyName) ?? -1
             if (propIndex !== -1) {
                 // Update existing property
                 node.properties[propIndex].value = value
             } else {
                 // Add new property
-                node.properties.push({ name: propertyName, value })
+                if (!node.properties) {
+                    node.properties = [];
+                }
+                node.properties.push({ displayName: node.properties[propIndex]?.displayName ?? propertyName, name: propertyName, value: value })
             }
 
             // If this is a pin default value (input_*), add it to the node's data for easy access
@@ -404,6 +428,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         blueprint.value.nodes = blueprint.value.nodes.filter(node => node.id !== id)
     }
 
+    function findNode(id: string) {
+        return blueprint.value.nodes.find((n: Node) => n.id === id)
+    }
+
     function addConnection(connection: Connection) {
         // Ensure the connection has an ID
         if (!connection.id) {
@@ -418,6 +446,11 @@ export const useBlueprintStore = defineStore('blueprint', () => {
                 conn.targetNodeId === connection.targetNodeId &&
                 conn.targetPinId === connection.targetPinId
         )
+
+        const node = findNode(connection.sourceNodeId);
+        if (checkNodeBind(node)) {
+            addEventBinding(node);
+        }
 
         if (!exists) {
             blueprint.value.connections.push(connection)
@@ -521,6 +554,52 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         blueprint.value.functions[fnIdx].nodes.push(node)
     }
 
+    function addEvent(e: EventDefinition) {
+        if (!blueprint.value.events) {
+            blueprint.value.events = [];
+        }
+
+        blueprint.value.events.push(e)
+    }
+
+    function findEvent(id: string) {
+        return blueprint.value.events.find((e: EventDefinition) => e.id === id)
+    }
+
+    function addEventBinding(node: Node) {
+        if (!blueprint.value.eventBindings) {
+            blueprint.value.eventBindings = [];
+        }
+
+        let eventId = '';
+        let priority = 0;
+        node.properties.forEach((prop) => {
+            if (prop.name === 'eventID') {
+                eventId = prop.value;
+            }
+
+            if (prop.name === 'priority') {
+                priority = prop.value;
+            }
+        });
+
+        const event = findEvent(eventId);
+        if (!event) {
+            return
+        }
+
+        blueprint.value.eventBindings.push({
+            id: `binding.${eventId}.${node.id}`,
+            eventId: eventId,
+            handlerId: node.id,
+            handlerType: node.type,
+            blueprintId: blueprint.value.id,
+            priority: priority,
+            enabled: true,
+            createdAt: Date.now().toString(),
+        })
+    }
+
     return {
         blueprint,
         isLoading,
@@ -554,6 +633,8 @@ export const useBlueprintStore = defineStore('blueprint', () => {
         addVariable,
         functions,
         addFunction,
-        addNodeToFunction
+        addNodeToFunction,
+        addEvent,
+        addEventBinding,
     }
 })

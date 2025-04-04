@@ -1273,6 +1273,8 @@ defineExpose({
   z-index: 1000;
   min-width: 120px;
   animation: fadeIn 0.15s ease-out;
+  scroll-behavior: smooth;
+  overflow-y: scroll;
 }
 
 .add-node-menu {
