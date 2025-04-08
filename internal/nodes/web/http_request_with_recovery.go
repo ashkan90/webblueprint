@@ -174,6 +174,14 @@ func (n *HTTPRequestWithRecoveryNode) GetProperties() []types.Property {
 	return n.properties
 }
 
+func (n *HTTPRequestWithRecoveryNode) SetProperty(name string, value interface{}) {
+	for i := range n.properties {
+		if n.properties[i].Name == name {
+			n.properties[i].Value = value
+		}
+	}
+}
+
 // Execute runs the node
 func (n *HTTPRequestWithRecoveryNode) Execute(ctx node.ExecutionContext) error {
 	// Check if we have error-aware context

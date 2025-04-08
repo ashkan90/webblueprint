@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"webblueprint/internal/common"
@@ -122,18 +123,53 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			"nodeId": nodeConfig.ID,
 		})
 
+		inputs := s.preprocessInputs(bp, nodeConfig.ID, s.executionID, s.variables)
+
+		activateFlow := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
+			if nodeConfig.Type == "loop" {
+				connections := bp.GetNodeConnections(nodeID)
+				for _, connection := range connections {
+					if connection.ConnectionType != "execution" {
+						continue
+					}
+
+					if connection.SourceNodeID == nodeID {
+						s.mutex.RLock()
+						loopActor, exists := s.actors[nodeID]
+						s.mutex.RUnlock()
+						if !exists {
+							return fmt.Errorf("loop actor not registered")
+						}
+
+						_ = loopActor
+
+						s.waitGroup.Add(1)
+						go func() {
+							defer s.waitGroup.Done()
+							s.executeNode(connection.TargetNodeID)
+						}()
+					}
+				}
+			}
+			return nil
+		}
+
 		actorCtx := s.ctxManager.CreateActorContext(
 			bp,
 			nodeConfig.ID,
 			nodeConfig.Type,
 			bp.ID,
 			s.executionID,
-			make(map[string]types.Value),
+			inputs,
 			s.variables,
 			s.logger,
 			s.hooks,
-			nil,
+			activateFlow,
 		)
+
+		if nodeConfig.Type == "loop" {
+			actorCtx = s.ctxManager.CreateLoopContext()
+		}
 
 		// Create the actor
 		actor := NewNodeActor(
@@ -279,6 +315,8 @@ func (s *ActorSystem) executeNode(nodeID string) {
 		"nodeType": actor.NodeType,
 	})
 
+	s.preprocessActorNodeInputs(actor)
+
 	// Create execute message
 	msg := NodeMessage{
 		Type:     "execute",
@@ -303,7 +341,7 @@ func (s *ActorSystem) executeNode(nodeID string) {
 			s.logger.Debug("Stored output value in debug manager", map[string]interface{}{
 				"nodeId": nodeID,
 				"pinId":  pinID,
-				"value":  value.RawValue,
+				// "value":  value.RawValue,
 			})
 		}
 	}
@@ -386,7 +424,7 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 					"sourcePinId":  conn.SourcePinID,
 					"targetNodeId": conn.TargetNodeID,
 					"targetPinId":  conn.TargetPinID,
-					"value":        value.RawValue,
+					//"value":        value.RawValue,
 				})
 			}
 
@@ -496,4 +534,156 @@ func (s *ActorSystem) GetNodesStatus() map[string]NodeStatus {
 	}
 
 	return statuses
+}
+
+func (s *ActorSystem) preprocessInputs(bp *blueprint.Blueprint, nodeID, executionID string, variables map[string]types.Value) map[string]types.Value {
+	inputValues := make(map[string]types.Value)
+
+	// Get input connections for this node
+	inputConnections := bp.GetNodeInputConnections(nodeID)
+
+	for _, conn := range inputConnections {
+		if conn.ConnectionType == "data" {
+			sourceNode := bp.FindNode(conn.SourceNodeID)
+			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+				// This is a connection from a variable getter node
+				// Extract variable name from the node type
+				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+
+				// Try to get the variable value
+				if varValue, exists := variables[varName]; exists {
+					// Add it directly to input values
+					inputValues[conn.TargetPinID] = varValue
+
+					// Also ensure the value is stored in debug manager for the source node
+					s.debugMgr.StoreNodeOutputValue(executionID, conn.SourceNodeID, conn.SourcePinID, varValue.RawValue)
+				}
+			}
+		}
+	}
+
+	// Process data connections
+	for _, conn := range inputConnections {
+		if conn.ConnectionType == "data" {
+			// Get the source node's output value
+			sourceNodeID := conn.SourceNodeID
+			sourcePinID := conn.SourcePinID
+			targetPinID := conn.TargetPinID
+
+			// Check if we have a result for this pin
+			if nodeResults, ok := s.debugMgr.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
+				// Convert to Value
+				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
+
+				// Emit value consumed event
+				//s..EmitEvent(ExecutionEvent{
+				//	Type:      EventValueConsumed,
+				//	Timestamp: time.Now(),
+				//	NodeID:    nodeID,
+				//	Data: map[string]interface{}{
+				//		"sourceNodeID": sourceNodeID,
+				//		"sourcePinID":  sourcePinID,
+				//		"targetPinID":  targetPinID,
+				//		"value":        nodeResults,
+				//	},
+				//})
+			}
+		}
+	}
+
+	return inputValues
+}
+
+func (s *ActorSystem) preprocessActorNodeInputs(actor *NodeActor) {
+	connections := actor.bp.GetNodeInputConnections(actor.NodeID)
+	for _, conn := range connections {
+		if conn.ConnectionType != "data" {
+			continue
+		}
+
+		s.mutex.RLock()
+		sourceActor, exists := s.actors[conn.SourceNodeID]
+		s.mutex.RUnlock()
+		if !exists {
+			continue
+		}
+
+		if strings.Contains(sourceActor.node.GetMetadata().TypeID, "variable-get") {
+			// TODO improve this variable naming approach
+			varId := types.GetProperty(sourceActor.properties, "variableId")
+			if varId == nil {
+				continue
+			}
+
+			setVar := actor.bp.FindNodeByVar(varId.Value.(string))
+
+			if setVar == nil {
+				return
+			}
+
+			s.mutex.Lock()
+			targetActor, exists := s.actors[setVar.ID]
+			s.mutex.Unlock()
+
+			if !exists {
+				s.logger.Warn("Target actor not found for data connection", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"targetNodeId": conn.TargetNodeID,
+				})
+				continue
+			}
+
+			value, vExists := engineext.GetExtendedContext(targetActor.decoratedCtx).GetInputValue(conn.SourcePinID)
+			if !vExists {
+				s.logger.Warn("Target actor has no input to feed", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+				})
+				continue
+			}
+
+			// Send the value to the target actor
+			inputMsg := NodeMessage{
+				Type:  "input",
+				PinID: conn.TargetPinID,
+				Value: value,
+			}
+			if sent := actor.SendAsync(inputMsg); !sent {
+				s.logger.Warn("Failed to send input value to target actor", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+				})
+			} else {
+				// send same message to current actor so it can now recognize variable
+				//actor.SendAsync(inputMsg)
+				s.logger.Debug("Sent input value to target actor", map[string]interface{}{
+					"sourceNodeId": conn.SourceNodeID,
+					"sourcePinId":  conn.SourcePinID,
+					"targetNodeId": conn.TargetNodeID,
+					"targetPinId":  conn.TargetPinID,
+					//"value":        value.RawValue,
+				})
+			}
+
+			// Emit value produced event
+			for _, listener := range s.listeners {
+				listener.OnExecutionEvent(ExecutionEvent{
+					Type:      EventValueProduced,
+					Timestamp: time.Now(),
+					NodeID:    conn.SourceNodeID,
+					Data: map[string]interface{}{
+						"sourceNodeId": conn.SourceNodeID,
+						"sourcePinId":  conn.SourcePinID,
+						"targetNodeId": conn.TargetNodeID,
+						"targetPinId":  conn.TargetPinID,
+						"value":        value.RawValue,
+					},
+				})
+			}
+		}
+	}
 }

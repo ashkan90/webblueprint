@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"webblueprint/internal/db" // Added import for db package
 	"webblueprint/internal/event"
 	"webblueprint/internal/node"
 	"webblueprint/pkg/api/dt"
@@ -73,6 +74,11 @@ type BlueprintRepository interface {
 
 	// FromPkgBlueprint Convert package blueprint to database format
 	FromPkgBlueprint(bp *blueprint.Blueprint) (*models.Blueprint, *models.BlueprintVersion, error)
+}
+
+type BlueprintVariableRepository interface {
+	// CreateVariable stands to create variable onto blueprint instance
+	CreateVariable(ctx context.Context, bpID, bpVersionID, varID, varName, varType string, varValue interface{}) (*models.Variable, error)
 }
 
 // Repository interface for managing workspaces
@@ -216,6 +222,9 @@ type RepositoryFactory interface {
 	// Get blueprint repository
 	GetBlueprintRepository() BlueprintRepository
 
+	// Get blueprint variable repository
+	GetBlueprintVariableRepository() BlueprintVariableRepository
+
 	// Get workspace repository
 	GetWorkspaceRepository() WorkspaceRepository
 
@@ -230,4 +239,7 @@ type RepositoryFactory interface {
 
 	// Get event repository
 	GetEventRepository() EventRepository
+
+	// Get schema component store
+	GetSchemaComponentStore() db.SchemaComponentStore // Added method
 }

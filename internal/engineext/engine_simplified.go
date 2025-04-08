@@ -10,8 +10,10 @@ import (
 
 	// "webblueprint/internal/bperrors" // Not used directly in this basic context
 	// "webblueprint/internal/core" // Not used directly in this basic context
+	"webblueprint/internal/db" // Added import for db package
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
+	"webblueprint/pkg/repository" // Added import
 )
 
 // DefaultExecutionContext is a simplified implementation of node.ExecutionContext
@@ -33,6 +35,7 @@ type DefaultExecutionContext struct {
 	activatedFlowMutex sync.Mutex
 	activePins         map[string]bool // Tracks which input execution pin was activated
 	mutex              sync.RWMutex
+	repoFactory        repository.RepositoryFactory // Added field
 }
 
 // NewExecutionContext creates a new execution context
@@ -47,6 +50,7 @@ func NewExecutionContext(
 	hooks *node.ExecutionHooks,
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
 	storeContext context.Context,
+	repoFactory repository.RepositoryFactory, // Added parameter
 ) *DefaultExecutionContext {
 	if logger != nil {
 		logger.Opts(map[string]interface{}{"nodeId": nodeID})
@@ -66,6 +70,7 @@ func NewExecutionContext(
 		activateFlow:   activateFlow,
 		activatedFlows: make([]string, 0),
 		activePins:     make(map[string]bool),
+		repoFactory:    repoFactory, // Added assignment
 	}
 }
 
@@ -132,12 +137,13 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 				}
 			}
 
-			if sourceNode != nil {
-				for _, property := range sourceNode.Properties {
-					var propType = ctx.resolveConstantType(ctx.nodeType)
-					return types.NewValue(propType, property.Value), true
-				}
-			}
+			// TODO: some confusion going here ?
+			//if sourceNode != nil {
+			//	for _, property := range sourceNode.Properties {
+			//		var propType = ctx.resolveConstantType(ctx.nodeType)
+			//		return types.NewValue(propType, property.Value), true
+			//	}
+			//}
 		}
 	}
 
@@ -266,6 +272,12 @@ func (ctx *DefaultExecutionContext) GetOutputValue(pinID string) (types.Value, b
 	return value, exists
 }
 
+func (ctx *DefaultExecutionContext) SetInput(pingID string, value types.Value) {
+	ctx.mutex.Lock()
+	defer ctx.mutex.Unlock()
+	ctx.inputs[pingID] = value
+}
+
 // ActivateOutputFlow activates an output execution flow
 func (ctx *DefaultExecutionContext) ActivateOutputFlow(pinID string) error {
 	ctx.activatedFlowMutex.Lock()
@@ -334,7 +346,11 @@ func (ctx *DefaultExecutionContext) Logger() node.Logger {
 func (ctx *DefaultExecutionContext) RecordDebugInfo(info types.DebugInfo) {
 	// Use a more structured key if needed, e.g., based on timestamp or sequence
 	key := fmt.Sprintf("debug_%d_%s", time.Now().UnixNano(), info.PinID)
+	if ctx.mutex.TryLock() {
+		defer ctx.mutex.Unlock()
+	}
 	ctx.debugData[key] = info
+
 }
 
 // GetDebugData returns all debug data
@@ -407,6 +423,20 @@ func (ctx *DefaultExecutionContext) resolveConstantType(nodeType string) *types.
 	default:
 		return types.PinTypes.Any
 	}
+} // End of resolveConstantType
+
+// GetSchemaComponentStore returns the SchemaComponentStore from the repository factory
+// This method makes DefaultExecutionContext implement node.SchemaAccessContext
+func (ctx *DefaultExecutionContext) GetSchemaComponentStore() db.SchemaComponentStore {
+	if ctx.repoFactory == nil {
+		// This shouldn't happen if injection is set up correctly, but return nil defensively.
+		// Consider logging an error here.
+		if ctx.logger != nil {
+			ctx.logger.Error("RepositoryFactory is nil in execution context", nil)
+		}
+		return nil
+	}
+	return ctx.repoFactory.GetSchemaComponentStore()
 }
 
 // getPropertyValue retrieves a property value from the actor's properties

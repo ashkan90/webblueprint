@@ -69,7 +69,7 @@ func NewJSONNode() node.Node {
 					ID:          "result",
 					Name:        "Result",
 					Description: "Result of the JSON operation",
-					Type:        types.PinTypes.Any,
+					Type:        types.PinTypes.Object,
 				},
 				{
 					ID:          "errorMessage",

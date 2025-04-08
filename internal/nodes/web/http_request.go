@@ -83,6 +83,12 @@ func NewHTTPRequestNode() node.Node {
 					Type:        types.PinTypes.Any,
 				},
 				{
+					ID:          "raw",
+					Name:        "Raw",
+					Description: "Raw response data",
+					Type:        types.PinTypes.String,
+				},
+				{
 					ID:          "status",
 					Name:        "Status Code",
 					Description: "HTTP status code",
@@ -341,6 +347,7 @@ func (n *HTTPRequestNode) Execute(ctx node.ExecutionContext) error {
 	}
 
 	// Set output values
+	ctx.SetOutputValue("raw", types.NewValue(types.PinTypes.String, string(responseBody)))
 	ctx.SetOutputValue("response", types.NewValue(types.PinTypes.Any, responseData))
 	ctx.SetOutputValue("status", types.NewValue(types.PinTypes.Number, float64(resp.StatusCode)))
 

@@ -6,6 +6,7 @@ import (
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
+	"webblueprint/pkg/repository" // Added import for repository
 )
 
 // ContextManager provides a centralized way to create and manage execution contexts
@@ -14,6 +15,7 @@ type ContextManager struct {
 	errorManager    *bperrors.ErrorManager
 	recoveryManager *bperrors.RecoveryManager
 	eventManager    core.EventManagerInterface
+	repoFactory     repository.RepositoryFactory // Added field
 }
 
 // NewContextManager creates a new context manager
@@ -21,11 +23,13 @@ func NewContextManager(
 	errorManager *bperrors.ErrorManager,
 	recoveryManager *bperrors.RecoveryManager,
 	eventManager core.EventManagerInterface,
+	repoFactory repository.RepositoryFactory, // Added parameter
 ) *ContextManager {
 	return &ContextManager{
 		errorManager:    errorManager,
 		recoveryManager: recoveryManager,
 		eventManager:    eventManager,
+		repoFactory:     repoFactory, // Added assignment
 	}
 }
 
@@ -53,6 +57,7 @@ func (cm *ContextManager) CreateContextBuilder(
 		logger,
 		hooks,
 		activateFlow,
+		cm.repoFactory, // Pass repoFactory
 	)
 }
 
@@ -81,6 +86,7 @@ func (cm *ContextManager) CreateStandardContext(
 		logger,
 		hooks,
 		activateFlow,
+		cm.repoFactory, // Pass repoFactory
 	).
 		WithErrorHandling(cm.errorManager, cm.recoveryManager).
 		WithEventSupport(cm.eventManager, false, nil).
@@ -112,10 +118,42 @@ func (cm *ContextManager) CreateActorContext(
 		logger,
 		hooks,
 		activateFlow,
+		cm.repoFactory, // Pass repoFactory
 	).
 		WithErrorHandling(cm.errorManager, cm.recoveryManager).
 		WithEventSupport(cm.eventManager, true, nil).
 		WithActorMode().
+		Build()
+}
+
+func (cm *ContextManager) CreateLoopContext(
+	bp *blueprint.Blueprint,
+	nodeID string,
+	nodeType string,
+	blueprintID string,
+	executionID string,
+	inputs map[string]types.Value,
+	variables map[string]types.Value,
+	logger node.Logger,
+	hooks *node.ExecutionHooks,
+	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
+) node.ExecutionContext {
+	return NewContextBuilder(
+		bp,
+		nodeID,
+		nodeType,
+		blueprintID,
+		executionID,
+		inputs,
+		variables,
+		logger,
+		hooks,
+		activateFlow,
+		cm.repoFactory,
+	).
+		WithErrorHandling(cm.errorManager, cm.recoveryManager).
+		WithEventSupport(cm.eventManager, true, nil).
+		WithLoopSupport().
 		Build()
 }
 
@@ -145,6 +183,7 @@ func (cm *ContextManager) CreateEventHandlerContext(
 		logger,
 		hooks,
 		activateFlow,
+		cm.repoFactory, // Pass repoFactory
 	).
 		WithErrorHandling(cm.errorManager, cm.recoveryManager).
 		WithEventSupport(cm.eventManager, true, eventHandlerContext).
@@ -175,6 +214,7 @@ func (cm *ContextManager) CreateFunctionContext(
 		logger,
 		hooks,
 		activateFlow,
+		cm.repoFactory, // Pass repoFactory
 	).
 		WithErrorHandling(cm.errorManager, cm.recoveryManager).
 		WithEventSupport(cm.eventManager, false, nil).
@@ -195,4 +235,9 @@ func (cm *ContextManager) GetRecoveryManager() *bperrors.RecoveryManager {
 // GetEventManager returns the event manager
 func (cm *ContextManager) GetEventManager() core.EventManagerInterface {
 	return cm.eventManager
+}
+
+// GetRepoFactory returns the repository factory
+func (cm *ContextManager) GetRepoFactory() repository.RepositoryFactory {
+	return cm.repoFactory
 }

@@ -474,7 +474,10 @@ export const useBlueprintStore = defineStore('blueprint', () => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(variable),
+                body: JSON.stringify({
+                    ...variable,
+                    version: blueprint.value.version
+                }),
             })
 
             if (!variableResponse.ok) {

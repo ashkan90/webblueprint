@@ -1076,6 +1076,7 @@ func (e *ExecutionEngine) executeVariableNode(nodeID string, bp *blueprint.Bluep
 		hooks,
 		dummyActivateFlow,
 		context.Background(), // Add context.Context argument
+		e.extensions.ContextManager.GetRepoFactory(), // Pass repoFactory using getter
 	)
 
 	// Execute the node (this will set or get variables as needed)
@@ -1244,7 +1245,7 @@ func (e *ExecutionEngine) createGenericActivateFlow(
 	}
 }
 
-func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks, triggerCtx *core.EventHandlerContext) error { // Re-added hooks, Added triggerCtx
+func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, blueprintID, executionID string, variables map[string]types.Value, hooks *node.ExecutionHooks, triggerCtx *core.EventHandlerContext) error {
 	// Find the node in the blueprint
 	nodeConfig := bp.FindNode(nodeID)
 	if nodeConfig == nil {
@@ -1262,61 +1263,17 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	// Create the node instance
 	nodeInstance := factory()
 
+	for _, blueprintNode := range bp.Nodes {
+		if blueprintNode.Type == nodeConfig.Type {
+			for _, property := range blueprintNode.Properties {
+				nodeInstance.SetProperty(property.Name, property.Value)
+			}
+		}
+	}
+
 	// Create execution context
 	// Collect input values from connected nodes
-	inputValues := make(map[string]types.Value)
-
-	// Get input connections for this node
-	inputConnections := bp.GetNodeInputConnections(nodeID)
-
-	for _, conn := range inputConnections {
-		if conn.ConnectionType == "data" {
-			sourceNode := bp.FindNode(conn.SourceNodeID)
-			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
-				// This is a connection from a variable getter node
-				// Extract variable name from the node type
-				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
-
-				// Try to get the variable value
-				if varValue, exists := variables[varName]; exists {
-					// Add it directly to input values
-					inputValues[conn.TargetPinID] = varValue
-
-					// Also ensure the value is stored in debug manager for the source node
-					e.debugManager.StoreNodeOutputValue(executionID, conn.SourceNodeID, conn.SourcePinID, varValue.RawValue)
-				}
-			}
-		}
-	}
-
-	// Process data connections
-	for _, conn := range inputConnections {
-		if conn.ConnectionType == "data" {
-			// Get the source node's output value
-			sourceNodeID := conn.SourceNodeID
-			sourcePinID := conn.SourcePinID
-			targetPinID := conn.TargetPinID
-
-			// Check if we have a result for this pin
-			if nodeResults, ok := e.debugManager.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
-				// Convert to Value
-				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
-
-				// Emit value consumed event
-				e.EmitEvent(ExecutionEvent{
-					Type:      EventValueConsumed,
-					Timestamp: time.Now(),
-					NodeID:    nodeID,
-					Data: map[string]interface{}{
-						"sourceNodeID": sourceNodeID,
-						"sourcePinID":  sourcePinID,
-						"targetPinID":  targetPinID,
-						"value":        nodeResults,
-					},
-				})
-			}
-		}
-	}
+	inputValues := e.preprocessInputs(bp, nodeID, executionID, variables)
 
 	// Record node execution with inputs
 	if e.OnNodeExecutionHook != nil {
@@ -1375,7 +1332,8 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 		// Fallback to a very basic context that likely won't work for complex nodes
 		// Ensure NewExecutionContext exists and has the correct signature
 		// Pass the 'hooks' parameter from executeNode and context.Background()
-		ctx = engineext.NewExecutionContext(nodeID, nodeConfig.Type, blueprintID, executionID, inputValues, variables, e.logger, hooks, activateFlowFn, context.Background()) // Pass hooks and context.Background()
+		// Also pass the repoFactory from the extensions using the getter
+		ctx = engineext.NewExecutionContext(nodeID, nodeConfig.Type, blueprintID, executionID, inputValues, variables, e.logger, hooks, activateFlowFn, context.Background(), e.extensions.ContextManager.GetRepoFactory()) // Use getter
 	} else {
 		// Use the ContextManager to create the appropriate context
 		if triggerCtx != nil {
@@ -1420,7 +1378,6 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 			)
 		}
 	}
-	// --- End Context Creation ---
 
 	// Notify node start
 	if e.hooks != nil && e.hooks.OnNodeStart != nil {
@@ -1490,4 +1447,62 @@ func (e *ExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint, bl
 	}
 
 	return nil
+}
+
+func (e *ExecutionEngine) preprocessInputs(bp *blueprint.Blueprint, nodeID, executionID string, variables map[string]types.Value) map[string]types.Value {
+	inputValues := make(map[string]types.Value)
+
+	// Get input connections for this node
+	inputConnections := bp.GetNodeInputConnections(nodeID)
+
+	for _, conn := range inputConnections {
+		if conn.ConnectionType == "data" {
+			sourceNode := bp.FindNode(conn.SourceNodeID)
+			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+				// This is a connection from a variable getter node
+				// Extract variable name from the node type
+				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+
+				// Try to get the variable value
+				if varValue, exists := variables[varName]; exists {
+					// Add it directly to input values
+					inputValues[conn.TargetPinID] = varValue
+
+					// Also ensure the value is stored in debug manager for the source node
+					e.debugManager.StoreNodeOutputValue(executionID, conn.SourceNodeID, conn.SourcePinID, varValue.RawValue)
+				}
+			}
+		}
+	}
+
+	// Process data connections
+	for _, conn := range inputConnections {
+		if conn.ConnectionType == "data" {
+			// Get the source node's output value
+			sourceNodeID := conn.SourceNodeID
+			sourcePinID := conn.SourcePinID
+			targetPinID := conn.TargetPinID
+
+			// Check if we have a result for this pin
+			if nodeResults, ok := e.debugManager.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
+				// Convert to Value
+				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
+
+				// Emit value consumed event
+				e.EmitEvent(ExecutionEvent{
+					Type:      EventValueConsumed,
+					Timestamp: time.Now(),
+					NodeID:    nodeID,
+					Data: map[string]interface{}{
+						"sourceNodeID": sourceNodeID,
+						"sourcePinID":  sourcePinID,
+						"targetPinID":  targetPinID,
+						"value":        nodeResults,
+					},
+				})
+			}
+		}
+	}
+
+	return inputValues
 }

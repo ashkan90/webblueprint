@@ -167,6 +167,9 @@ func (n *VariableGetNode) Execute(ctx node.ExecutionContext) error {
 // VariableSetNode implements a node that sets a variable value
 type VariableSetNode struct {
 	node.BaseNode
+	varName  *string
+	varType  *string
+	varValue interface{}
 }
 
 // NewVariableSetNode creates a new Variable Set node
@@ -235,19 +238,25 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	// Get the variable name
 	nameValue, nameExists := ctx.GetInputValue("name")
 	if !nameExists {
-		err := fmt.Errorf("missing required input: name")
-		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
-		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		if n.varName != nil && *n.varName != "" {
+			nameValue = types.NewValue(types.PinTypes.String, *n.varName)
+			nameExists = true
 
-		debugData["error"] = err.Error()
-		ctx.RecordDebugInfo(types.DebugInfo{
-			NodeID:      ctx.GetNodeID(),
-			Description: "Variable Set Error",
-			Value:       debugData,
-			Timestamp:   time.Now(),
-		})
+		} else {
+			err := fmt.Errorf("missing required input: name")
+			logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
 
-		return ctx.ActivateOutputFlow("error")
+			debugData["error"] = err.Error()
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.GetNodeID(),
+				Description: "Variable Set Error",
+				Value:       debugData,
+				Timestamp:   time.Now(),
+			})
+
+			return ctx.ActivateOutputFlow("error")
+		}
 	}
 
 	// For the "invalid variable name" test case, we need to check
@@ -290,19 +299,35 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	// Get the value to set
 	valueValue, valueExists := ctx.GetInputValue("value")
 	if !valueExists {
-		err := fmt.Errorf("missing required input: value")
-		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
-		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		if n.varValue != nil && n.varType != nil {
+			pinType, ok := types.GetPinTypeByID(*n.varType)
+			if !ok {
+				pErr := fmt.Errorf("invalid variable type %s", *n.varType)
+				logger.Error("Error getting pin type", nil)
+				logger.Error("Variable Set Error", map[string]interface{}{"error": pErr.Error()})
+				logger.Error("Execution failed", map[string]interface{}{"error": pErr.Error()})
+				ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, pErr.Error()))
 
-		debugData["error"] = err.Error()
-		ctx.RecordDebugInfo(types.DebugInfo{
-			NodeID:      ctx.GetNodeID(),
-			Description: "Variable Set Error",
-			Value:       debugData,
-			Timestamp:   time.Now(),
-		})
+				return ctx.ActivateOutputFlow("error")
+			}
+			valueValue = types.NewValue(pinType, n.varValue)
+			valueExists = true
+		} else {
+			err := fmt.Errorf("missing required input: value")
+			logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+			ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
 
-		return ctx.ActivateOutputFlow("error")
+			debugData["error"] = err.Error()
+			ctx.RecordDebugInfo(types.DebugInfo{
+				NodeID:      ctx.GetNodeID(),
+				Description: "Variable Set Error",
+				Value:       debugData,
+				Timestamp:   time.Now(),
+			})
+
+			return ctx.ActivateOutputFlow("error")
+		}
+
 	}
 
 	// Set the variable in the execution context
@@ -323,4 +348,121 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 
 	// Continue execution
 	return ctx.ActivateOutputFlow("then")
+}
+
+func NewVariableGetDefinedNode(varName, varType string, varValue interface{}) func() node.Node {
+	return func() node.Node {
+		varPinType, ok := types.GetPinTypeByID(varType)
+		if !ok {
+			varPinType = types.PinTypes.Any
+		}
+
+		return &VariableGetNode{
+			BaseNode: node.BaseNode{
+				Metadata: node.NodeMetadata{
+					TypeID:      "variable-get-" + varName,
+					Name:        fmt.Sprintf("Get %s", varName),
+					Description: fmt.Sprintf("Gets the value of a %s", varName),
+					Category:    "Data",
+					Version:     "1.0.0",
+				},
+				Inputs: []types.Pin{
+					{
+						ID:          "exec",
+						Name:        "Execute",
+						Description: "Execution input",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "name",
+						Name:        "Variable Name",
+						Description: "Name of the variable to get",
+						Type:        types.PinTypes.String,
+						Default:     varName,
+					},
+				},
+				Outputs: []types.Pin{
+					{
+						ID:          "then",
+						Name:        "Then",
+						Description: "Execution continues if variable exists",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "error",
+						Name:        "Error",
+						Description: "Executed if variable doesn't exist or an error occurs",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "value",
+						Name:        "Value",
+						Description: "Variable value",
+						Type:        varPinType,
+						Default:     varValue,
+					},
+					{
+						ID:          "errorMessage",
+						Name:        "Error Message",
+						Description: "Error message if operation fails",
+						Type:        types.PinTypes.String,
+					},
+				},
+			},
+		}
+	}
+}
+
+func NewVariableSetDefinedNode(varName, varType string, varValue interface{}) func() node.Node {
+	return func() node.Node {
+		_node := &VariableSetNode{
+			BaseNode: node.BaseNode{
+				Metadata: node.NodeMetadata{
+					TypeID:      "variable-set-" + varName,
+					Name:        fmt.Sprintf("Set %s", varName),
+					Description: fmt.Sprintf("Sets the value of a %s", varName),
+					Category:    "Data",
+					Version:     "1.0.0",
+				},
+				Inputs: []types.Pin{
+					{
+						ID:          "exec",
+						Name:        "Execute",
+						Description: "Execution input",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "value",
+						Name:        "Value",
+						Description: "Value to set",
+						Type:        types.PinTypes.Any,
+					},
+				},
+				Outputs: []types.Pin{
+					{
+						ID:          "then",
+						Name:        "Then",
+						Description: "Execution continues",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "error",
+						Name:        "Error",
+						Description: "Executed if an error occurs",
+						Type:        types.PinTypes.Execution,
+					},
+					{
+						ID:          "errorMessage",
+						Name:        "Error Message",
+						Description: "Error message if operation fails",
+						Type:        types.PinTypes.String,
+					},
+				},
+			},
+		}
+		_node.varType = &varType
+		_node.varName = &varName
+		_node.varValue = varValue
+		return _node
+	}
 }

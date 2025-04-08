@@ -9,6 +9,7 @@ import (
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
+	"webblueprint/pkg/repository"
 )
 
 // ContextFactory provides utility methods for creating different kinds of contexts
@@ -16,7 +17,8 @@ import (
 type ContextFactory struct {
 	errorManager    *bperrors.ErrorManager
 	recoveryManager *bperrors.RecoveryManager
-	eventManager    *event.EventManager // Use concrete type
+	eventManager    *event.EventManager          // Use concrete type
+	repoFactory     repository.RepositoryFactory // Added field
 	contextManager  *ContextManager
 }
 
@@ -25,18 +27,21 @@ func NewContextFactory(
 	errorManager *bperrors.ErrorManager,
 	recoveryManager *bperrors.RecoveryManager,
 	eventManager *event.EventManager, // Expect concrete type
+	repoFactory repository.RepositoryFactory, // Added parameter
 ) *ContextFactory {
 	// Create a context manager, passing the concrete event manager's core interface
 	contextManager := NewContextManager(
 		errorManager,
 		recoveryManager,
 		eventManager.AsEventManagerInterface(), // Pass core interface adapter to ContextManager
+		repoFactory,                            // Pass repoFactory to ContextManager
 	)
 
 	return &ContextFactory{
 		errorManager:    errorManager,
 		recoveryManager: recoveryManager,
 		eventManager:    eventManager, // Store concrete type
+		repoFactory:     repoFactory,  // Store repoFactory
 		contextManager:  contextManager,
 	}
 }
@@ -206,6 +211,13 @@ func (f *ContextFactory) CreateFunctionContext(
 
 	// Add event handling to the context
 	return NewFunctionExecutionContext(baseCtx.(*DefaultExecutionContext), functionID)
+}
+
+func (f *ContextFactory) CreateLoopContext(baseCtx node.ExecutionContext) node.ExecutionContext {
+	// TODO: Will be implemented
+	return NewLoopContext(
+		baseCtx.(*DefaultExecutionContext),
+	)
 }
 
 // GetOrCreateErrorManager gets the error manager if the context has error handling,

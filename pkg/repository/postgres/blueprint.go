@@ -752,7 +752,7 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 	}
 
 	// Create a new package blueprint
-	bp := blueprint.NewBlueprint(blueprintModel.ID, blueprintModel.Name, "1.0.0") // Version might need to be set differently
+	bp := blueprint.NewBlueprint(blueprintModel.ID, blueprintModel.Name, fmt.Sprintf("%d", versionModel.VersionNumber)) // Version might need to be set differently
 
 	// Initialize empty events and event bindings slices
 	bp.Events = make([]blueprint.EventDefinition, 0)
@@ -900,7 +900,11 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 				continue // Skip invalid variables
 			}
 
+			// [{"id": "47305904-c782-4292-954f-a75ceba0f937", "name": "asd", "type": "string", "category": {"Valid": true, "String": "User Defined"}, "createdAt": "2025-04-07T20:54:07.669616+03:00", "isExposed": true, "updatedAt": "0001-01-01T00:00:00Z", "blueprintId": "745f58fa-b769-46b8-849d-1f6f919316d9", "description": {"Valid": false, "String": ""}, "defaultValue": {"data": ""}}, {"id": "fdc431ab-1e1b-4824-904a-9decc4313f55", "name": "response", "type": "array", "category": {"Valid": true, "String": "User Defined"}, "createdAt": "2025-04-07T20:55:16.487429+03:00", "isExposed": true, "updatedAt": "0001-01-01T00:00:00Z", "blueprintId": "745f58fa-b769-46b8-849d-1f6f919316d9", "description": {"Valid": false, "String": ""}, "defaultValue": {"data": []}}]
 			var variable blueprint.Variable
+			if id, ok := varMap["id"].(string); ok {
+				variable.ID = id
+			}
 			if name, ok := varMap["name"].(string); ok {
 				variable.Name = name
 			}
@@ -909,6 +913,15 @@ func (r *PostgresBlueprintRepository) ToPkgBlueprint(blueprintModel *models.Blue
 			}
 			if value, ok := varMap["value"]; ok {
 				variable.Value = value
+			}
+			if category, ok := varMap["category"].(string); ok {
+				variable.Category = category
+			}
+			if isExposed, ok := varMap["isExposed"].(bool); ok {
+				variable.IsExposed = isExposed
+			}
+			if description, ok := varMap["description"].(string); ok {
+				variable.Description = description
 			}
 
 			bp.AddVariable(variable)
@@ -1276,9 +1289,13 @@ func (r *PostgresBlueprintRepository) FromPkgBlueprint(bp *blueprint.Blueprint) 
 	variables := make([]interface{}, len(bp.Variables))
 	for i, variable := range bp.Variables {
 		variables[i] = map[string]interface{}{
-			"name":  variable.Name,
-			"type":  variable.Type,
-			"value": variable.Value,
+			"id":           variable.ID,
+			"name":         variable.Name,
+			"type":         variable.Type,
+			"defaultValue": variable.Value,
+			"category":     variable.Category,
+			"isExposed":    variable.IsExposed,
+			"description":  variable.Description,
 		}
 	}
 	versionModel.Variables = variables

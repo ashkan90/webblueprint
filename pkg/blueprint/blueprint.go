@@ -1,5 +1,7 @@
 package blueprint
 
+import "strings"
+
 // BlueprintNode represents a node in a blueprint
 type BlueprintNode struct {
 	ID         string                 `json:"id"`
@@ -58,9 +60,13 @@ type Connection struct {
 
 // Variable represents a blueprint variable
 type Variable struct {
-	Name  string      `json:"name"`
-	Type  string      `json:"type"`
-	Value interface{} `json:"value"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Type        string      `json:"type"`
+	Description string      `json:"description"`
+	Category    string      `json:"category"`
+	IsExposed   bool        `json:"isExposed"`
+	Value       interface{} `json:"value"`
 }
 
 type Function struct {
@@ -154,6 +160,22 @@ func (b *Blueprint) FindNode(id string) *BlueprintNode {
 			return &b.Nodes[i]
 		}
 	}
+	return nil
+}
+
+func (b *Blueprint) FindNodeByVar(varId string) *BlueprintNode {
+	for _, node := range b.Nodes {
+		if !strings.Contains(node.Type, "variable-set") {
+			continue
+		}
+
+		for _, property := range node.Properties {
+			if property.Name == "variableId" && property.Value == varId {
+				return &node
+			}
+		}
+	}
+
 	return nil
 }
 

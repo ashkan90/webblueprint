@@ -8,6 +8,7 @@ import (
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
+	"webblueprint/pkg/repository" // Added import
 )
 
 // ContextBuilder creates execution contexts with specific capabilities
@@ -22,6 +23,7 @@ type ContextBuilder struct {
 	logger       node.Logger
 	hooks        *node.ExecutionHooks
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error
+	repoFactory  repository.RepositoryFactory // Ensure field is present
 
 	// Feature flags
 	withErrorHandling bool
@@ -38,6 +40,8 @@ type ContextBuilder struct {
 
 	withFunction bool
 	functionID   string
+
+	withLoopSupport bool
 }
 
 // NewContextBuilder creates a new context builder
@@ -52,6 +56,7 @@ func NewContextBuilder(
 	logger node.Logger,
 	hooks *node.ExecutionHooks,
 	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
+	repoFactory repository.RepositoryFactory, // Ensure parameter is present
 ) *ContextBuilder {
 	return &ContextBuilder{
 		bp:           bp,
@@ -64,6 +69,7 @@ func NewContextBuilder(
 		logger:       logger,
 		hooks:        hooks,
 		activateFlow: activateFlow,
+		repoFactory:  repoFactory, // Ensure assignment is present
 
 		// Default all features to off
 		withErrorHandling: false,
@@ -90,6 +96,11 @@ func (b *ContextBuilder) WithEventSupport(eventManager core.EventManagerInterfac
 	return b
 }
 
+func (b *ContextBuilder) WithLoopSupport() *ContextBuilder {
+	b.withLoopSupport = true
+	return b
+}
+
 // WithActorMode enables actor-based execution
 func (b *ContextBuilder) WithActorMode() *ContextBuilder {
 	b.withActorMode = true
@@ -105,7 +116,7 @@ func (b *ContextBuilder) WithFunction(fnID string) *ContextBuilder {
 // Build creates the execution context with all requested capabilities
 func (b *ContextBuilder) Build() node.ExecutionContext {
 	// Pass the concrete event manager to the factory
-	ctxFactory := NewContextFactory(b.errorManager, b.recoveryManager, b.concreteEventManager)
+	ctxFactory := NewContextFactory(b.errorManager, b.recoveryManager, b.concreteEventManager, b.repoFactory) // Pass repoFactory
 	// Create the base execution context
 	baseCtx := NewExecutionContext(
 		b.nodeID,
@@ -118,6 +129,7 @@ func (b *ContextBuilder) Build() node.ExecutionContext {
 		b.hooks,
 		b.activateFlow,
 		context.WithValue(context.Background(), "bp", b.bp),
+		b.repoFactory, // Pass repoFactory
 	)
 
 	// Apply decorators in a consistent order
@@ -220,6 +232,22 @@ func (b *ContextBuilder) Build() node.ExecutionContext {
 		}
 
 		currentCtx = ctxFactory.CreateEventAwareContext(currentCtx, b.isEventHandler, b.eventHandlerContext)
+	} else if b.withLoopSupport {
+		currentCtx = baseCtx
+
+		if b.withErrorHandling {
+			currentCtx = ctxFactory.CreateErrorAwareContext(currentCtx)
+		}
+
+		if b.withActorMode {
+			currentCtx = ctxFactory.CreateActorContext(currentCtx)
+		}
+
+		if b.withEventSupport {
+			currentCtx = ctxFactory.CreateEventAwareContext(currentCtx, b.isEventHandler, b.eventHandlerContext)
+		}
+
+		currentCtx = ctxFactory.CreateLoopContext(currentCtx)
 	}
 
 	return currentCtx

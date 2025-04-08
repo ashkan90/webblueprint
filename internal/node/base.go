@@ -46,3 +46,11 @@ func (n *BaseNode) AddOutputPin(pin types.Pin) {
 func (n *BaseNode) GetProperties() []types.Property {
 	return n.Properties
 }
+
+func (n *BaseNode) SetProperty(name string, value interface{}) {
+	for i := range n.Properties {
+		if n.Properties[i].Name == name {
+			n.Properties[i].Value = value
+		}
+	}
+}

@@ -544,7 +544,14 @@ INSERT INTO variables (
     var_record.value->>'description',
     (var_record.value->>'isExposed')::boolean,
     var_record.value->>'id'
-    );
+    )
+ON CONFLICT(blueprint_id,name)
+    DO UPDATE SET
+                  name = EXCLUDED.name,
+                  type = EXCLUDED.type,
+                  default_value = EXCLUDED.default_value,
+                  description = EXCLUDED.description,
+                  is_exposed = EXCLUDED.is_exposed;
 END LOOP;
 
 RETURN NEW;

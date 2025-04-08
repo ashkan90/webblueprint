@@ -25,15 +25,16 @@ var (
 		"storage":      web.NewStorageNode,
 
 		// Veri düğümleri
-		"constant-string":   data.NewStringConstantNode,
-		"constant-number":   data.NewNumberConstantNode,
-		"constant-boolean":  data.NewBooleanConstantNode,
-		"variable-get":      data.NewVariableGetNode,
-		"variable-set":      data.NewVariableSetNode,
-		"json-processor":    data.NewJSONNode,
-		"array-operations":  data.NewArrayNode,
-		"object-operations": data.NewObjectNode,
-		"type-conversion":   data.NewTypeConversionNode,
+		"constant-string":    data.NewStringConstantNode,
+		"constant-number":    data.NewNumberConstantNode,
+		"constant-boolean":   data.NewBooleanConstantNode,
+		"variable-get":       data.NewVariableGetNode,
+		"variable-set":       data.NewVariableSetNode,
+		"json-processor":     data.NewJSONNode,
+		"array-operations":   data.NewArrayNode,
+		"object-operations":  data.NewObjectNode,
+		"type-conversion":    data.NewTypeConversionNode,
+		"schema-transformer": data.NewSchemaNode, // Updated registration for Schema Node
 
 		// Matematik düğümleri
 		"math-add":      math.NewAddNode,

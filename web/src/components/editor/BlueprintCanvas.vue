@@ -17,7 +17,7 @@
       <!-- Grid background is handled by CSS -->
 
       <!-- Connections -->
-      <svg class="connections-layer">
+      <svg class="connections-layer" v-if="visible">
         <g v-for="connection in connections" :key="connection.id">
           <path
               :d="getConnectionPath(connection)"
@@ -88,6 +88,8 @@
           @pin-mouse-down="handlePinMouseDown"
           @pin-mouse-up="handlePinMouseUp"
           @delete="handleNodeDelete"
+          @dragstart="() => visible = false"
+          @dragend="() => visible = true"
       />
     </div>
 
@@ -642,7 +644,7 @@ function handleContextMenu(event: MouseEvent) {
 
 function handleDragOver(event: DragEvent) {
   // Allow the drop
-  event.preventDefault();
+  // event.preventDefault();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'copy';
   }
@@ -712,7 +714,9 @@ function handleNodeDeselect() {
 }
 
 function handleNodeMove(nodeId: string, position: Position) {
+  visible.value = false
   emit('node-moved', nodeId, position)
+  visible.value = true
 }
 
 function handlePinMouseDown(data: {
@@ -932,6 +936,8 @@ function handleResetZoom() {
   showContextMenu.value = false
 }
 
+const visible = ref<boolean>(true);
+
 function getConnectionPath(connection: Connection): string {
   // Find source and target nodes
   const sourceNode = props.nodes.find(n => n.id === connection.sourceNodeId)
@@ -1130,11 +1136,17 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('mouseup', handleMouseUp)
 
+
+  setTimeout(() => {
+    visible.value = false
+    visible.value = true
+  }, 50);
+
   // Center the view
-  if (canvasContainer.value && canvas.value) {
-    offset.value.x = canvasContainer.value.clientWidth / 2
-    offset.value.y = canvasContainer.value.clientHeight / 2
-  }
+  // if (canvasContainer.value && canvas.value) {
+  //   offset.value.x = canvasContainer.value.clientWidth / 2
+  //   offset.value.y = canvasContainer.value.clientHeight / 2
+  // }
 })
 
 onUnmounted(() => {

@@ -127,6 +127,14 @@ func (n *SafeDivideNode) GetProperties() []types.Property {
 	return n.properties
 }
 
+func (n *SafeDivideNode) SetProperty(name string, value interface{}) {
+	for i := range n.properties {
+		if n.properties[i].Name == name {
+			n.properties[i].Value = value
+		}
+	}
+}
+
 // Execute runs the node
 func (n *SafeDivideNode) Execute(ctx node.ExecutionContext) error {
 	// Check if context supports error handling

@@ -261,6 +261,10 @@ func (n *ArrayNode) handleGetOperation(ctx node.ExecutionContext, debugData map[
 		Timestamp:   time.Now(),
 	})
 
+	ctx.Logger().Debug("Array Get operation succeed", map[string]interface{}{
+		"value": index,
+	})
+
 	// Continue execution
 	return ctx.ActivateOutputFlow("then")
 }

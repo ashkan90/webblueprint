@@ -1,16 +1,16 @@
-package logic
+package engineext
 
 import (
 	"time"
-	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
+	"webblueprint/internal/nodes/logic"
 	"webblueprint/internal/types"
 )
 
 // LoopContext is a special execution context that tracks loop state
 type LoopContext struct {
 	node.ExecutionContext
-	loopNode       *LoopNode
+	loopNode       *logic.LoopNode
 	loopVarName    string
 	currentIndex   float64
 	maxIterations  int
@@ -23,6 +23,34 @@ type LoopContext struct {
 	iterationsDone int
 	startTime      time.Time
 	outputs        map[string]types.Value
+}
+
+func NewLoopContext(
+	ctx *DefaultExecutionContext,
+	loopNode *logic.LoopNode,
+	loopVarName string,
+	maxIterations int,
+	startIndex float64,
+	nodeID string,
+	debugData map[string]interface{},
+	outputs map[string]types.Value,
+) *LoopContext {
+	return &LoopContext{
+		ExecutionContext: ctx,
+		loopNode:         loopNode,
+		loopVarName:      loopVarName,
+		currentIndex:     0,
+		maxIterations:    maxIterations,
+		startIndex:       startIndex,
+		nodeID:           nodeID,
+		bodyCompleted:    make(chan bool),
+		executionDone:    make(chan bool),
+		debugData:        debugData,
+		bodyActivated:    false,
+		iterationsDone:   0,
+		startTime:        time.Now(),
+		outputs:          outputs,
+	}
 }
 
 // ActivateOutputFlow overrides the standard method to track loop body completion
@@ -118,7 +146,7 @@ func (ctx *LoopContext) GetOutputValue(pinID string) (types.Value, bool) {
 	}
 
 	// Fall back to the parent context
-	return ctx.ExecutionContext.(*engineext.DefaultExecutionContext).GetOutputValue(pinID)
+	return ctx.ExecutionContext.(*DefaultExecutionContext).GetOutputValue(pinID)
 }
 
 // GetOutputPins returns all output pins from the loop node

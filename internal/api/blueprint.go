@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"webblueprint/internal/nodes/data"
+	"webblueprint/internal/registry"
 	"webblueprint/pkg/blueprint"
 	"webblueprint/pkg/service"
 
@@ -13,13 +15,15 @@ import (
 
 // BlueprintHandler handles blueprint-related API requests
 type BlueprintHandler struct {
-	blueprintService *service.BlueprintService
+	blueprintService         *service.BlueprintService
+	blueprintVariableService *service.BlueprintVariableService
 }
 
 // NewBlueprintHandler creates a new blueprint handler
-func NewBlueprintHandler(blueprintService *service.BlueprintService) *BlueprintHandler {
+func NewBlueprintHandler(blueprintService *service.BlueprintService, blueprintVariableService *service.BlueprintVariableService) *BlueprintHandler {
 	return &BlueprintHandler{
-		blueprintService: blueprintService,
+		blueprintService:         blueprintService,
+		blueprintVariableService: blueprintVariableService,
 	}
 }
 
@@ -31,6 +35,12 @@ func (h *BlueprintHandler) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc("/api/blueprints/{id}", h.handleGetBlueprint).Methods("GET")
 	router.HandleFunc("/api/blueprints/{id}", h.handleUpdateBlueprint).Methods("PUT")
 	router.HandleFunc("/api/blueprints/{id}", h.handleDeleteBlueprint).Methods("DELETE")
+
+	// Blueprint variable operations/api/blueprints/{id}/variable
+	router.HandleFunc("/api/blueprints/{id}/variable", h.handleAddVariable).Methods("POST")
+	router.HandleFunc("/api/blueprints/{id}/variable", func(writer http.ResponseWriter, request *http.Request) {
+		respondWithJSON(writer, http.StatusGone, "Not Implemented")
+	}).Methods("GET")
 
 	// Blueprint versions
 	router.HandleFunc("/api/blueprints/{id}/versions", h.handleGetVersions).Methods("GET")
@@ -76,6 +86,11 @@ func (h *BlueprintHandler) handleGetBlueprint(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, fmt.Sprintf("Blueprint not found: %v", err))
 		return
+	}
+
+	for _, variable := range bp.Variables {
+		registry.GetInstance().RegisterNodeTypeRuntime(fmt.Sprintf("variable-get-%s", variable.Name), data.NewVariableGetDefinedNode(variable.Name, variable.Type, variable.Type))
+		registry.GetInstance().RegisterNodeTypeRuntime(fmt.Sprintf("variable-set-%s", variable.Name), data.NewVariableSetDefinedNode(variable.Name, variable.Type, variable.Value))
 	}
 
 	respondWithJSON(w, http.StatusOK, bp)
@@ -320,6 +335,48 @@ func (h *BlueprintHandler) handleExecuteBlueprint(w http.ResponseWriter, r *http
 	respondWithJSON(w, http.StatusAccepted, map[string]string{
 		"executionId": executionID,
 		"status":      "running",
+	})
+}
+
+func (h *BlueprintHandler) handleAddVariable(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var request struct {
+		ID      string      `json:"id"`
+		Name    string      `json:"name"`
+		Type    string      `json:"type"`
+		Value   interface{} `json:"value"`
+		Version string      `json:"version"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload, "+err.Error())
+		return
+	}
+
+	version, vErr := strconv.Atoi(request.Version)
+	if vErr != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid version number, "+vErr.Error())
+		return
+	}
+
+	_, err := h.blueprintService.GetBlueprint(r.Context(), id)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("Blueprint not found: %v", err))
+		return
+	}
+
+	variable, err := h.blueprintVariableService.CreateVariable(r.Context(), version, id, request.ID, request.Name, request.Type, request.Value)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error creating variable: %v", err))
+		return
+	}
+
+	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":    variable.ID,
+		"name":  variable.Name,
+		"type":  variable.Type,
+		"value": request.Value,
 	})
 }
 

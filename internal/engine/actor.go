@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
@@ -82,6 +83,7 @@ func NewNodeActor(
 	if node := bp.FindNode(nodeID); node != nil {
 		propertyLog := make(map[string]interface{})
 		for _, property := range node.Properties {
+			nodeInstance.SetProperty(property.Name, property.Value)
 			properties = append(properties, types.Property{
 				Name:  property.Name,
 				Value: property.Value,
@@ -101,7 +103,7 @@ func NewNodeActor(
 		ExecutionID: executionID,
 		node:        nodeInstance,
 		bp:          bp,
-		mailbox:     make(chan NodeMessage, 50), // Buffer for handling multiple messages
+		mailbox:     make(chan NodeMessage, 1024), // Buffer for handling multiple messages
 		inputs:      make(map[string]types.Value),
 		outputs:     make(map[string]types.Value),
 		variables:   varsCopy,
@@ -296,7 +298,9 @@ func (a *NodeActor) handleExecuteMessage(msg NodeMessage) NodeResponse {
 	}
 
 	// Execute the node using the potentially decorated context stored from Start()
-	err := a.node.Execute(a.decoratedCtx) // Use decoratedCtx
+	err := a.node.Execute(a.decoratedCtx)
+
+	a.outputs = engineext.GetExtendedContext(a.decoratedCtx).GetAllOutputs()
 
 	// Get the outputs
 	a.mutex.RLock()
@@ -383,12 +387,13 @@ func (a *NodeActor) handleInputMessage(msg NodeMessage) NodeResponse {
 
 	// Store input in the execution context
 	a.ctx.SetInput(msg.PinID, msg.Value)
+	engineext.GetExtendedContext(a.decoratedCtx).SetInput(msg.PinID, msg.Value)
 
 	// Log the received input for debugging
 	a.logger.Debug("Received input value", map[string]interface{}{
-		"pinId":     msg.PinID,
-		"valueType": fmt.Sprintf("%T", msg.Value.RawValue),
-		"value":     msg.Value.RawValue,
+		"pinId": msg.PinID,
+		//"valueType": fmt.Sprintf("%T", msg.Value.RawValue),
+		//"value":     msg.Value.RawValue,
 	})
 
 	// Return success

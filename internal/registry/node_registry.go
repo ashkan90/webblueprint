@@ -10,6 +10,7 @@ import (
 // as the main execution engine
 type GlobalNodeRegistry struct {
 	factories map[string]node.NodeFactory
+	chanF     chan map[string]node.NodeFactory
 	mutex     sync.RWMutex
 }
 
@@ -28,6 +29,7 @@ func Make(def ...map[string]node.NodeFactory) {
 
 		instance = &GlobalNodeRegistry{
 			factories: factories,
+			chanF:     make(chan map[string]node.NodeFactory),
 		}
 	})
 }
@@ -42,6 +44,20 @@ func (r *GlobalNodeRegistry) RegisterNodeType(typeID string, factory node.NodeFa
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.factories[typeID] = factory
+}
+
+func (r *GlobalNodeRegistry) RegisterNodeTypeRuntime(typeID string, factory node.NodeFactory) {
+	if factory == nil {
+		return
+	}
+
+	r.mutex.Lock()
+	r.factories[typeID] = factory
+	r.mutex.Unlock()
+
+	go func() {
+		r.chanF <- map[string]node.NodeFactory{typeID: factory}
+	}()
 }
 
 // GetNodeFactory retrieves a node factory by type ID
@@ -64,4 +80,14 @@ func (r *GlobalNodeRegistry) GetAllNodeFactories() map[string]node.NodeFactory {
 	}
 
 	return factoriesCopy
+}
+
+func (r *GlobalNodeRegistry) FactoryChannel() chan map[string]node.NodeFactory {
+	return r.chanF
+}
+
+func (r *GlobalNodeRegistry) Close() {
+	close(r.chanF)
+	for range r.chanF {
+	}
 }

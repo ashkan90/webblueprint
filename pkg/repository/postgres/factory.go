@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"webblueprint/internal/db" // Added import for internal db package
 	"webblueprint/pkg/repository"
 )
 
@@ -10,13 +11,15 @@ type PostgresRepositoryFactory struct {
 	db *sql.DB
 
 	// Cached repository instances
-	assetRepo     repository.AssetRepository
-	blueprintRepo repository.BlueprintRepository
-	workspaceRepo repository.WorkspaceRepository
-	userRepo      repository.UserRepository
-	executionRepo repository.ExecutionRepository
-	nodeRepo      repository.NodeRepository
-	eventRepo     repository.EventRepository
+	assetRepo             repository.AssetRepository
+	blueprintRepo         repository.BlueprintRepository
+	blueprintVariableRepo repository.BlueprintVariableRepository
+	workspaceRepo         repository.WorkspaceRepository
+	userRepo              repository.UserRepository
+	executionRepo         repository.ExecutionRepository
+	nodeRepo              repository.NodeRepository
+	eventRepo             repository.EventRepository
+	schemaComponentStore  db.SchemaComponentStore // Added field
 }
 
 // NewRepositoryFactory creates a new PostgreSQL repository factory
@@ -40,6 +43,14 @@ func (f *PostgresRepositoryFactory) GetBlueprintRepository() repository.Blueprin
 		f.blueprintRepo = NewBlueprintRepository(f.db)
 	}
 	return f.blueprintRepo
+}
+
+// GetBlueprintVariableRepository returns a BlueprintVariableRepository implementation
+func (f *PostgresRepositoryFactory) GetBlueprintVariableRepository() repository.BlueprintVariableRepository {
+	if f.blueprintVariableRepo == nil {
+		f.blueprintVariableRepo = NewBlueprintVariableRepository(f.db)
+	}
+	return f.blueprintVariableRepo
 }
 
 // GetWorkspaceRepository returns a WorkspaceRepository implementation
@@ -80,4 +91,13 @@ func (f *PostgresRepositoryFactory) GetEventRepository() repository.EventReposit
 	}
 
 	return f.eventRepo
+}
+
+// GetSchemaComponentStore returns a SchemaComponentStore implementation
+func (f *PostgresRepositoryFactory) GetSchemaComponentStore() db.SchemaComponentStore {
+	if f.schemaComponentStore == nil {
+		// Assuming NewSQLSchemaComponentStore exists in internal/db
+		f.schemaComponentStore = db.NewSQLSchemaComponentStore(f.db)
+	}
+	return f.schemaComponentStore
 }

@@ -95,6 +95,8 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer shutdownCancel()
 
+	registry.GetInstance().Close()
+
 	// Shutdown gracefully
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("Server shutdown error", slog.String("error", err.Error()))
@@ -104,10 +106,14 @@ func main() {
 }
 
 func setupAPI(ctx context.Context, router *mux.Router) {
-	_, repoFactory, dbErr := db.Setup(ctx)
+	connManager, repoFactory, dbErr := db.Setup(ctx) // Capture connManager
 	if dbErr != nil {
+		slog.Error("Failed to setup database", slog.String("error", dbErr.Error()))
+		// Decide if the application should exit or continue without DB functionality
+		// For now, let's return, preventing API setup without DB.
 		return
 	}
+	dbConn := connManager.GetDB() // Get the *sql.DB connection
 
 	wsManager := api.NewWebSocketManager()
 	logger := api.NewWebSocketLogger(wsManager)
@@ -128,6 +134,7 @@ func setupAPI(ctx context.Context, router *mux.Router) {
 		errorManager,
 		recoveryManager,
 		eventManagerCoreAdapter, // Pass the core interface adapter
+		repoFactory,             // Pass the repoFactory
 	)
 	// engineext.InitializeExtensions expects the concrete manager
 	contextExtension := engineext.InitializeExtensions(
@@ -145,9 +152,12 @@ func setupAPI(ctx context.Context, router *mux.Router) {
 		wsManager,
 		debugManager,
 		repoFactory,
+		dbConn,
 		contextExtension,
+		logger,
 	)
 
 	server.InitiateCoreNodes()
 	server.SetupRoutes(router)
+	go server.ListenRuntimeNodes()
 }

@@ -11,6 +11,7 @@ import (
 	"webblueprint/internal/registry"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
+	"webblueprint/pkg/repository" // Added import
 )
 
 // MiniExecutionEngine is a simplified execution engine for running function nodes
@@ -20,15 +21,17 @@ type MiniExecutionEngine struct {
 	debugMgr     *DebugManager
 	outputs      map[string]map[string]types.Value // nodeID -> pinID -> value
 	mutex        sync.RWMutex
+	repoFactory  repository.RepositoryFactory // Added field
 }
 
 // NewMiniExecutionEngine creates a new mini execution engine
-func NewMiniExecutionEngine(logger node.Logger, debugMgr *DebugManager) *MiniExecutionEngine {
+func NewMiniExecutionEngine(logger node.Logger, debugMgr *DebugManager, repoFactory repository.RepositoryFactory) *MiniExecutionEngine { // Added parameter
 	return &MiniExecutionEngine{
 		nodeRegistry: make(map[string]node.NodeFactory),
 		logger:       logger,
 		debugMgr:     debugMgr,
 		outputs:      make(map[string]map[string]types.Value),
+		repoFactory:  repoFactory, // Added assignment
 	}
 }
 
@@ -291,6 +294,7 @@ func (e *MiniExecutionEngine) executeNode(nodeID string, bp *blueprint.Blueprint
 		hooks,
 		activateFlowFn,
 		storeCtx,
+		e.repoFactory, // Pass repoFactory
 	)
 
 	// Notify node start

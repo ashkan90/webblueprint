@@ -71,6 +71,10 @@ func (v Value) AsNumber() (float64, error) {
 		if _v, ok := v.RawValue.(int); ok {
 			return float64(_v), nil
 		}
+
+		if v.RawValue == nil {
+			return 0, nil
+		}
 		return v.RawValue.(float64), nil
 	}
 
@@ -421,6 +425,16 @@ func (p *Pin) ValidateConnection(targetPin *Pin) error {
 			return nil
 		}
 		return fmt.Errorf("incompatible pin types: %s -> %s", p.Type.Name, targetPin.Type.Name)
+	}
+
+	return nil
+}
+
+func GetProperty(properties []Property, name string) *Property {
+	for _, property := range properties {
+		if property.Name == name {
+			return &property
+		}
 	}
 
 	return nil

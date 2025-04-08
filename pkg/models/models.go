@@ -326,16 +326,16 @@ type BlueprintDependency struct {
 
 // Variable represents a blueprint variable
 type Variable struct {
-	ID           string
-	BlueprintID  string
-	Name         string
-	Type         string
-	DefaultValue JSONB
-	Description  sql.NullString
-	IsExposed    bool
-	Category     sql.NullString
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID           string         `json:"id,omitempty"`
+	BlueprintID  string         `json:"blueprintId,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	Type         string         `json:"type,omitempty"`
+	DefaultValue JSONB          `json:"defaultValue,omitempty"`
+	Description  sql.NullString `json:"description"`
+	IsExposed    bool           `json:"isExposed,omitempty"`
+	Category     sql.NullString `json:"category"`
+	CreatedAt    time.Time      `json:"createdAt"`
+	UpdatedAt    time.Time      `json:"updatedAt"`
 }
 
 // Function represents a blueprint function
@@ -352,4 +352,13 @@ type Function struct {
 	IsPublic      bool
 	Category      sql.NullString
 	Version       string
+}
+
+// SchemaComponent represents the structure in the database.
+type SchemaComponent struct {
+	ID               string    `db:"id"`
+	Name             string    `db:"name"`
+	SchemaDefinition string    `db:"schema_definition"`
+	CreatedAt        time.Time `db:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
 }

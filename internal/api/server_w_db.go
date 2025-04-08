@@ -1,13 +1,18 @@
 package api
 
 import (
+	"database/sql" // Added import
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 	"webblueprint/internal/bperrors"
+	"webblueprint/internal/db" // Added import
 	"webblueprint/internal/nodes"
+
 	// "webblueprint/internal/core" // No longer needed directly
 	"webblueprint/internal/engine"
 	"webblueprint/internal/engineext"
@@ -23,21 +28,24 @@ import (
 
 // APIServer handles HTTP API requests with repository integration
 type APIServerWithDB struct {
-	executionEngine  *engine.ExecutionEngine
-	engineExtensions *engineext.ExecutionEngineExtensions
-	nodeRegistry     map[string]node.NodeFactory
-	wsManager        *WebSocketManager
-	debugManager     *engine.DebugManager
-	errorManager     *bperrors.ErrorManager
-	recoveryManager  *bperrors.RecoveryManager
-	eventManager     *event.EventManager // Ensure concrete type is used
-	repoFactory      repository.RepositoryFactory
-	blueprintService *service.BlueprintService
-	userService      *service.UserService
-	workspaceService *service.WorkspaceService
-	executionService *service.ExecutionService
-	eventService     *service.EventService
-	rw               *sync.RWMutex
+	executionEngine          *engine.ExecutionEngine
+	engineExtensions         *engineext.ExecutionEngineExtensions
+	nodeRegistry             map[string]node.NodeFactory
+	wsManager                *WebSocketManager
+	debugManager             *engine.DebugManager
+	errorManager             *bperrors.ErrorManager
+	recoveryManager          *bperrors.RecoveryManager
+	eventManager             *event.EventManager // Ensure concrete type is used
+	repoFactory              repository.RepositoryFactory
+	blueprintService         *service.BlueprintService
+	blueprintVariableService *service.BlueprintVariableService
+	userService              *service.UserService
+	workspaceService         *service.WorkspaceService
+	executionService         *service.ExecutionService
+	eventService             *service.EventService
+	schemaComponentHandler   *SchemaComponentHandler // Added handler
+	logger                   node.Logger
+	rw                       *sync.RWMutex
 }
 
 // NewAPIServerWithDB creates a new API server with database integration
@@ -46,7 +54,9 @@ func NewAPIServerWithDB(
 	wsManager *WebSocketManager,
 	debugManager *engine.DebugManager,
 	repoFactory repository.RepositoryFactory,
-	engineExtensions *engineext.ExecutionEngineExtensions, // Changed from errorAwareEngine
+	dbConn *sql.DB, // Added *sql.DB parameter
+	engineExtensions *engineext.ExecutionEngineExtensions,
+	logger node.Logger,
 ) *APIServerWithDB {
 	// Create the blueprint service
 	blueprintService := service.NewBlueprintService(
@@ -54,6 +64,11 @@ func NewAPIServerWithDB(
 		repoFactory.GetWorkspaceRepository(),
 		repoFactory.GetAssetRepository(),
 		repoFactory.GetExecutionRepository(),
+	)
+
+	blueprintVariableService := service.NewBlueprintVariableService(
+		repoFactory.GetBlueprintRepository(),
+		repoFactory.GetBlueprintVariableRepository(),
 	)
 
 	userService := service.NewUserService(repoFactory.GetUserRepository())
@@ -70,8 +85,15 @@ func NewAPIServerWithDB(
 		repoFactory.GetAssetRepository(),
 		repoFactory.GetBlueprintRepository(),
 	)
-
 	eventService := service.NewEventService(repoFactory.GetEventRepository())
+
+	// --- Instantiate Schema Component Store and Handler ---
+	if dbConn == nil {
+		panic("Database connection (*sql.DB) is required for APIServerWithDB")
+	}
+	schemaStore := db.NewSQLSchemaComponentStore(dbConn) // Use the passed dbConn
+	schemaComponentHandler := NewSchemaComponentHandler(schemaStore)
+	// --- End Schema Component Setup ---
 
 	// Get components from the engine extensions
 	errorManager := engineExtensions.GetErrorManager()
@@ -88,21 +110,24 @@ func NewAPIServerWithDB(
 	wsManager.RegisterErrorHandlers(errorManager, wsManager.Logger)
 
 	return &APIServerWithDB{
-		executionEngine:  executionEngine,
-		engineExtensions: engineExtensions,
-		nodeRegistry:     make(map[string]node.NodeFactory),
-		wsManager:        wsManager,
-		debugManager:     debugManager,
-		errorManager:     errorManager,
-		recoveryManager:  recoveryManager,
-		eventManager:     concreteEventManager,
-		repoFactory:      repoFactory,
-		blueprintService: blueprintService,
-		userService:      userService,
-		workspaceService: workspaceService,
-		executionService: executionService,
-		eventService:     eventService,
-		rw:               &sync.RWMutex{},
+		executionEngine:          executionEngine,
+		engineExtensions:         engineExtensions,
+		nodeRegistry:             make(map[string]node.NodeFactory),
+		wsManager:                wsManager,
+		debugManager:             debugManager,
+		errorManager:             errorManager,
+		recoveryManager:          recoveryManager,
+		eventManager:             concreteEventManager,
+		repoFactory:              repoFactory,
+		blueprintService:         blueprintService,
+		blueprintVariableService: blueprintVariableService,
+		userService:              userService,
+		workspaceService:         workspaceService,
+		executionService:         executionService,
+		eventService:             eventService,
+		schemaComponentHandler:   schemaComponentHandler, // Assign handler
+		logger:                   logger,
+		rw:                       &sync.RWMutex{},
 	}
 }
 
@@ -141,7 +166,7 @@ func (s *APIServerWithDB) SetupRoutes(r *mux.Router) *mux.Router {
 	r.HandleFunc("/ws", s.wsManager.HandleWebSocket)
 
 	// Create a blueprint handler
-	blueprintHandler := NewBlueprintHandler(s.blueprintService)
+	blueprintHandler := NewBlueprintHandler(s.blueprintService, s.blueprintVariableService)
 	blueprintHandler.RegisterRoutes(r)
 
 	userHandler := NewUserHandler(s.userService)
@@ -165,10 +190,27 @@ func (s *APIServerWithDB) SetupRoutes(r *mux.Router) *mux.Router {
 	// Setup event API
 	s.setupEventAPI(api)
 
-	// Serve static files for the frontend
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
+	// Setup Schema Component API
+	s.setupSchemaComponentAPI(api) // Added call
+
+	// Serve static files for the frontend - MOVED TO MAIN.GO
+	// r.PathPrefix("/").Handler(http.FileServer(http.Dir("./web/dist")))
 
 	return r
+}
+
+// setupSchemaComponentAPI sets up API endpoints for schema components
+func (s *APIServerWithDB) setupSchemaComponentAPI(router *mux.Router) {
+	if s.schemaComponentHandler == nil {
+		slog.Error("SchemaComponentHandler is not initialized, skipping route setup", nil)
+		return
+	}
+	router.HandleFunc("/schema-components", s.schemaComponentHandler.ListSchemaComponents).Methods("GET")
+	router.HandleFunc("/schema-components", s.schemaComponentHandler.CreateSchemaComponent).Methods("POST")
+	router.HandleFunc("/schema-components/{id}", s.schemaComponentHandler.GetSchemaComponent).Methods("GET")
+	router.HandleFunc("/schema-components/{id}", s.schemaComponentHandler.UpdateSchemaComponent).Methods("PUT")
+	router.HandleFunc("/schema-components/{id}", s.schemaComponentHandler.DeleteSchemaComponent).Methods("DELETE")
+	slog.Info("Schema Component API endpoints registered")
 }
 
 // setupErrorAPI sets up API endpoints for error handling
@@ -252,6 +294,25 @@ func (s *APIServerWithDB) InitiateCoreNodes() {
 	for k, factory := range nodes.Core {
 		s.RegisterNodeType(k, factory)
 		//registry.GetInstance().RegisterNodeType(s, factory)
+	}
+}
+
+func (s *APIServerWithDB) ListenRuntimeNodes() {
+	if s == nil {
+		return
+	}
+	for {
+		select {
+		case f := <-registry.GetInstance().FactoryChannel():
+			for k, factory := range f {
+				s.logger.Debug(fmt.Sprintf("Registering runtime node: %s", k), map[string]interface{}{
+					"nodeType": k,
+				})
+				s.RegisterNodeType(k, factory)
+			}
+		default:
+			time.Sleep(time.Millisecond * 250)
+		}
 	}
 }
 

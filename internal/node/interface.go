@@ -1,6 +1,7 @@
 package node
 
 import (
+	"webblueprint/internal/db"
 	"webblueprint/internal/types"
 )
 
@@ -35,6 +36,8 @@ type Node interface {
 
 	// GetProperties returns the node properties
 	GetProperties() []types.Property
+
+	SetProperty(name string, value interface{})
 
 	// Execute runs the node's logic with the given execution context
 	Execute(ctx ExecutionContext) error
@@ -89,6 +92,7 @@ type ExtendedExecutionContext interface {
 	ExecutionContext
 
 	// Additional methods for engine implementation
+	SetInput(pingID string, value types.Value)
 	GetOutputValue(pinID string) (types.Value, bool)
 	GetAllOutputs() map[string]types.Value
 	GetActivatedOutputFlows() []string
@@ -110,3 +114,9 @@ type ActivationAwareContext interface {
 
 // NodeFactory is a function that creates a new instance of a node
 type NodeFactory func() Node
+
+// SchemaAccessContext defines an execution context that can access schema components store.
+type SchemaAccessContext interface {
+	ExecutionContext
+	GetSchemaComponentStore() db.SchemaComponentStore // Assuming db is the package for SchemaComponentStore
+}

@@ -19,32 +19,34 @@
     </div>
 
     <div class="panel-sections">
-      <!-- GRAPHS Section -->
+      <!-- ENTRY POINT EVENTS Section -->
       <div class="section">
-        <div class="section-header" @click="toggleSection('graphs')">
-          <div class="section-expand" :class="{ expanded: expandedSections.graphs }">
-            {{ expandedSections.graphs ? '▼' : '▶' }}
+        <div class="section-header" @click="toggleSection('entryPointEvents')">
+          <div class="section-expand" :class="{ expanded: expandedSections.entryPointEvents }">
+            {{ expandedSections.entryPointEvents ? '▼' : '▶' }}
           </div>
-          <div class="section-title">GRAPHS</div>
+          <div class="section-title">ENTRY POINT EVENTS</div>
           <div class="section-actions">
-            <button class="section-action-btn" title="Add Graph">+</button>
+            <!-- No add button for entry point events as they're system-defined -->
           </div>
         </div>
 
-        <div v-if="expandedSections.graphs" class="section-content">
+        <div v-if="expandedSections.entryPointEvents" class="section-content">
           <div
-              v-for="graph in filteredGraphs"
-              :key="graph.id"
+              v-for="event in filteredEntryPointEvents"
+              :key="event.id"
               class="section-item"
-              :class="{ active: selectedItem === graph.id }"
-              @click="selectItem(graph.id)"
+              :class="{ active: selectedItem === event.id }"
+              @click="selectItem(event.id)"
+              draggable="true"
+              @dragstart="onEntryPointEventDragStart($event, event)"
           >
-            <div class="item-icon">📊</div>
-            <div class="item-name">{{ graph.name }}</div>
+            <div class="item-icon">🔌</div>
+            <div class="item-name">{{ event.name }}</div>
           </div>
 
-          <div v-if="filteredGraphs.length === 0" class="empty-section">
-            No graphs available
+          <div v-if="filteredEntryPointEvents.length === 0" class="empty-section">
+            No entry point events available
           </div>
         </div>
       </div>
@@ -144,38 +146,6 @@
 
           <div v-if="filteredVariables.length === 0" class="empty-section">
             No variables available
-          </div>
-        </div>
-      </div>
-
-      <!-- ENTRY POINT EVENTS Section -->
-      <div class="section">
-        <div class="section-header" @click="toggleSection('entryPointEvents')">
-          <div class="section-expand" :class="{ expanded: expandedSections.entryPointEvents }">
-            {{ expandedSections.entryPointEvents ? '▼' : '▶' }}
-          </div>
-          <div class="section-title">ENTRY POINT EVENTS</div>
-          <div class="section-actions">
-            <!-- No add button for entry point events as they're system-defined -->
-          </div>
-        </div>
-
-        <div v-if="expandedSections.entryPointEvents" class="section-content">
-          <div
-              v-for="event in filteredEntryPointEvents"
-              :key="event.id"
-              class="section-item"
-              :class="{ active: selectedItem === event.id }"
-              @click="selectItem(event.id)"
-              draggable="true"
-              @dragstart="onEntryPointEventDragStart($event, event)"
-          >
-            <div class="item-icon">🔌</div>
-            <div class="item-name">{{ event.name }}</div>
-          </div>
-
-          <div v-if="filteredEntryPointEvents.length === 0" class="empty-section">
-            No entry point events available
           </div>
         </div>
       </div>
@@ -353,7 +323,6 @@ const nodeTypeStore = useNodeRegistryStore()
 const searchQuery = ref('')
 const selectedItem = ref<string | null>(null)
 const expandedSections = ref({
-  graphs: true,
   functions: true,
   macros: true,
   variables: true,
@@ -429,16 +398,6 @@ const variableMenuStyle = computed(() => {
   }
 })
 
-// Filtered lists based on search query
-const filteredGraphs = computed(() => {
-  const graphs = [{ id: 'eventGraph', name: 'EventGraph' }]
-  if (!searchQuery.value) return graphs
-
-  return graphs.filter(g =>
-      g.name.toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
-})
-
 const filteredFunctions = computed(() => {
   if (!searchQuery.value) return blueprintStore.functions
 
@@ -506,7 +465,6 @@ function selectItem(id: string) {
 }
 
 function getItemType(id: string): string {
-  if (filteredGraphs.value.some(g => g.id === id)) return 'graph'
   if (filteredFunctions.value.some(f => f.id === id)) return 'function'
   if (filteredMacros.value.some(m => m.id === id)) return 'macro'
   if (filteredVariables.value.some(v => v.id === id)) return 'variable'
@@ -598,7 +556,7 @@ function createGetVariableNode() {
   // Create a Get Variable node with the correct position
   const node = {
     id: uuid(),
-    type: `get-variable-${draggedVariable.value.name}`,
+    type: `variable-get-${draggedVariable.value.name}`,
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
@@ -629,7 +587,7 @@ function createSetVariableNode() {
   // Create a Set Variable node with the correct position
   const node = {
     id: uuid(),
-    type: `set-variable-${draggedVariable.value.name}`,
+    type: `variable-set-${draggedVariable.value.name}`,
     position: dropPosition.value,
     properties: [
       { name: 'variableId', value: draggedVariable.value.id },
