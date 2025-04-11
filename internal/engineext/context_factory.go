@@ -213,10 +213,26 @@ func (f *ContextFactory) CreateFunctionContext(
 	return NewFunctionExecutionContext(baseCtx.(*DefaultExecutionContext), functionID)
 }
 
-func (f *ContextFactory) CreateLoopContext(baseCtx node.ExecutionContext) node.ExecutionContext {
-	// TODO: Will be implemented
+func (f *ContextFactory) CreateLoopContext(
+	baseCtx node.ExecutionContext,
+	// loopNode *logic.LoopNode, // Removed parameter
+	loopVarName string,
+	maxIterations int,
+	startIndex float64,
+	nodeID string,
+	debugData map[string]interface{},
+	outputs map[string]types.Value,
+) node.ExecutionContext {
+	// Pass all required parameters to NewLoopContext (excluding loopNode)
 	return NewLoopContext(
 		baseCtx.(*DefaultExecutionContext),
+		// loopNode, // Removed argument
+		loopVarName,
+		maxIterations,
+		startIndex,
+		nodeID,
+		debugData,
+		outputs,
 	)
 }
 

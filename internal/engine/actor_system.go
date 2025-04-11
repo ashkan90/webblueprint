@@ -9,6 +9,7 @@ import (
 	"webblueprint/internal/common"
 	"webblueprint/internal/engineext"
 	"webblueprint/internal/node"
+	"webblueprint/internal/nodes/data"
 	"webblueprint/internal/types"
 	"webblueprint/pkg/blueprint"
 )
@@ -123,34 +124,13 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			"nodeId": nodeConfig.ID,
 		})
 
-		inputs := s.preprocessInputs(bp, nodeConfig.ID, s.executionID, s.variables)
+		// inputs := s.preprocessInputs(bp, nodeConfig.ID, s.executionID, s.variables) // Removed call
+		inputs := make(map[string]types.Value) // Initialize empty inputs, handled by messages now
 
+		// Simple activateFlow placeholder
 		activateFlow := func(ctx *engineext.DefaultExecutionContext, nodeID, pinID string) error {
-			if nodeConfig.Type == "loop" {
-				connections := bp.GetNodeConnections(nodeID)
-				for _, connection := range connections {
-					if connection.ConnectionType != "execution" {
-						continue
-					}
-
-					if connection.SourceNodeID == nodeID {
-						s.mutex.RLock()
-						loopActor, exists := s.actors[nodeID]
-						s.mutex.RUnlock()
-						if !exists {
-							return fmt.Errorf("loop actor not registered")
-						}
-
-						_ = loopActor
-
-						s.waitGroup.Add(1)
-						go func() {
-							defer s.waitGroup.Done()
-							s.executeNode(connection.TargetNodeID)
-						}()
-					}
-				}
-			}
+			// In the actor model, the actual triggering happens in followConnections.
+			// This callback might be less critical here.
 			return nil
 		}
 
@@ -167,9 +147,11 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			activateFlow,
 		)
 
-		if nodeConfig.Type == "loop" {
-			actorCtx = s.ctxManager.CreateLoopContext()
-		}
+		// Removed incorrect attempt to create LoopContext here.
+		// LoopContext creation should be handled within the LoopNode's execution.
+		// if nodeConfig.Type == "loop" {
+		// 	actorCtx = s.ctxManager.CreateLoopContext() // This was incorrect
+		// }
 
 		// Create the actor
 		actor := NewNodeActor(
@@ -181,7 +163,9 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 			nodeLogger,
 			s.listeners,
 			s.debugMgr,
-			s.variables,
+			s.variables, // Pass ActorSystem's shared variables map
+			&s.mutex,    // Pass ActorSystem's mutex for shared variables
+			s,           // Pass ActorSystem reference
 			s.nodeExecutionHook,
 			s.anyHook,
 		)
@@ -196,6 +180,7 @@ func (s *ActorSystem) Start(bp *blueprint.Blueprint) error {
 		actor.Start(actorCtx)
 	}
 
+	// TODO try to delete those codes ?
 	// Second pass: execute data nodes immediately
 	// This ensures that constant values are available right away
 	for _, nodeConfig := range bp.Nodes {
@@ -315,7 +300,7 @@ func (s *ActorSystem) executeNode(nodeID string) {
 		"nodeType": actor.NodeType,
 	})
 
-	s.preprocessActorNodeInputs(actor)
+	// s.preprocessActorNodeInputs(actor) // Ensure this call is removed
 
 	// Create execute message
 	msg := NodeMessage{
@@ -367,14 +352,22 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 		return
 	}
 
-	// Get activated flows using the helper function
-	var activatedFlows []string
-	if extCtx := engineext.GetExtendedContext(actor.decoratedCtx); extCtx != nil {
-		activatedFlows = extCtx.GetActivatedOutputFlows()
-	} else {
-		// Fallback or log error if ExtendedExecutionContext was not found
-		s.logger.Warn("Could not retrieve ExtendedExecutionContext to get activated flows", map[string]interface{}{"nodeId": actor.NodeID, "contextType": fmt.Sprintf("%T", actor.decoratedCtx)})
-		activatedFlows = []string{} // Initialize to empty slice
+	// Use the explicit flow signal from the response, if available
+	flowToActivate := response.FlowToActivate
+	if flowToActivate == "" {
+		// Fallback to context's activated flows if response doesn't specify one
+		// This maintains compatibility with nodes not using the new response field
+		if extCtx := engineext.GetExtendedContext(actor.ctx); extCtx != nil {
+			activatedFlows := extCtx.GetActivatedOutputFlows()
+			if len(activatedFlows) > 0 {
+				flowToActivate = activatedFlows[0] // Use the first activated flow as default? Or handle multiple?
+				if len(activatedFlows) > 1 {
+					s.logger.Warn("Multiple flows activated in context, but only following the first", map[string]interface{}{"nodeId": actor.NodeID, "flows": activatedFlows})
+				}
+			}
+		} else {
+			s.logger.Warn("Could not retrieve ExtendedExecutionContext to get activated flows", map[string]interface{}{"nodeId": actor.NodeID, "contextType": fmt.Sprintf("%T", actor.decoratedCtx)})
+		}
 	}
 
 	// Process data connections first to ensure data is available before execution
@@ -383,6 +376,9 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 			// Check if we have a value for this pin
 			value, exists := response.OutputPins[conn.SourcePinID]
 			if !exists {
+				//s.logger.Debug("No value for data connection from response, fallback actor outputs", map[string]interface{}{})
+				//value, exists = actor.GetOutput(conn.SourcePinID)
+				//if !exists {
 				s.logger.Debug("No value for data connection", map[string]interface{}{
 					"sourceNodeId": conn.SourceNodeID,
 					"sourcePinId":  conn.SourcePinID,
@@ -390,6 +386,7 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 					"targetPinId":  conn.TargetPinID,
 				})
 				continue
+				//}
 			}
 
 			// Get the target actor
@@ -426,6 +423,25 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 					"targetPinId":  conn.TargetPinID,
 					//"value":        value.RawValue,
 				})
+
+				if strings.Contains(targetActor.NodeType, "variable-set") {
+					varName, varValue := data.NewVariableDefinition(targetActor.node, inputMsg.Value)
+					targetActor.ctx.SetVariable(varName, varValue)
+
+					varId, _ := targetActor.GetProperty("variableId")
+					if varId != nil {
+						varGetNode := targetActor.bp.FindNodeByVar(varId.(string))
+						if varGetNode != nil {
+							s.mutex.RLock()
+							getActor := s.actors[varGetNode.ID]
+							s.mutex.RUnlock()
+
+							getActor.ctx.SetVariable(varName, varValue)
+
+							getActor.SendAsync(inputMsg)
+						}
+					}
+				}
 			}
 
 			// Emit value produced event
@@ -446,28 +462,71 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 		}
 	}
 
-	// Now follow execution connections
+	// Now follow execution connections (single pass)
 	for _, conn := range connections {
+		// Check if the connection's source pin matches the flow we need to activate
 		if conn.ConnectionType == "execution" {
-			// Check if this flow was activated
-			flowActivated := false
-			for _, flow := range activatedFlows {
-				if flow == conn.SourcePinID {
-					flowActivated = true
-					break
-				}
+
+			// Get the target actor
+			s.mutex.RLock()
+			targetActor, targetExists := s.actors[conn.TargetNodeID]
+			s.mutex.RUnlock()
+			if !targetExists {
+				continue // Target actor doesn't exist
 			}
 
-			if flowActivated {
-				// Execute the target node
+			// --- Special Handling for Loop Node ---
+			if actor.NodeType == "loop" && conn.SourcePinID == flowToActivate {
+				indexValue, indexExists := response.OutputPins["index"]
+				if !indexExists {
+					s.logger.Warn("Loop node activated 'loop' pin but 'index' output is missing", map[string]interface{}{"loopNodeId": actor.NodeID})
+					continue // Skip this iteration if index is missing
+				}
+
+				loopIterationPayload := map[string]interface{}{
+					"_loop_index": indexValue.RawValue,
+				}
+				execMsg := NodeMessage{
+					Type:     "execute",
+					Value:    types.NewValue(types.PinTypes.Object, loopIterationPayload),
+					Response: make(chan NodeResponse, 1),
+				}
+
 				s.waitGroup.Add(1)
-				go func(conn Connection) {
+				go func(sourceActor, targetActor *NodeActor, msg NodeMessage) { // Pass sourceActor (the LoopNode actor)
 					defer s.waitGroup.Done()
-					s.executeNode(conn.TargetNodeID)
-				}(conn)
+					s.logger.Debug("Executing loop body node", map[string]interface{}{"targetNodeId": targetActor.NodeID, "indexPayload": msg.Value.RawValue})
+					execResponse := targetActor.Send(msg) // Execute the loop body node
+					if !execResponse.Success {
+						s.logger.Error("Loop body node execution failed", map[string]interface{}{"nodeId": targetActor.NodeID, "error": execResponse.Error})
+						// If body fails, should we stop the loop? Send error back to loop actor?
+						// For now, we just log and don't proceed with this path or signal loop actor.
+						return
+					}
+					// Follow connections *from* the loop body node
+					// s.followConnections(targetActor, execResponse) // Removed recursive call
+
+					// After body execution (and its downstream effects) are done *for this iteration*,
+					// signal the original LoopNode actor to proceed to the next iteration.
+					if sent := sourceActor.SendAsync(NodeMessage{Type: "loop_next"}); !sent {
+						s.logger.Error("Failed to send loop_next message back to loop actor", map[string]interface{}{"loopNodeId": sourceActor.NodeID})
+					}
+
+				}(actor, targetActor, execMsg) // Pass original actor (LoopNode)
+
+			} else {
+				// --- Standard Execution Flow ---
+				s.waitGroup.Add(1)
+				go func(targetNodeID string, triggerPinID string) {
+					defer s.waitGroup.Done()
+					//s.executeNode(targetNodeID)
+					s.logger.Debug("standard execution", map[string]interface{}{})
+					s.executeNodeTriggered(targetNodeID, triggerPinID)
+				}(conn.TargetNodeID, conn.TargetPinID)
+
 			}
-		}
-	}
+		} // End if execution connection
+	} // End for connections
 }
 
 // Wait waits for all execution to complete with a timeout
@@ -536,154 +595,47 @@ func (s *ActorSystem) GetNodesStatus() map[string]NodeStatus {
 	return statuses
 }
 
-func (s *ActorSystem) preprocessInputs(bp *blueprint.Blueprint, nodeID, executionID string, variables map[string]types.Value) map[string]types.Value {
-	inputValues := make(map[string]types.Value)
+// Removed preprocessInputs and preprocessActorNodeInputs functions
+// executeNodeTriggered executes a node when triggered by a specific input pin
+func (s *ActorSystem) executeNodeTriggered(nodeID, triggerPinID string) { // Simplified signature
+	s.mutex.RLock()
+	actor, exists := s.actors[nodeID]
+	s.mutex.RUnlock()
+	if !exists {
+		s.logger.Error("Node not found for triggered execution", map[string]interface{}{"nodeId": nodeID})
+		return
+	}
 
-	// Get input connections for this node
-	inputConnections := bp.GetNodeInputConnections(nodeID)
+	s.logger.Debug("Executing node (triggered)", map[string]interface{}{"nodeId": nodeID, "triggerPin": triggerPinID})
 
-	for _, conn := range inputConnections {
-		if conn.ConnectionType == "data" {
-			sourceNode := bp.FindNode(conn.SourceNodeID)
-			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
-				// This is a connection from a variable getter node
-				// Extract variable name from the node type
-				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+	// Create execute message
+	// Note: Removed TriggerPin field as it doesn't exist in NodeMessage
+	msg := NodeMessage{
+		Type:     "execute",
+		Response: make(chan NodeResponse, 1),
+		// If triggerPinID needs to be passed, use FlowData:
+		// FlowData: map[string]interface{}{"triggerPin": triggerPinID},
+	}
 
-				// Try to get the variable value
-				if varValue, exists := variables[varName]; exists {
-					// Add it directly to input values
-					inputValues[conn.TargetPinID] = varValue
+	if triggerPinID != "" {
+		msg.TriggerPin = triggerPinID
+	}
 
-					// Also ensure the value is stored in debug manager for the source node
-					s.debugMgr.StoreNodeOutputValue(executionID, conn.SourceNodeID, conn.SourcePinID, varValue.RawValue)
-				}
-			}
+	// Send the message to the actor
+	response := actor.Send(msg)
+
+	if !response.Success {
+		s.logger.Error("Node execution failed (triggered)", map[string]interface{}{"nodeId": nodeID, "error": response.Error})
+		return
+	}
+
+	// Store debug outputs
+	for pinID, value := range response.OutputPins {
+		if s.debugMgr != nil {
+			s.debugMgr.StoreNodeOutputValue(s.executionID, nodeID, pinID, value.RawValue)
 		}
 	}
 
-	// Process data connections
-	for _, conn := range inputConnections {
-		if conn.ConnectionType == "data" {
-			// Get the source node's output value
-			sourceNodeID := conn.SourceNodeID
-			sourcePinID := conn.SourcePinID
-			targetPinID := conn.TargetPinID
-
-			// Check if we have a result for this pin
-			if nodeResults, ok := s.debugMgr.GetNodeOutputValue(executionID, sourceNodeID, sourcePinID); ok {
-				// Convert to Value
-				inputValues[targetPinID] = types.NewValue(types.PinTypes.Any, nodeResults)
-
-				// Emit value consumed event
-				//s..EmitEvent(ExecutionEvent{
-				//	Type:      EventValueConsumed,
-				//	Timestamp: time.Now(),
-				//	NodeID:    nodeID,
-				//	Data: map[string]interface{}{
-				//		"sourceNodeID": sourceNodeID,
-				//		"sourcePinID":  sourcePinID,
-				//		"targetPinID":  targetPinID,
-				//		"value":        nodeResults,
-				//	},
-				//})
-			}
-		}
-	}
-
-	return inputValues
-}
-
-func (s *ActorSystem) preprocessActorNodeInputs(actor *NodeActor) {
-	connections := actor.bp.GetNodeInputConnections(actor.NodeID)
-	for _, conn := range connections {
-		if conn.ConnectionType != "data" {
-			continue
-		}
-
-		s.mutex.RLock()
-		sourceActor, exists := s.actors[conn.SourceNodeID]
-		s.mutex.RUnlock()
-		if !exists {
-			continue
-		}
-
-		if strings.Contains(sourceActor.node.GetMetadata().TypeID, "variable-get") {
-			// TODO improve this variable naming approach
-			varId := types.GetProperty(sourceActor.properties, "variableId")
-			if varId == nil {
-				continue
-			}
-
-			setVar := actor.bp.FindNodeByVar(varId.Value.(string))
-
-			if setVar == nil {
-				return
-			}
-
-			s.mutex.Lock()
-			targetActor, exists := s.actors[setVar.ID]
-			s.mutex.Unlock()
-
-			if !exists {
-				s.logger.Warn("Target actor not found for data connection", map[string]interface{}{
-					"sourceNodeId": conn.SourceNodeID,
-					"targetNodeId": conn.TargetNodeID,
-				})
-				continue
-			}
-
-			value, vExists := engineext.GetExtendedContext(targetActor.decoratedCtx).GetInputValue(conn.SourcePinID)
-			if !vExists {
-				s.logger.Warn("Target actor has no input to feed", map[string]interface{}{
-					"sourceNodeId": conn.SourceNodeID,
-					"sourcePinId":  conn.SourcePinID,
-					"targetNodeId": conn.TargetNodeID,
-					"targetPinId":  conn.TargetPinID,
-				})
-				continue
-			}
-
-			// Send the value to the target actor
-			inputMsg := NodeMessage{
-				Type:  "input",
-				PinID: conn.TargetPinID,
-				Value: value,
-			}
-			if sent := actor.SendAsync(inputMsg); !sent {
-				s.logger.Warn("Failed to send input value to target actor", map[string]interface{}{
-					"sourceNodeId": conn.SourceNodeID,
-					"sourcePinId":  conn.SourcePinID,
-					"targetNodeId": conn.TargetNodeID,
-					"targetPinId":  conn.TargetPinID,
-				})
-			} else {
-				// send same message to current actor so it can now recognize variable
-				//actor.SendAsync(inputMsg)
-				s.logger.Debug("Sent input value to target actor", map[string]interface{}{
-					"sourceNodeId": conn.SourceNodeID,
-					"sourcePinId":  conn.SourcePinID,
-					"targetNodeId": conn.TargetNodeID,
-					"targetPinId":  conn.TargetPinID,
-					//"value":        value.RawValue,
-				})
-			}
-
-			// Emit value produced event
-			for _, listener := range s.listeners {
-				listener.OnExecutionEvent(ExecutionEvent{
-					Type:      EventValueProduced,
-					Timestamp: time.Now(),
-					NodeID:    conn.SourceNodeID,
-					Data: map[string]interface{}{
-						"sourceNodeId": conn.SourceNodeID,
-						"sourcePinId":  conn.SourcePinID,
-						"targetNodeId": conn.TargetNodeID,
-						"targetPinId":  conn.TargetPinID,
-						"value":        value.RawValue,
-					},
-				})
-			}
-		}
-	}
+	// Follow connections from this node's execution
+	s.followConnections(actor, response)
 }

@@ -3,14 +3,13 @@ package engineext
 import (
 	"time"
 	"webblueprint/internal/node"
-	"webblueprint/internal/nodes/logic"
 	"webblueprint/internal/types"
 )
 
 // LoopContext is a special execution context that tracks loop state
 type LoopContext struct {
 	node.ExecutionContext
-	loopNode       *logic.LoopNode
+	// loopNode       *logic.LoopNode // Removed to break import cycle
 	loopVarName    string
 	currentIndex   float64
 	maxIterations  int
@@ -27,7 +26,7 @@ type LoopContext struct {
 
 func NewLoopContext(
 	ctx *DefaultExecutionContext,
-	loopNode *logic.LoopNode,
+	// loopNode *logic.LoopNode, // Removed parameter
 	loopVarName string,
 	maxIterations int,
 	startIndex float64,
@@ -37,19 +36,19 @@ func NewLoopContext(
 ) *LoopContext {
 	return &LoopContext{
 		ExecutionContext: ctx,
-		loopNode:         loopNode,
-		loopVarName:      loopVarName,
-		currentIndex:     0,
-		maxIterations:    maxIterations,
-		startIndex:       startIndex,
-		nodeID:           nodeID,
-		bodyCompleted:    make(chan bool),
-		executionDone:    make(chan bool),
-		debugData:        debugData,
-		bodyActivated:    false,
-		iterationsDone:   0,
-		startTime:        time.Now(),
-		outputs:          outputs,
+		// loopNode:         loopNode, // Removed assignment
+		loopVarName:    loopVarName,
+		currentIndex:   0,
+		maxIterations:  maxIterations,
+		startIndex:     startIndex,
+		nodeID:         nodeID,
+		bodyCompleted:  make(chan bool),
+		executionDone:  make(chan bool),
+		debugData:      debugData,
+		bodyActivated:  false,
+		iterationsDone: 0,
+		startTime:      time.Now(),
+		outputs:        outputs,
 	}
 }
 
@@ -59,20 +58,17 @@ func (ctx *LoopContext) ActivateOutputFlow(pinID string) error {
 		// Mark that we've activated the loop body flow
 		ctx.bodyActivated = true
 		// Let the original flow happen
+		ctx.Logger().Info("Activate loop body flow", map[string]interface{}{
+			"pinID": pinID,
+		})
 		return ctx.ExecutionContext.ActivateOutputFlow(pinID)
 	} else if pinID == "completed" {
 		// This is called when we're done with all iterations
 		ctx.executionDone <- true
 		return ctx.ExecutionContext.ActivateOutputFlow(pinID)
 	}
-
-	// If this is called with any other pin, it might be coming from the loop body completion
-	// Signal that the current iteration is complete
-	if ctx.bodyActivated {
-		ctx.bodyCompleted <- true
-		// Don't call the underlying activation as we'll handle that ourselves
-		return nil
-	}
+	// Removed unreliable logic that assumed other pin activations meant body completion.
+	// Loop body completion must now be signaled explicitly via SignalIterationComplete().
 
 	// Otherwise, just let the standard activation happen
 	return ctx.ExecutionContext.ActivateOutputFlow(pinID)
@@ -149,7 +145,49 @@ func (ctx *LoopContext) GetOutputValue(pinID string) (types.Value, bool) {
 	return ctx.ExecutionContext.(*DefaultExecutionContext).GetOutputValue(pinID)
 }
 
-// GetOutputPins returns all output pins from the loop node
-func (ctx *LoopContext) GetOutputPins() []types.Pin {
-	return ctx.loopNode.GetOutputPins()
+// Removed GetOutputPins override as loopNode field is removed
+
+// --- Getters and Setters for Loop State ---
+
+func (ctx *LoopContext) StartIndex() float64 {
+	return ctx.startIndex
+}
+
+func (ctx *LoopContext) MaxIterations() int {
+	return ctx.maxIterations
+}
+
+func (ctx *LoopContext) CurrentIndex() float64 {
+	return ctx.currentIndex
+}
+
+func (ctx *LoopContext) SetCurrentIndex(index float64) {
+	ctx.currentIndex = index
+}
+
+func (ctx *LoopContext) IterationsDone() int {
+	return ctx.iterationsDone
+}
+
+func (ctx *LoopContext) IncrementIterationsDone() {
+	ctx.iterationsDone++
+}
+
+func (ctx *LoopContext) BodyCompletedSignal() <-chan bool {
+	return ctx.bodyCompleted
+}
+
+func (ctx *LoopContext) ExecutionDoneSignal() <-chan bool {
+	return ctx.executionDone
+}
+
+// SignalIterationComplete sends a signal indicating the loop body finished
+func (ctx *LoopContext) SignalIterationComplete() {
+	// Use non-blocking send in case the loop isn't waiting (e.g., error occurred)
+	select {
+	case ctx.bodyCompleted <- true:
+	default:
+		// Log or handle cases where the signal couldn't be sent?
+		ctx.Logger().Warn("Could not send loop body completion signal", nil)
+	}
 }

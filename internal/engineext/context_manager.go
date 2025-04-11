@@ -126,36 +126,8 @@ func (cm *ContextManager) CreateActorContext(
 		Build()
 }
 
-func (cm *ContextManager) CreateLoopContext(
-	bp *blueprint.Blueprint,
-	nodeID string,
-	nodeType string,
-	blueprintID string,
-	executionID string,
-	inputs map[string]types.Value,
-	variables map[string]types.Value,
-	logger node.Logger,
-	hooks *node.ExecutionHooks,
-	activateFlow func(ctx *DefaultExecutionContext, nodeID, pinID string) error,
-) node.ExecutionContext {
-	return NewContextBuilder(
-		bp,
-		nodeID,
-		nodeType,
-		blueprintID,
-		executionID,
-		inputs,
-		variables,
-		logger,
-		hooks,
-		activateFlow,
-		cm.repoFactory,
-	).
-		WithErrorHandling(cm.errorManager, cm.recoveryManager).
-		WithEventSupport(cm.eventManager, true, nil).
-		WithLoopSupport().
-		Build()
-}
+// Removed CreateLoopContext method as it was incorrectly placed and implemented.
+// Loop context creation should be handled within the LoopNode's execution.
 
 // CreateEventHandlerContext creates a context for event handlers
 func (cm *ContextManager) CreateEventHandlerContext(

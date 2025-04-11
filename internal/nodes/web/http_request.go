@@ -276,9 +276,11 @@ func (n *HTTPRequestNode) Execute(ctx node.ExecutionContext) error {
 	})
 
 	// Execute the request
+	logger.Debug("Sending HTTP request...", map[string]interface{}{"url": url, "method": method})
 	startTime := time.Now()
 	resp, err := client.Do(req)
 	requestDuration := time.Since(startTime)
+	logger.Debug("HTTP request finished", map[string]interface{}{"duration": requestDuration.String(), "error": err})
 
 	// Add timing information
 	debugData["timing"] = map[string]interface{}{
@@ -364,6 +366,7 @@ func (n *HTTPRequestNode) Execute(ctx node.ExecutionContext) error {
 		"size":       len(responseBody),
 		"body":       string(responseBody),
 	})
-
+	logger.Debug("Activating 'then' output flow", nil)
+	return ctx.ActivateOutputFlow("then")
 	return ctx.ActivateOutputFlow("then")
 }

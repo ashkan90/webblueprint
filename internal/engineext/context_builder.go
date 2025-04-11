@@ -40,9 +40,10 @@ type ContextBuilder struct {
 
 	withFunction bool
 	functionID   string
-
-	withLoopSupport bool
+	// withLoopSupport bool // Removed loop support flag
 }
+
+// Removed extra closing brace
 
 // NewContextBuilder creates a new context builder
 func NewContextBuilder(
@@ -96,10 +97,8 @@ func (b *ContextBuilder) WithEventSupport(eventManager core.EventManagerInterfac
 	return b
 }
 
-func (b *ContextBuilder) WithLoopSupport() *ContextBuilder {
-	b.withLoopSupport = true
-	return b
-}
+// Updated WithLoopSupport to accept and store parameters
+// Removed WithLoopSupport method
 
 // WithActorMode enables actor-based execution
 func (b *ContextBuilder) WithActorMode() *ContextBuilder {
@@ -220,7 +219,7 @@ func (b *ContextBuilder) Build() node.ExecutionContext {
 				currentCtx = ctxFactory.CreateFunctionContext(currentCtx, b.functionID) // Wrap result with function
 			}
 		} // End else block for standard wrapping
-	} else if b.withEventSupport {
+	} else if b.withEventSupport { // Keep this block
 		currentCtx = baseCtx
 
 		if b.withErrorHandling {
@@ -232,23 +231,8 @@ func (b *ContextBuilder) Build() node.ExecutionContext {
 		}
 
 		currentCtx = ctxFactory.CreateEventAwareContext(currentCtx, b.isEventHandler, b.eventHandlerContext)
-	} else if b.withLoopSupport {
-		currentCtx = baseCtx
-
-		if b.withErrorHandling {
-			currentCtx = ctxFactory.CreateErrorAwareContext(currentCtx)
-		}
-
-		if b.withActorMode {
-			currentCtx = ctxFactory.CreateActorContext(currentCtx)
-		}
-
-		if b.withEventSupport {
-			currentCtx = ctxFactory.CreateEventAwareContext(currentCtx, b.isEventHandler, b.eventHandlerContext)
-		}
-
-		currentCtx = ctxFactory.CreateLoopContext(currentCtx)
 	}
+	// Removed the else if b.withLoopSupport block
 
 	return currentCtx
 }

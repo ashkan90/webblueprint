@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 	"webblueprint/internal/bperrors"
@@ -315,14 +316,21 @@ func (c *WebSocketClient) sendMessage(messageType string, payload interface{}) {
 
 // Create a WebSocket logger that sends logs to clients
 type WebSocketLogger struct {
-	wsManager *WebSocketManager
-	nodeID    string
+	wsManager        *WebSocketManager
+	persistentLogger *os.File
+	nodeID           string
 }
 
 // NewWebSocketLogger creates a new logger that sends logs via WebSocket
 func NewWebSocketLogger(wsManager *WebSocketManager) *WebSocketLogger {
+	f, err := os.OpenFile("./log.out", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v, skipping persistent logger", err)
+	}
+
 	return &WebSocketLogger{
-		wsManager: wsManager,
+		wsManager:        wsManager,
+		persistentLogger: f,
 	}
 }
 
@@ -357,8 +365,17 @@ func (l *WebSocketLogger) sendLogMessage(level, msg string, fields map[string]in
 	if fields == nil {
 		fields = make(map[string]interface{})
 	}
-	fields["nodeID"] = l.nodeID
+	if v, ok := fields["nodeID"].(string); ok {
+		l.nodeID = v
+	}
+	if v, ok := fields["nodeId"].(string); ok {
+		l.nodeID = v
+	}
 	fmt.Printf("[%s] %s: %s %v\n", level, l.nodeID, msg, fields)
+
+	if l.persistentLogger != nil {
+		l.persistentLogger.Write([]byte(msg))
+	}
 
 	// Then broadcast via WebSocket
 	l.wsManager.BroadcastMessage(MsgTypeLog, map[string]interface{}{
@@ -368,6 +385,10 @@ func (l *WebSocketLogger) sendLogMessage(level, msg string, fields map[string]in
 		"message":   msg,
 		"fields":    fields,
 	})
+}
+
+func (l *WebSocketLogger) Close() error {
+	return l.persistentLogger.Close()
 }
 
 // ExecutionEventListener implements the engine.ExecutionListener interface

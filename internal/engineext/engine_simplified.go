@@ -127,9 +127,9 @@ func (ctx *DefaultExecutionContext) GetInputValue(pinID string) (types.Value, bo
 		if conn.TargetPinID == pinID && conn.ConnectionType == "data" {
 			// Check if the source node is a variable getter
 			sourceNode := bp.FindNode(conn.SourceNodeID)
-			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "get-variable-") {
+			if sourceNode != nil && strings.HasPrefix(sourceNode.Type, "variable-get-") {
 				// Extract variable name from the node type
-				varName := strings.TrimPrefix(sourceNode.Type, "get-variable-")
+				varName := strings.TrimPrefix(sourceNode.Type, "variable-get-")
 
 				// Try to get the variable value from the execution context
 				if varValue, varExists := ctx.GetVariable(varName); varExists {
@@ -292,6 +292,7 @@ func (ctx *DefaultExecutionContext) ActivateOutputFlow(pinID string) error {
 	if !alreadyActivated {
 		ctx.activatedFlows = append(ctx.activatedFlows, pinID)
 	}
+
 	ctx.activatedFlowMutex.Unlock()
 
 	// Call the engine's activateFlow function immediately
@@ -475,4 +476,22 @@ func (ctx *DefaultExecutionContext) getPinTypeForInput(pinID string) *types.PinT
 
 	// Default to Any if we can't determine a specific type
 	return types.PinTypes.Any
+}
+
+// CreateLoopContext creates a specialized context for loop iterations
+func (ctx *DefaultExecutionContext) CreateLoopContext(loopVarName string, maxIterations int, startIndex float64) (node.LoopContext, bool) {
+	// DefaultExecutionContext supports creating LoopContext
+	// Note: We need to pass the necessary fields from the DefaultExecutionContext
+	// and the parameters provided. LoopContext constructor needs adjustment if
+	// it requires fields not directly available here (like loopNode).
+	loopCtx := NewLoopContext(
+		ctx, // Pass the current DefaultExecutionContext as the base
+		loopVarName,
+		maxIterations,
+		startIndex,
+		ctx.nodeID,                   // Pass nodeID from base context
+		make(map[string]interface{}), // Initial debug data
+		make(map[string]types.Value), // Initial outputs
+	)
+	return loopCtx, true
 }

@@ -152,6 +152,11 @@ func (w *ErrorContextWrapper) SaveData(key string, value interface{}) {
 	w.Context.SaveData(key, value)
 }
 
+// CreateLoopContext delegates to the wrapped context
+func (w *ErrorContextWrapper) CreateLoopContext(loopVarName string, maxIterations int, startIndex float64) (node.LoopContext, bool) {
+	return w.Context.CreateLoopContext(loopVarName, maxIterations, startIndex)
+}
+
 // Error handling methods
 
 // ReportError reports an error during node execution

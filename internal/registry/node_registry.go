@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"sync"
 	"webblueprint/internal/node"
 )
@@ -12,6 +13,7 @@ type GlobalNodeRegistry struct {
 	factories map[string]node.NodeFactory
 	chanF     chan map[string]node.NodeFactory
 	mutex     sync.RWMutex
+	wg        sync.WaitGroup // Add WaitGroup to track registration goroutines
 }
 
 var (
@@ -30,6 +32,7 @@ func Make(def ...map[string]node.NodeFactory) {
 		instance = &GlobalNodeRegistry{
 			factories: factories,
 			chanF:     make(chan map[string]node.NodeFactory),
+			// wg is initialized with zero value
 		}
 	})
 }
@@ -55,8 +58,19 @@ func (r *GlobalNodeRegistry) RegisterNodeTypeRuntime(typeID string, factory node
 	r.factories[typeID] = factory
 	r.mutex.Unlock()
 
+	r.wg.Add(1) // Increment WaitGroup counter
 	go func() {
-		r.chanF <- map[string]node.NodeFactory{typeID: factory}
+		defer r.wg.Done() // Decrement counter when goroutine finishes
+		// Use a select with a default case or timeout to prevent blocking indefinitely
+		// if the channel is closed or never read.
+		select {
+		case r.chanF <- map[string]node.NodeFactory{typeID: factory}:
+			// Sent successfully
+		default:
+			// Channel might be closed or blocked, log or handle appropriately
+			// Depending on requirements, could try a timed send
+			fmt.Printf("[WARN] Could not send runtime node factory update for %s to channel\n", typeID)
+		}
 	}()
 }
 
@@ -87,7 +101,13 @@ func (r *GlobalNodeRegistry) FactoryChannel() chan map[string]node.NodeFactory {
 }
 
 func (r *GlobalNodeRegistry) Close() {
+	// Wait for any pending registration goroutines to finish sending
+	r.wg.Wait()
+
+	// Now it's safe to close the channel
 	close(r.chanF)
-	for range r.chanF {
-	}
+
+	// Drain any remaining items (optional, might not be necessary if readers stop on close)
+	// for range r.chanF {
+	// }
 }

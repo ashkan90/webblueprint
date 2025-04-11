@@ -84,6 +84,10 @@ type ExecutionContext interface {
 	// Blueprint information
 	GetBlueprintID() string
 	GetExecutionID() string
+
+	// CreateLoopContext creates a specialized context for loop iterations (if supported)
+	// Returns the LoopContext and a boolean indicating if loop context is supported/created.
+	CreateLoopContext(loopVarName string, maxIterations int, startIndex float64) (LoopContext, bool)
 }
 
 // ExtendedExecutionContext adds additional methods for engine implementation
@@ -119,4 +123,20 @@ type NodeFactory func() Node
 type SchemaAccessContext interface {
 	ExecutionContext
 	GetSchemaComponentStore() db.SchemaComponentStore // Assuming db is the package for SchemaComponentStore
+}
+
+// LoopContext defines an interface for loop-specific context operations
+// We define an interface here to avoid direct dependency on engineext.LoopContext
+type LoopContext interface {
+	ExecutionContext // Embed base context capabilities
+	SetCurrentIndex(index float64)
+	CurrentIndex() float64
+	MaxIterations() int
+	StartIndex() float64
+	IterationsDone() int
+	IncrementIterationsDone()
+	BodyCompletedSignal() <-chan bool
+	ExecutionDoneSignal() <-chan bool
+	SignalIterationComplete() // Method for loop body to signal completion
+	// Add other methods needed by LoopNode if any
 }

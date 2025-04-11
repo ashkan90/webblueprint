@@ -3,6 +3,9 @@ package logic
 import (
 	"fmt"
 	"time"
+
+	// "webblueprint/internal/engineext" // Removed import to break cycle
+	"webblueprint/internal/engine"
 	"webblueprint/internal/node"
 	"webblueprint/internal/types"
 )
@@ -131,7 +134,7 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 
 	// Create a context variable to store loop state
 	nodeID := ctx.GetNodeID()
-	loopVarName := fmt.Sprintf("_loop_%s", nodeID)
+	// loopVarName := fmt.Sprintf("_loop_%s", nodeID) // Removed unused variable
 
 	// Record debug info for loop start
 	ctx.RecordDebugInfo(types.DebugInfo{
@@ -160,96 +163,40 @@ func (n *LoopNode) Execute(ctx node.ExecutionContext) error {
 
 		return ctx.ActivateOutputFlow("completed")
 	}
+	// --- Actor-Managed Loop Initialization ---
 
-	// Get access to a direct execution capability, if available
-	directExecutionCtx, hasDirectExec := ctx.(interface {
-		ExecuteConnectedNodes(pinID string) error
-	})
+	// Get the underlying actor instance via the context
+	// We need the concrete ActorExecutionContext to get the actor reference
+	actorCtx, ok := ctx.(*engine.ActorExecutionContext) // Use concrete type from engine
+	if !ok {
+		// This node requires the actor model context to function correctly
+		err := fmt.Errorf("LoopNode requires ActorExecutionContext in actor mode, received %T", ctx)
+		logger.Error("Execution failed", map[string]interface{}{"error": err.Error()})
+		ctx.SetOutputValue("errorMessage", types.NewValue(types.PinTypes.String, err.Error()))
+		// Cannot proceed, maybe activate error flow?
+		// For now, return error. Loop won't start.
+		return err
+	}
+	loopActor := actorCtx.GetActor() // Get the actor reference
 
-	// Loop initialization
-	currentIndex := startValue
+	// Initialize loop state within the actor
+	loopActor.InitializeLoop(startValue, maxIterations) // Assuming InitializeLoop method exists
 
-	logger.Info("Starting loop execution", map[string]interface{}{
+	logger.Info("Initialized loop state in actor", map[string]interface{}{
 		"iterations": maxIterations,
 		"startIndex": startValue,
 	})
 
-	debugData["execution"] = "started"
+	// Record loop start debug info
 	ctx.RecordDebugInfo(types.DebugInfo{
-		NodeID:      ctx.GetNodeID(),
-		Description: "Loop Started",
-		Value:       debugData,
+		NodeID:      nodeID,
+		Description: "Loop Start Initialized",
+		Value:       debugData, // Contains inputs
 		Timestamp:   time.Now(),
 	})
 
-	// Execute each iteration
-	for i := 0; i < maxIterations; i++ {
-		// Update debug data for this iteration
-		iterDebugData := map[string]interface{}{
-			"iteration":    i,
-			"currentIndex": currentIndex,
-			"timestamp":    time.Now(),
-		}
-
-		ctx.RecordDebugInfo(types.DebugInfo{
-			NodeID:      ctx.GetNodeID(),
-			Description: fmt.Sprintf("Loop Iteration %d", i),
-			Value:       iterDebugData,
-			Timestamp:   time.Now(),
-		})
-
-		// Store the current index in a loop variable
-		ctx.SetVariable(loopVarName, types.NewValue(types.PinTypes.Number, currentIndex))
-
-		// Set output value for this iteration
-		ctx.SetOutputValue("index", types.NewValue(types.PinTypes.Number, currentIndex))
-
-		logger.Info(fmt.Sprintf("Loop iteration %d", i), map[string]interface{}{
-			"index": currentIndex,
-		})
-
-		// If we have direct execution capability, use it
-		if hasDirectExec {
-			// Execute connected nodes immediately and synchronously
-			err = directExecutionCtx.ExecuteConnectedNodes("loop")
-			if err != nil {
-				logger.Error("Failed to execute loop body", map[string]interface{}{
-					"error":     err.Error(),
-					"iteration": i,
-				})
-				break
-			}
-		} else {
-			// Fall back to standard activation (might not work as expected)
-			err = ctx.ActivateOutputFlow("loop")
-			if err != nil {
-				logger.Error("Failed to activate loop body", map[string]interface{}{
-					"error":     err.Error(),
-					"iteration": i,
-				})
-				break
-			}
-		}
-
-		// Increment index for next iteration
-		currentIndex++
-	}
-
-	// Record loop completion
-	ctx.RecordDebugInfo(types.DebugInfo{
-		NodeID:      ctx.GetNodeID(),
-		Description: "Loop Completed",
-		Value: map[string]interface{}{
-			"iterationsDone": maxIterations,
-			"finalIndex":     currentIndex - 1,
-		},
-		Timestamp: time.Now(),
-	})
-
-	logger.Info("Loop execution completed", map[string]interface{}{
-		"iterations": maxIterations,
-	})
-
-	// Activate the completed flow
-	return ctx.ActivateOutputFlow("completed")
+	// Send the first "loop_next" message to self asynchronously to start the iteration process
+	loopActor.SendAsync(engine.NodeMessage{Type: "loop_next"})
+	// Execute returns immediately; the loop runs via actor messages
+	return nil
 }

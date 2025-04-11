@@ -167,9 +167,9 @@ func (n *VariableGetNode) Execute(ctx node.ExecutionContext) error {
 // VariableSetNode implements a node that sets a variable value
 type VariableSetNode struct {
 	node.BaseNode
-	varName  *string
-	varType  *string
-	varValue interface{}
+	VarName  *string
+	VarType  *string
+	VarValue interface{}
 }
 
 // NewVariableSetNode creates a new Variable Set node
@@ -238,8 +238,8 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	// Get the variable name
 	nameValue, nameExists := ctx.GetInputValue("name")
 	if !nameExists {
-		if n.varName != nil && *n.varName != "" {
-			nameValue = types.NewValue(types.PinTypes.String, *n.varName)
+		if n.VarName != nil && *n.VarName != "" {
+			nameValue = types.NewValue(types.PinTypes.String, *n.VarName)
 			nameExists = true
 
 		} else {
@@ -299,10 +299,10 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 	// Get the value to set
 	valueValue, valueExists := ctx.GetInputValue("value")
 	if !valueExists {
-		if n.varValue != nil && n.varType != nil {
-			pinType, ok := types.GetPinTypeByID(*n.varType)
+		if n.VarValue != nil && n.VarType != nil {
+			pinType, ok := types.GetPinTypeByID(*n.VarType)
 			if !ok {
-				pErr := fmt.Errorf("invalid variable type %s", *n.varType)
+				pErr := fmt.Errorf("invalid variable type %s", *n.VarType)
 				logger.Error("Error getting pin type", nil)
 				logger.Error("Variable Set Error", map[string]interface{}{"error": pErr.Error()})
 				logger.Error("Execution failed", map[string]interface{}{"error": pErr.Error()})
@@ -310,7 +310,7 @@ func (n *VariableSetNode) Execute(ctx node.ExecutionContext) error {
 
 				return ctx.ActivateOutputFlow("error")
 			}
-			valueValue = types.NewValue(pinType, n.varValue)
+			valueValue = types.NewValue(pinType, n.VarValue)
 			valueExists = true
 		} else {
 			err := fmt.Errorf("missing required input: value")
@@ -460,9 +460,26 @@ func NewVariableSetDefinedNode(varName, varType string, varValue interface{}) fu
 				},
 			},
 		}
-		_node.varType = &varType
-		_node.varName = &varName
-		_node.varValue = varValue
+		_node.VarType = &varType
+		_node.VarName = &varName
+		_node.VarValue = varValue
 		return _node
 	}
+}
+
+func NewVariableDefinition(varNode node.Node, value types.Value) (string, types.Value) {
+	var (
+		name = "invalid_variable"
+	)
+
+	varDef, ok := varNode.(*VariableSetNode)
+	if !ok {
+		return name, value
+	}
+
+	if varDef.VarName != nil {
+		name = *varDef.VarName
+	}
+
+	return name, value
 }

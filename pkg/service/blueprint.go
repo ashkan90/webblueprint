@@ -314,11 +314,3 @@ type VersionInfo struct {
 	CreatedBy     string    `json:"createdBy"`
 	Comment       string    `json:"comment"`
 }
-
-// Helper function to convert sql.NullString to string
-//func (models).NullString(str string) sql.NullString {
-//	return sql.NullString{
-//		String: str,
-//		Valid:  str != "",
-//	}
-//}
