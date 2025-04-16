@@ -270,7 +270,6 @@ func (a *NodeActor) processMessages() {
 			if msg.Response != nil {
 				select {
 				case msg.Response <- response:
-					// Response sent
 				default:
 					// Response channel is full or closed
 					a.logger.Warn("Could not send response, channel may be full or closed", map[string]interface{}{
@@ -280,14 +279,6 @@ func (a *NodeActor) processMessages() {
 				}
 				// Close the response channel after sending? Depends on usage pattern.
 				// close(msg.Response)
-			}
-
-			// After handling the message and sending response, trigger downstream connections
-			if a.system != nil && response.FlowToActivate != "" {
-				// Use a goroutine to avoid blocking the actor's message loop
-				go a.system.followConnections(a, response)
-			} else {
-				a.logger.Error("Actor system reference is nil, cannot follow connections", map[string]interface{}{"nodeId": a.NodeID})
 			}
 		}
 	}
@@ -303,7 +294,11 @@ func (a *NodeActor) handleMessage(msg NodeMessage) NodeResponse {
 	case "stop":
 		return a.handleStopMessage(msg)
 	case "loop_next":
-		return a.handleLoopNextMessage(msg) // Add handler for loop iteration
+		res := a.handleLoopNextMessage(msg)
+
+		a.system.followConnections(a, res)
+
+		return res
 	default:
 		return NodeResponse{
 			Success: false,
@@ -487,7 +482,7 @@ func (a *NodeActor) handleLoopNextMessage(msg NodeMessage) NodeResponse {
 			OutputPins: map[string]types.Value{
 				"index": types.NewValue(types.PinTypes.Number, finalIndex),
 			},
-			FlowToActivate: "completed", // Explicitly signal completion
+			FlowToActivate: "completed",
 		}
 	}
 

@@ -493,7 +493,7 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 				}
 
 				s.waitGroup.Add(1)
-				go func(sourceActor, targetActor *NodeActor, msg NodeMessage) { // Pass sourceActor (the LoopNode actor)
+				go func(sourceActor, targetActor *NodeActor, msg NodeMessage) {
 					defer s.waitGroup.Done()
 					s.logger.Debug("Executing loop body node", map[string]interface{}{"targetNodeId": targetActor.NodeID, "indexPayload": msg.Value.RawValue})
 					execResponse := targetActor.Send(msg) // Execute the loop body node
@@ -504,16 +504,16 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 						return
 					}
 					// Follow connections *from* the loop body node
-					// s.followConnections(targetActor, execResponse) // Removed recursive call
+					s.followConnections(targetActor, execResponse) // Removed recursive call
 
 					// After body execution (and its downstream effects) are done *for this iteration*,
 					// signal the original LoopNode actor to proceed to the next iteration.
-					if sent := sourceActor.SendAsync(NodeMessage{Type: "loop_next"}); !sent {
-						s.logger.Error("Failed to send loop_next message back to loop actor", map[string]interface{}{"loopNodeId": sourceActor.NodeID})
-					}
+					sourceActor.Send(NodeMessage{Type: "loop_next"})
 
-				}(actor, targetActor, execMsg) // Pass original actor (LoopNode)
-
+					//s.logger.Debug("execution response", map[string]interface{}{
+					//	"response": execResponse,
+					//})
+				}(actor, targetActor, execMsg)
 			} else {
 				// --- Standard Execution Flow ---
 				s.waitGroup.Add(1)
@@ -525,8 +525,8 @@ func (s *ActorSystem) followConnections(actor *NodeActor, response NodeResponse)
 				}(conn.TargetNodeID, conn.TargetPinID)
 
 			}
-		} // End if execution connection
-	} // End for connections
+		}
+	}
 }
 
 // Wait waits for all execution to complete with a timeout

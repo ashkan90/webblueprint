@@ -319,6 +319,7 @@ type WebSocketLogger struct {
 	wsManager        *WebSocketManager
 	persistentLogger *os.File
 	nodeID           string
+	mu               sync.RWMutex
 }
 
 // NewWebSocketLogger creates a new logger that sends logs via WebSocket
@@ -361,6 +362,8 @@ func (l *WebSocketLogger) Error(msg string, fields map[string]interface{}) {
 
 // sendLogMessage sends a log message to all clients
 func (l *WebSocketLogger) sendLogMessage(level, msg string, fields map[string]interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	// First print to console for server-side debugging
 	if fields == nil {
 		fields = make(map[string]interface{})
@@ -375,6 +378,7 @@ func (l *WebSocketLogger) sendLogMessage(level, msg string, fields map[string]in
 
 	if l.persistentLogger != nil {
 		l.persistentLogger.Write([]byte(msg))
+		l.persistentLogger.Write([]byte{'\n'})
 	}
 
 	// Then broadcast via WebSocket
